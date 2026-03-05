@@ -1,0 +1,181 @@
+import { ref, computed, watch } from 'vue'
+
+// --- LOCAL STORAGE HELPERS ---
+const loadState = (key, defaultVal) => {
+    try {
+        const saved = localStorage.getItem(`openproxy_${key}`)
+        return saved ? JSON.parse(saved) : defaultVal
+    } catch (e) {
+        return defaultVal
+    }
+}
+
+const saveState = (key, value) => {
+    try {
+        localStorage.setItem(`openproxy_${key}`, JSON.stringify(value))
+    } catch (e) {
+        console.warn(`Storage limit reached for ${key}. Try clearing traffic.`)
+    }
+}
+
+// Lowered limit so LocalStorage doesn't hit its 5MB Quota
+const MAX_SAVED_REQUESTS = 100;
+
+// --- 1. CORE PROXY STATE ---
+export const requests = ref(loadState('requests', []))
+export const connectionStatus = ref('Connecting...')
+export const isRecording = ref(true)
+export const proxyHost = ref('127.0.0.1:8080')
+export let wsConnection = null
+
+// --- 2. UI SELECTION STATE ---
+export const selectedRequest = ref(null)
+export const activeReqTab = ref('Header')
+export const activeResTab = ref('Body')
+
+// --- 3. FOCUS MODE & SOURCES STATE ---
+export const isFocusMode = ref(loadState('isFocusMode', false))
+export const pinnedSources = ref(loadState('pinnedSources', []))
+export const activeFilter = ref({ type: 'all', value: null })
+export const searchQuery = ref('')
+export const sortKey = ref('time')
+export const sortOrder = ref('desc')
+
+export const toggleSort = (key) => {
+    if (sortKey.value === key) {
+        sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+    } else {
+        sortKey.value = key
+        sortOrder.value = 'asc'
+    }
+}
+
+// --- 4. MAP LOCAL STATE ---
+export const showMapModal = ref(false)
+export const mapLocalRules = ref(loadState('mapLocalRules', []))
+export const selectedRuleId = ref(null)
+
+// --- 5. CONTEXT MENU STATE ---
+export const contextMenu = ref({ show: false, x: 0, y: 0, request: null })
+
+// --- NEW: AUTOSAVE WATCHERS ---
+// Anytime these variables change, Vue automatically saves them to localStorage!
+watch(requests, (newVals) => saveState('requests', newVals), { deep: true })
+watch(pinnedSources, (newVals) => saveState('pinnedSources', newVals), { deep: true })
+watch(isFocusMode, (newVal) => saveState('isFocusMode', newVal))
+watch(mapLocalRules, (newVals) => {
+    saveState('mapLocalRules', newVals)
+    syncMapLocalRules() // Instantly tell Python about rule changes
+}, { deep: true })
+
+
+// --- HELPER: FORMATTERS ---
+export const formatUrl = (fullUrl) => {
+    try { const u = new URL(fullUrl); return { host: u.hostname, path: u.pathname + u.search } }
+    catch (e) { return { host: fullUrl, path: '' } }
+}
+
+export const formatTime = (timestamp) => {
+    if (!timestamp) return ''
+    const d = new Date(timestamp * 1000)
+    return d.toTimeString().split(' ')[0] + '.' + String(d.getMilliseconds()).padStart(3, '0')
+}
+
+export const formatBytes = (bytes) => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
+// --- COMPUTED: FILTERING LOGIC ---
+export const unpinnedDomains = computed(() => {
+    const domains = new Set()
+    requests.value.forEach(req => {
+        const host = formatUrl(req.url).host
+        if (host && !pinnedSources.value.some(p => host.toLowerCase().includes(p.toLowerCase()))) {
+            domains.add(host)
+        }
+    })
+    return Array.from(domains).sort()
+})
+
+export const filteredRequests = computed(() => {
+    let baseList = [...requests.value]; // Copy array so sorting doesn't mutate original state
+
+    if (isFocusMode.value) {
+        if (pinnedSources.value.length === 0) return [];
+        baseList = baseList.filter(req => {
+            const urlLower = req.url.toLowerCase();
+            return pinnedSources.value.some(pinned => urlLower.includes(pinned.toLowerCase()));
+        });
+    }
+
+    if (activeFilter.value.type !== 'all') {
+        if (['pinned', 'unpinned'].includes(activeFilter.value.type)) {
+            const pattern = activeFilter.value.value.toLowerCase();
+            baseList = baseList.filter(req => req.url.toLowerCase().includes(pattern));
+        }
+    }
+
+    if (searchQuery.value.trim() !== '') {
+        const query = searchQuery.value.toLowerCase();
+        baseList = baseList.filter(req => {
+            return req.url.toLowerCase().includes(query) ||
+                req.method.toLowerCase().includes(query) ||
+                String(req.status).includes(query);
+        });
+    }
+
+    baseList.sort((a, b) => {
+        let valA = a[sortKey.value]
+        let valB = b[sortKey.value]
+        if (typeof valA === 'string') valA = valA.toLowerCase()
+        if (typeof valB === 'string') valB = valB.toLowerCase()
+        if (valA < valB) return sortOrder.value === 'asc' ? -1 : 1
+        if (valA > valB) return sortOrder.value === 'asc' ? 1 : -1
+        return 0
+    })
+
+    return baseList;
+})
+
+// --- ACTIONS: WEBSOCKET & STATE MUTATION ---
+export const initWebSocket = () => {
+    wsConnection = new WebSocket("ws://127.0.0.1:8765")
+
+    wsConnection.onopen = () => {
+        connectionStatus.value = '🟢 Intercepting Traffic'
+        syncMapLocalRules() // Send the loaded rules to python immediately on boot!
+    }
+
+    wsConnection.onmessage = (event) => {
+        const payload = JSON.parse(event.data)
+        if (payload.type === "NEW_REQUEST") {
+            requests.value.unshift(payload.data)
+            if (requests.value.length > MAX_SAVED_REQUESTS) requests.value.pop() // Enforce memory/storage limit
+        } else if (payload.type === "UPDATE_REQUEST") {
+            const reqIndex = requests.value.findIndex(r => r.id === payload.data.id)
+            if (reqIndex !== -1) Object.assign(requests.value[reqIndex], payload.data)
+        }
+    }
+    wsConnection.onclose = () => { connectionStatus.value = '🔴 Disconnected' }
+}
+
+export const toggleRecording = () => {
+    isRecording.value = !isRecording.value
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "TOGGLE_PROXY", is_recording: isRecording.value }))
+    }
+}
+
+export const syncMapLocalRules = () => {
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "UPDATE_MAP_LOCAL_RULES", rules: mapLocalRules.value }))
+    }
+}
+
+export const closeContextMenu = () => {
+    contextMenu.value.show = false
+}

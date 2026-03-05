@@ -25,15 +25,19 @@ class ProxyUIBridge:
         self.is_recording = True 
 
     def request(self, flow: http.HTTPFlow):
-        if not self.is_recording:
-            return
-        
+        if not self.is_recording: return
+
         req_body = flow.request.get_text(strict=False) or ""
+        
         request_data = {
             "id": flow.id,
             "method": flow.request.method,
             "url": flow.request.pretty_url,
             "status": "...", 
+            "time": flow.request.timestamp_start, # Capture start time
+            "req_bytes": len(flow.request.raw_content) if flow.request.raw_content else 0,
+            "duration": 0,
+            "res_bytes": 0,
             "req_headers": dict(flow.request.headers),
             "req_body": req_body,
             "res_headers": {},
@@ -74,16 +78,18 @@ class ProxyUIBridge:
                     return
 
     def response(self, flow: http.HTTPFlow):
+        if not self.is_recording: return
 
-        if not self.is_recording:
-            return
-        
         flow.response.decode(strict=False) 
-        
         res_body = flow.response.get_text(strict=False) or ""
+        
+        duration_ms = (flow.response.timestamp_end - flow.request.timestamp_start) * 1000 if flow.response.timestamp_end else 0
+        
         update_data = {
             "id": flow.id,
             "status": flow.response.status_code,
+            "duration": round(duration_ms),
+            "res_bytes": len(flow.response.raw_content) if flow.response.raw_content else 0,
             "res_headers": dict(flow.response.headers),
             "res_body": res_body
         }
@@ -132,4 +138,4 @@ if __name__ == '__main__':
 
     html_file = get_asset_path(os.path.join('ui', 'dist', 'index.html'))
     webview.create_window('My Beautiful Proxy', url=f'file://{html_file}', width=1280, height=800)
-    webview.start()
+    webview.start(private_mode=False)
