@@ -1,0 +1,11 @@
+https: //jsonplaceholder.typicode.com/users/1
+
+{
+    "id": 999,
+    "name": "Bugs Bunny",
+    "username": "bbunny",
+    "email": "whats.up@doc.com",
+    "company": {
+        "name": "Warner Bros"
+    }
+}
