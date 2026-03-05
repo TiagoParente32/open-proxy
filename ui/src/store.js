@@ -19,7 +19,8 @@ const saveState = (key, value) => {
 }
 
 // Lowered limit so LocalStorage doesn't hit its 5MB Quota
-const MAX_SAVED_REQUESTS = 100;
+const MAX_LIVE_REQUESTS = 2000;
+const MAX_SAVED_REQUESTS = 500;
 
 // --- 1. CORE PROXY STATE ---
 export const requests = ref(loadState('requests', []))
@@ -50,6 +51,15 @@ export const toggleSort = (key) => {
     }
 }
 
+export const disableCache = ref(loadState('disableCache', false))
+
+watch(disableCache, (newVal) => {
+    saveState('disableCache', newVal)
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "TOGGLE_CACHE", disable_cache: newVal }))
+    }
+})
+
 // --- 4. MAP LOCAL STATE ---
 export const showMapModal = ref(false)
 export const mapLocalRules = ref(loadState('mapLocalRules', []))
@@ -60,7 +70,7 @@ export const contextMenu = ref({ show: false, x: 0, y: 0, request: null })
 
 // --- NEW: AUTOSAVE WATCHERS ---
 // Anytime these variables change, Vue automatically saves them to localStorage!
-watch(requests, (newVals) => saveState('requests', newVals), { deep: true })
+watch(requests, (newVals) => saveState('requests', newVals.slice(0, MAX_SAVED_REQUESTS)), { deep: true })
 watch(pinnedSources, (newVals) => saveState('pinnedSources', newVals), { deep: true })
 watch(isFocusMode, (newVal) => saveState('isFocusMode', newVal))
 watch(mapLocalRules, (newVals) => {
@@ -148,13 +158,22 @@ export const initWebSocket = () => {
     wsConnection.onopen = () => {
         connectionStatus.value = '🟢 Intercepting Traffic'
         syncMapLocalRules() // Send the loaded rules to python immediately on boot!
+        wsConnection.send(JSON.stringify({ type: "TOGGLE_CACHE", disable_cache: disableCache.value }))
     }
 
     wsConnection.onmessage = (event) => {
         const payload = JSON.parse(event.data)
-        if (payload.type === "NEW_REQUEST") {
+
+        if (payload.type === "SYSTEM_INFO") {
+            proxyHost.value = `${payload.data.ip}:${payload.data.port}`
+        }
+        else if (payload.type === "ALERT") {
+            alert(payload.message)
+        }
+        else if (payload.type === "NEW_REQUEST") {
             requests.value.unshift(payload.data)
-            if (requests.value.length > MAX_SAVED_REQUESTS) requests.value.pop() // Enforce memory/storage limit
+            // NEW: Let the live UI hold up to 2000 requests!
+            if (requests.value.length > MAX_LIVE_REQUESTS) requests.value.pop()
         } else if (payload.type === "UPDATE_REQUEST") {
             const reqIndex = requests.value.findIndex(r => r.id === payload.data.id)
             if (reqIndex !== -1) Object.assign(requests.value[reqIndex], payload.data)
@@ -178,4 +197,10 @@ export const syncMapLocalRules = () => {
 
 export const closeContextMenu = () => {
     contextMenu.value.show = false
+}
+
+export const setupAndroidEmulator = () => {
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "SETUP_ANDROID" }))
+    }
 }

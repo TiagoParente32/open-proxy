@@ -1,5 +1,10 @@
 <script setup>
-import { isRecording, toggleRecording, proxyHost, requests, showMapModal } from '../store.js'
+import { isRecording, toggleRecording, proxyHost, requests, showMapModal, setupAndroidEmulator, disableCache } from '../store.js'
+
+// NEW: A safe function to toggle the imported variable!
+const toggleCache = () => {
+  disableCache.value = !disableCache.value
+}
 </script>
 
 <template>
@@ -20,7 +25,16 @@ import { isRecording, toggleRecording, proxyHost, requests, showMapModal } from 
       OpenProxy running on {{ proxyHost }}
     </div>
 
-    <div class="actions" style="display: flex; justify-content: flex-end; gap: 10px; width: 200px;">
+    <div class="actions" style="display: flex; justify-content: flex-end; align-items: center; gap: 16px; width: 380px;">
+      
+      <div class="toolbar-toggle" @click="toggleCache" :class="{ 'active': disableCache }" title="Force 200 OKs instead of 304s">
+        <span class="toggle-label">Bust Cache</span>
+        <div class="switch"></div>
+      </div>
+
+      <div style="width: 1px; height: 16px; background: var(--border);"></div>
+
+      <button class="action-btn" style="color: #10b981; border-color: rgba(16, 185, 129, 0.4);" @click="setupAndroidEmulator">📱 Emulator</button>
       <button class="action-btn" @click="showMapModal = true">⚡️ Map Local</button>
       <button class="action-btn" @click="requests = []">🚫 Clear</button>
     </div>
@@ -30,6 +44,16 @@ import { isRecording, toggleRecording, proxyHost, requests, showMapModal } from 
 <style scoped>
 .toolbar { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background-color: var(--bg-sidebar); border-bottom: 1px solid var(--border); font-size: 13px; }
 .toolbar .title { font-weight: 600; color: #ffffff; }
+/* Toolbar Toggle Switch */
+.toolbar-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 8px; border-radius: 6px; transition: background 0.2s; }
+.toolbar-toggle:hover { background: #2a2d2e; }
+.toggle-label { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; transition: color 0.3s; }
+.toolbar-toggle.active .toggle-label { color: #f59e0b; }
+
+.switch { width: 30px; height: 16px; background: #444; border-radius: 20px; position: relative; transition: background 0.3s; }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: white; border-radius: 50%; transition: transform 0.3s; }
+.toolbar-toggle.active .switch { background: #f59e0b; }
+.toolbar-toggle.active .switch::after { transform: translateX(14px); }
 
 .icon-btn { display: flex; align-items: center; justify-content: center; padding: 4px 8px; height: 26px; width: 32px; }
 .btn-pause { color: #ef4444; border-color: rgba(239, 68, 68, 0.4); }
