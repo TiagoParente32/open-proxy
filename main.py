@@ -166,7 +166,10 @@ class ProxyUIBridge:
                 
                 elif payload.get("type") == "TOGGLE_PROXY":
                     self.is_recording = payload.get("is_recording")
-                
+                    
+                elif payload.get("type") == "TOGGLE_CACHE":
+                    self.disable_cache = payload.get("disable_cache")
+
                 elif payload.get("type") == "SETUP_ANDROID":
                     try:
                         # 1. Set the global HTTP proxy on the running emulator
@@ -181,12 +184,6 @@ class ProxyUIBridge:
                         }))
                     except Exception as e:
                         await websocket.send(json.dumps({"type": "ALERT", "message": f"❌ ADB Error: {e}"}))
-                elif payload.get("type") == "TOGGLE_PROXY":
-                    self.is_recording = payload.get("is_recording")
-                
-                # NEW: Listen for the Cache Toggle
-                elif payload.get("type") == "TOGGLE_CACHE":
-                    self.disable_cache = payload.get("disable_cache")
         finally:
             self.connected_clients.remove(websocket)
 
