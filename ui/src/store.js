@@ -42,6 +42,53 @@ export const searchQuery = ref('')
 export const sortKey = ref('time')
 export const sortOrder = ref('desc')
 
+export const showBreakpointModal = ref(false)
+export const breakpointRules = ref(loadState('breakpointRules', []))
+export const trappedFlows = ref([]) // <--- CHANGED TO AN ARRAY
+export const selectedBreakpointId = ref(null)
+export const breakpointsEnabled = ref(loadState('breakpointsEnabled', true)) // <--- MASTER TOGGLE
+
+// Watch for rule changes to save and sync
+// Watch the master toggle and tell Python immediately
+watch(breakpointsEnabled, (newVal) => {
+    saveState('breakpointsEnabled', newVal)
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "TOGGLE_BREAKPOINTS", enabled: newVal }))
+    }
+})
+
+watch(breakpointRules, (newVals) => {
+    saveState('breakpointRules', newVals)
+    syncBreakpointRules()
+}, { deep: true })
+
+export const syncBreakpointRules = () => {
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "UPDATE_BREAKPOINT_RULES", rules: breakpointRules.value }))
+    }
+}
+
+// --- Update resolveTrappedFlow to handle the queue ---
+export const resolveTrappedFlow = (action, flowId, modifiedData = null) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+
+    // Find the flow in our queue
+    const flowIndex = trappedFlows.value.findIndex(f => f.id === flowId)
+    if (flowIndex === -1) return
+    const flowToResolve = trappedFlows.value[flowIndex]
+
+    wsConnection.send(JSON.stringify({
+        type: "RESOLVE_BREAKPOINT",
+        id: flowToResolve.id,
+        phase: flowToResolve.phase,
+        action: action,
+        modified_data: modifiedData || flowToResolve
+    }))
+
+    // Remove it from the queue so the UI shows the next one!
+    trappedFlows.value.splice(flowIndex, 1)
+}
+
 export const toggleSort = (key) => {
     if (sortKey.value === key) {
         sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
@@ -158,6 +205,8 @@ export const initWebSocket = () => {
     wsConnection.onopen = () => {
         connectionStatus.value = '🟢 Intercepting Traffic'
         syncMapLocalRules() // Send the loaded rules to python immediately on boot!
+        syncBreakpointRules()
+        wsConnection.send(JSON.stringify({ type: "TOGGLE_BREAKPOINTS", enabled: breakpointsEnabled.value }))
         wsConnection.send(JSON.stringify({ type: "TOGGLE_CACHE", disable_cache: disableCache.value }))
     }
 
@@ -177,6 +226,12 @@ export const initWebSocket = () => {
         } else if (payload.type === "UPDATE_REQUEST") {
             const reqIndex = requests.value.findIndex(r => r.id === payload.data.id)
             if (reqIndex !== -1) Object.assign(requests.value[reqIndex], payload.data)
+        }
+        else if (payload.type === "BREAKPOINT_HIT") {
+            // Push it to the queue instead of overwriting!
+            const newFlow = payload.data
+            newFlow.headersStr = JSON.stringify(newFlow.headers, null, 2)
+            trappedFlows.value.push(newFlow)
         }
     }
     wsConnection.onclose = () => { connectionStatus.value = '🔴 Disconnected' }

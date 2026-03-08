@@ -28,7 +28,11 @@ const formatJson = (str) => {
             </div>
             <div class="inspector-content">
               <table v-if="activeReqTab === 'Header'" class="kv-table"><tr v-for="(value, key) in selectedRequest.req_headers" :key="key"><td class="kv-key">{{ key }}</td><td class="kv-value">{{ value }}</td></tr></table>
-              <div v-if="activeReqTab === 'Body'" style="height: 100%;"><codemirror :model-value="formatJson(selectedRequest.req_body)" :style="{ height: '100%' }" :extensions="extensions" :disabled="true" /></div>
+              
+              <div v-if="activeReqTab === 'Body'" style="height: 100%; display: flex; justify-content: center; align-items: center; background: #111;">
+                <img v-if="selectedRequest.req_is_image" :src="selectedRequest.req_body" style="max-width: 100%; max-height: 100%; object-fit: contain; padding: 16px; box-sizing: border-box;" />
+                <codemirror v-else :model-value="formatJson(selectedRequest.req_body)" :style="{ height: '100%', width: '100%' }" :extensions="extensions" :disabled="true" />
+              </div>
             </div>
           </div>
         </pane>
@@ -41,7 +45,11 @@ const formatJson = (str) => {
             </div>
             <div class="inspector-content">
               <table v-if="activeResTab === 'Header'" class="kv-table"><tr v-for="(value, key) in selectedRequest.res_headers" :key="key"><td class="kv-key">{{ key }}</td><td class="kv-value">{{ value }}</td></tr></table>
-              <div v-if="activeResTab === 'Body'" style="height: 100%;"><codemirror :model-value="formatJson(selectedRequest.res_body)" :style="{ height: '100%' }" :extensions="extensions" :disabled="true" /></div>
+              
+              <div v-if="activeResTab === 'Body'" style="height: 100%; display: flex; justify-content: center; align-items: center; background: #111;">
+                <img v-if="selectedRequest.res_is_image" :src="selectedRequest.res_body" style="max-width: 100%; max-height: 100%; object-fit: contain; padding: 16px; box-sizing: border-box;" />
+                <codemirror v-else :model-value="formatJson(selectedRequest.res_body)" :style="{ height: '100%', width: '100%' }" :extensions="extensions" :disabled="true" />
+              </div>
             </div>
           </div>
         </pane>

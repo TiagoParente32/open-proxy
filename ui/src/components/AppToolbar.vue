@@ -6,6 +6,8 @@ import {
   requests, 
   showMapModal, 
   setupAndroidEmulator, 
+  showBreakpointModal,
+  breakpointsEnabled,
   disableCache 
 } from '../store.js'
 
@@ -45,8 +47,20 @@ const toggleCache = () => {
         <div class="switch"></div>
       </div>
 
+      <div
+        class="toggle"
+        @click="breakpointsEnabled = !breakpointsEnabled"
+        :class="{ active: breakpointsEnabled }"
+      >
+        <span style="color: #f59e0b;">Breakpoints</span>
+        <div class="switch" style="border: 1px solid #555;"></div>
+      </div>
+
       <div class="divider"></div>
 
+      <button class="tool-btn" @click="showBreakpointModal = true" title="Manage Breakpoints">
+        Breakpoints
+      </button>
       <button class="tool-btn" @click="setupAndroidEmulator" title="Android Emulator">
         Emulator
       </button>

@@ -9,6 +9,8 @@ import AppSidebar from './components/AppSidebar.vue'
 import TrafficTable from './components/TrafficTable.vue'
 import InspectorPane from './components/InspectorPane.vue'
 import MapLocalModal from './components/MapLocalModal.vue'
+import BreakpointHit from './components/BreakpointHit.vue'
+import BreakpointsModal from './components/BreakpointsModal.vue'
 
 // Import just the logic needed for the top-level app overlay (WebSockets & Context Menu)
 import { 
@@ -20,7 +22,10 @@ import {
   activeFilter, 
   showMapModal, 
   mapLocalRules, 
-  selectedRuleId 
+  selectedRuleId,
+  showBreakpointModal,
+  breakpointRules,
+  selectedBreakpointId
 } from './store.js'
 
 onMounted(() => {
@@ -61,6 +66,32 @@ const openMapLocalModalFromContext = () => {
   }
   showMapModal.value = true;
 }
+
+const openBreakpointModalFromContext = () => {
+  closeContextMenu();
+  if (contextMenu.value.request) {
+    const req = contextMenu.value.request;
+    
+    // Pro-tip: Strip the query parameters (everything after '?') so the regex is cleaner
+    // and escape the dots so 'google.com' doesn't accidentally match 'google-com'
+    let defaultPattern = req.url.split('?')[0].replace(/\./g, '\\.');
+
+    const newRule = { 
+      id: Date.now(), 
+      active: true, 
+      pattern: defaultPattern, 
+      is_request: true, 
+      is_response: false 
+    };
+    
+    breakpointRules.value.unshift(newRule);
+    selectedBreakpointId.value = newRule.id;
+  } else if (breakpointRules.value.length > 0 && !selectedBreakpointId.value) {
+    selectedBreakpointId.value = breakpointRules.value[0].id;
+  }
+  
+  showBreakpointModal.value = true;
+}
 </script>
 
 <template>
@@ -92,9 +123,12 @@ const openMapLocalModalFromContext = () => {
     <div v-if="contextMenu.show" class="context-menu" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
       <div class="context-menu-item" @click="pinFromContextMenu">📌 Pin Domain</div>
       <div class="context-menu-item" @click="openMapLocalModalFromContext">⚡️ Map Local</div>
+      <div class="context-menu-item" @click="openBreakpointModalFromContext">🛑 Add Breakpoint</div>
     </div>
 
     <MapLocalModal />
+    <BreakpointHit />
+    <BreakpointsModal />
   </div>
 </template>
 

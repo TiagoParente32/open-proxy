@@ -8,6 +8,8 @@ import websockets
 import webview
 from mitmproxy import http, options
 from mitmproxy.tools.dump import DumpMaster
+import asyncio
+import base64
 import os
 
 # --- 1. NETWORK HELPERS ---
@@ -35,8 +37,11 @@ class ProxyUIBridge:
         self.is_recording = True
         self.disable_cache = False
         self.bg_tasks = set()
+        self.breakpoint_rules = []
+        self.paused_flows = {} # Maps flow.id -> asyncio.Event
+        self.breakpoints_enabled = True
 
-    def request(self, flow: http.HTTPFlow):
+    async def request(self, flow: http.HTTPFlow):
         # 1. Respect the Pause/Play button
         if not self.is_recording:
             return
@@ -48,15 +53,26 @@ class ProxyUIBridge:
             flow.request.headers["Cache-Control"] = "no-cache"
             flow.request.headers["Pragma"] = "no-cache"
 
-        # --- 2. SAFE BODY EXTRACTION ---
+        # --- 2. SAFE BODY EXTRACTION (REQUEST) ---
         req_body = ""
+        req_is_image = False
+        content_type = flow.request.headers.get("Content-Type", "").lower()
+
         if flow.request.raw_content:
-            if len(flow.request.raw_content) > 1000000: # 1MB Limit!
+            if len(flow.request.raw_content) > 1000000 and not content_type.startswith("image/"):
                 req_body = "// [Request Body too large to display (Over 1MB)]"
+            elif content_type.startswith("image/"):
+                try:
+                    # Convert raw image bytes to a base64 string that HTML can read
+                    b64_data = base64.b64encode(flow.request.raw_content).decode('utf-8')
+                    req_body = f"data:{content_type};base64,{b64_data}"
+                    req_is_image = True
+                except Exception:
+                    req_body = "// [Error encoding image data]"
             else:
                 req_body = flow.request.get_text(strict=False) or "// [Binary or unreadable data]"
         
-        # 2. Capture all metrics and request data
+        # Now update your request_data dictionary to include the new flag!
         request_data = {
             "id": flow.id,
             "method": flow.request.method,
@@ -68,8 +84,10 @@ class ProxyUIBridge:
             "res_bytes": 0,
             "req_headers": dict(flow.request.headers),
             "req_body": req_body,
+            "req_is_image": req_is_image, # <-- NEW FLAG
             "res_headers": {},
-            "res_body": ""
+            "res_body": "",
+            "res_is_image": False         # <-- NEW FLAG (placeholder for now)
         }
         
         try:
@@ -99,8 +117,33 @@ class ProxyUIBridge:
                 except Exception as e:
                     flow.response = http.Response.make(500, f"Editor Error: {e}".encode())
                     return
+        if self.breakpoints_enabled:
+            for rule in self.breakpoint_rules:
+                if rule.get("active") and rule.get("is_request"):
+                    try:
+                        # Safe regex check
+                        if re.search(rule.get("pattern", ""), flow.request.pretty_url):
+                            pause_event = asyncio.Event()
+                            self.paused_flows[flow.id] = {"event": pause_event, "flow": flow}
+                            
+                            bp_data = {
+                                "id": flow.id,
+                                "phase": "request",
+                                "url": flow.request.pretty_url,
+                                "method": flow.request.method,
+                                "headers": dict(flow.request.headers),
+                                "body": flow.request.get_text(strict=False) or ""
+                            }
+                            
+                            await self.broadcast_to_ui("BREAKPOINT_HIT", bp_data)
+                            await pause_event.wait()
+                            break
+                    except re.error:
+                        # If the user typed an invalid regex like "*google", ignore the rule so we don't crash
+                        print(f"⚠️ Invalid regex in breakpoint rule: {rule.get('pattern')}")
+                        pass
 
-    def response(self, flow: http.HTTPFlow):
+    async def response(self, flow: http.HTTPFlow):
         # 1. Respect the Pause/Play button
         if not self.is_recording:
             return
@@ -112,24 +155,60 @@ class ProxyUIBridge:
             flow.response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             flow.response.headers["Expires"] = "0"
 
-        # --- 2. SAFE BODY EXTRACTION ---
+        # --- 2. SAFE BODY EXTRACTION (RESPONSE) ---
         res_body = ""
+        res_is_image = False
+        content_type = flow.response.headers.get("Content-Type", "").lower()
+
         if flow.response.raw_content:
-            if len(flow.response.raw_content) > 1000000: # 1MB Limit!
+            if len(flow.response.raw_content) > 1000000 and not content_type.startswith("image/"): 
                 res_body = "// [Response Body too large to display (Over 1MB)]"
+            elif content_type.startswith("image/"):
+                try:
+                    b64_data = base64.b64encode(flow.response.raw_content).decode('utf-8')
+                    res_body = f"data:{content_type};base64,{b64_data}"
+                    res_is_image = True
+                except Exception:
+                    res_body = "// [Error encoding image data]"
             else:
                 flow.response.decode(strict=False) 
                 res_body = flow.response.get_text(strict=False) or "// [Binary or unreadable data]"
         
         duration_ms = (flow.response.timestamp_end - flow.request.timestamp_start) * 1000 if flow.response.timestamp_end else 0
+        
+        # Update your update_data dictionary
         update_data = {
             "id": flow.id,
             "status": flow.response.status_code,
             "duration": round(duration_ms),
             "res_bytes": len(flow.response.raw_content) if flow.response.raw_content else 0,
             "res_headers": dict(flow.response.headers),
-            "res_body": res_body
+            "res_body": res_body,
+            "res_is_image": res_is_image # <-- NEW FLAG
         }
+        # --- BREAKPOINT LOGIC (RESPONSE) ---
+        if self.breakpoints_enabled:
+            for rule in self.breakpoint_rules:
+                if rule.get("active") and rule.get("is_response"):
+                    try:
+                        if re.search(rule.get("pattern", ""), flow.request.pretty_url):
+                            pause_event = asyncio.Event()
+                            self.paused_flows[flow.id] = {"event": pause_event, "flow": flow}
+                            
+                            bp_data = {
+                                "id": flow.id,
+                                "phase": "response",
+                                "url": flow.request.pretty_url,
+                                "status": flow.response.status_code,
+                                "headers": dict(flow.response.headers),
+                                "body": flow.response.get_text(strict=False) or ""
+                            }
+                            
+                            await self.broadcast_to_ui("BREAKPOINT_HIT", bp_data)
+                            await pause_event.wait()
+                            break
+                    except re.error:
+                        pass
         
         try:
             loop = asyncio.get_running_loop()
@@ -184,6 +263,41 @@ class ProxyUIBridge:
                         }))
                     except Exception as e:
                         await websocket.send(json.dumps({"type": "ALERT", "message": f"❌ ADB Error: {e}"}))
+
+                elif payload.get("type") == "TOGGLE_BREAKPOINTS":
+                    self.breakpoints_enabled = payload.get("enabled", True)
+
+                elif payload.get("type") == "UPDATE_BREAKPOINT_RULES":
+                    self.breakpoint_rules = payload.get("rules", [])
+
+                elif payload.get("type") == "RESOLVE_BREAKPOINT":
+                    flow_id = payload.get("id")
+                    action = payload.get("action") # "execute" or "drop"
+                    mod_data = payload.get("modified_data", {})
+
+                    if flow_id in self.paused_flows:
+                        flow_dict = self.paused_flows.pop(flow_id)
+                        flow = flow_dict["flow"]
+                        
+                        if action == "drop":
+                            flow.kill()
+                        elif action == "execute":
+                            # Apply modifications from the UI
+                            if payload.get("phase") == "request":
+                                flow.request.method = mod_data.get("method", flow.request.method)
+                                flow.request.url = mod_data.get("url", flow.request.url)
+                                # Update headers and body...
+                                for k, v in mod_data.get("headers", {}).items():
+                                    flow.request.headers[k] = v
+                                flow.request.text = mod_data.get("body", "")
+                            else:
+                                flow.response.status_code = int(mod_data.get("status", flow.response.status_code))
+                                for k, v in mod_data.get("headers", {}).items():
+                                    flow.response.headers[k] = v
+                                flow.response.text = mod_data.get("body", "")
+
+                        # Resume the mitmproxy pipeline!
+                        flow_dict["event"].set()
         finally:
             self.connected_clients.remove(websocket)
 
