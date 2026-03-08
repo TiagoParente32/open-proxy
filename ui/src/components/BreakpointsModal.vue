@@ -4,7 +4,8 @@ import {
   showBreakpointModal, 
   breakpointRules, 
   selectedBreakpointId, 
-  syncBreakpointRules 
+  syncBreakpointRules, 
+  breakpointsEnabled 
 } from '../store.js'
 
 // Get the currently selected rule to edit
@@ -40,9 +41,17 @@ const saveAndApplyRules = () => {
     <div class="modal-content large" style="width: 800px; height: 500px; min-width: 600px; min-height: 400px;">
       
       <div class="modal-sidebar" style="width: 250px;">
-        <div style="padding: 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-          <strong style="color: white; font-size: 13px;">Breakpoints</strong>
-          <button class="action-btn" @click="addNewRule">+ Add</button>
+        
+        <div style="padding: 16px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong style="color: white; font-size: 13px;">Breakpoints</strong>
+            <button class="action-btn" @click="addNewRule">+ Add</button>
+          </div>
+          
+          <div class="toggle" @click="breakpointsEnabled = !breakpointsEnabled" :class="{ active: breakpointsEnabled }" style="display: flex; justify-content: space-between; align-items: center; background: #1a1a1b; padding: 8px 12px; border-radius: 6px; border: 1px solid #333;">
+            <span style="font-size: 12px; font-weight: 600;">Enable Breakpoints</span>
+            <div class="switch"></div>
+          </div>
         </div>
         
         <div class="rule-list">
@@ -130,4 +139,12 @@ const saveAndApplyRules = () => {
 .custom-checkbox input:checked + .checkbox-box { background: #f59e0b; border-color: #f59e0b; }
 .custom-checkbox input:checked + .checkbox-box::after { content: '✓'; color: white; font-size: 12px; font-weight: bold; }
 .custom-checkbox:hover .checkbox-box { border-color: #888; }
+
+/* Custom Checkboxes and Toggles */
+.toggle { cursor: pointer; color: #ccc; transition: color 0.2s; }
+.toggle.active { color: #f59e0b; }
+.switch { width: 30px; height: 16px; background: #444; border-radius: 20px; position: relative; transition: background 0.3s; }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: white; border-radius: 50%; transition: transform 0.3s; }
+.toggle.active .switch { background: #f59e0b; border-color: #f59e0b; }
+.toggle.active .switch::after { transform: translateX(14px); }
 </style>

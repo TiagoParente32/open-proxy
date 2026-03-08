@@ -244,6 +244,15 @@ export const toggleRecording = () => {
     }
 }
 
+export const repeatRequest = () => {
+    if (wsConnection?.readyState === WebSocket.OPEN && contextMenu.value.request) {
+        wsConnection.send(JSON.stringify({
+            type: "REPEAT_REQUEST",
+            request: contextMenu.value.request
+        }))
+    }
+}
+
 export const syncMapLocalRules = () => {
     if (wsConnection?.readyState === WebSocket.OPEN) {
         wsConnection.send(JSON.stringify({ type: "UPDATE_MAP_LOCAL_RULES", rules: mapLocalRules.value }))

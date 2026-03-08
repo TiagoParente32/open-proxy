@@ -10,7 +10,8 @@ from mitmproxy import http, options
 from mitmproxy.tools.dump import DumpMaster
 import asyncio
 import base64
-import os
+import urllib.request
+import ssl
 
 # --- 1. NETWORK HELPERS ---
 def get_local_ip():
@@ -263,6 +264,43 @@ class ProxyUIBridge:
                         }))
                     except Exception as e:
                         await websocket.send(json.dumps({"type": "ALERT", "message": f"❌ ADB Error: {e}"}))
+
+                elif payload.get("type") == "REPEAT_REQUEST":
+                    req_data = payload.get("request", {})
+                    
+                    def _replay():
+                        try:
+                            url = req_data.get("url")
+                            req = urllib.request.Request(url, method=req_data.get("method"))
+                            
+                            # Safely copy headers, skipping ones that urllib manages automatically
+                            for k, v in req_data.get("req_headers", {}).items():
+                                if k.lower() not in ["host", "content-length", "accept-encoding"]:
+                                    req.add_header(k, v)
+                            
+                            # Attach body if it's raw text/JSON
+                            body = req_data.get("req_body")
+                            if body and not req_data.get("req_is_image") and not str(body).startswith("//"):
+                                req.data = body.encode('utf-8')
+                                
+                            # Route through our own mitmproxy!
+                            proxy_handler = urllib.request.ProxyHandler({
+                                'http': f'http://127.0.0.1:{PROXY_PORT}',
+                                'https': f'http://127.0.0.1:{PROXY_PORT}'
+                            })
+                            
+                            # Ignore SSL errors from our own proxy cert
+                            ctx = ssl.create_default_context()
+                            ctx.check_hostname = False
+                            ctx.verify_mode = ssl.CERT_NONE
+                            
+                            opener = urllib.request.build_opener(proxy_handler, urllib.request.HTTPSHandler(context=ctx))
+                            opener.open(req, timeout=10)
+                        except Exception as e:
+                            print(f"⚠️ Replay failed: {e}")
+
+                    # Run it in a background thread so it doesn't freeze the WebSocket!
+                    threading.Thread(target=_replay, daemon=True).start()
 
                 elif payload.get("type") == "TOGGLE_BREAKPOINTS":
                     self.breakpoints_enabled = payload.get("enabled", True)

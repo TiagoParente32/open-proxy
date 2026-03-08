@@ -1,4 +1,5 @@
 <script setup>
+import { onMounted, onUnmounted } from 'vue'
 import { 
   filteredRequests, selectedRequest, isFocusMode, pinnedSources, 
   formatUrl, contextMenu, searchQuery, 
@@ -19,6 +20,36 @@ const sortIcon = (key) => {
   if (sortKey.value !== key) return ''
   return sortOrder.value === 'asc' ? ' ↑' : ' ↓'
 }
+
+// NEW: Keyboard Navigation Logic
+const handleKeyDown = (e) => {
+  // Ignore keypresses if the user is typing in an input (like the search bar)
+  if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault(); // Stop the whole page from scrolling
+
+    if (filteredRequests.value.length === 0) return;
+
+    // If nothing is selected, select the first one
+    if (!selectedRequest.value) {
+      selectedRequest.value = filteredRequests.value[0];
+      return;
+    }
+
+    const currentIndex = filteredRequests.value.findIndex(r => r.id === selectedRequest.value.id);
+    if (currentIndex === -1) return;
+
+    if (e.key === 'ArrowDown' && currentIndex < filteredRequests.value.length - 1) {
+      selectedRequest.value = filteredRequests.value[currentIndex + 1];
+    } else if (e.key === 'ArrowUp' && currentIndex > 0) {
+      selectedRequest.value = filteredRequests.value[currentIndex - 1];
+    }
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', handleKeyDown))
+onUnmounted(() => window.removeEventListener('keydown', handleKeyDown))
 </script>
 
 <template>

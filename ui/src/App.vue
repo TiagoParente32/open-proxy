@@ -25,7 +25,8 @@ import {
   selectedRuleId,
   showBreakpointModal,
   breakpointRules,
-  selectedBreakpointId
+  selectedBreakpointId,
+  repeatRequest
 } from './store.js'
 
 onMounted(() => {
@@ -36,6 +37,11 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('click', closeContextMenu)
 })
+
+const handleRepeatFromContext = () => {
+  repeatRequest();
+  closeContextMenu();
+}
 
 // --- Context Menu Actions ---
 const pinFromContextMenu = () => {
@@ -121,6 +127,7 @@ const openBreakpointModalFromContext = () => {
     </splitpanes>
 
     <div v-if="contextMenu.show" class="context-menu" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
+      <div class="context-menu-item" @click="handleRepeatFromContext">🔄 Repeat Request</div>
       <div class="context-menu-item" @click="pinFromContextMenu">📌 Pin Domain</div>
       <div class="context-menu-item" @click="openMapLocalModalFromContext">⚡️ Map Local</div>
       <div class="context-menu-item" @click="openBreakpointModalFromContext">🛑 Add Breakpoint</div>
@@ -133,7 +140,6 @@ const openBreakpointModalFromContext = () => {
 </template>
 
 <style>
-/* --- CORE VARIABLES & LAYOUT --- */
 :root { background-color: #1a1a1b; color: #cccccc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --bg-main: #1e1e1f; --bg-sidebar: #222223; --bg-active: #2a2d2e; --border: #333333; }
 body { margin: 0; padding: 0; }
 .app-wrapper { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
