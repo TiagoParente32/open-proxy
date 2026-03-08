@@ -11,6 +11,8 @@ import InspectorPane from './components/InspectorPane.vue'
 import MapLocalModal from './components/MapLocalModal.vue'
 import BreakpointHit from './components/BreakpointHit.vue'
 import BreakpointsModal from './components/BreakpointsModal.vue'
+import ComposeModal from './components/ComposeModal.vue'
+import MapRemoteModal from './components/MapRemoteModal.vue'
 
 // Import just the logic needed for the top-level app overlay (WebSockets & Context Menu)
 import { 
@@ -26,7 +28,11 @@ import {
   showBreakpointModal,
   breakpointRules,
   selectedBreakpointId,
-  repeatRequest
+  repeatRequest,
+  openComposeModal,
+  showMapRemoteModal,
+  mapRemoteRules,
+  selectedMapRemoteId
 } from './store.js'
 
 onMounted(() => {
@@ -37,6 +43,13 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('click', closeContextMenu)
 })
+
+const handleEditAndRepeatFromContext = () => {
+  if (contextMenu.value.request) {
+    openComposeModal(contextMenu.value.request);
+  }
+  closeContextMenu();
+}
 
 const handleRepeatFromContext = () => {
   repeatRequest();
@@ -53,6 +66,30 @@ const pinFromContextMenu = () => {
     }
   }
   closeContextMenu();
+}
+
+const openMapRemoteModalFromContext = () => {
+  closeContextMenu();
+  if (contextMenu.value.request) {
+    const req = contextMenu.value.request;
+    
+    // Strip query params and escape dots for a safe regex pattern
+    let defaultPattern = req.url.split('?')[0].replace(/\./g, '\\.');
+
+    const newRule = { 
+      id: Date.now(), 
+      active: true, 
+      pattern: defaultPattern, 
+      target: 'http://localhost:8080' // Default target for dev servers
+    };
+    
+    mapRemoteRules.value.unshift(newRule);
+    selectedMapRemoteId.value = newRule.id;
+  } else if (mapRemoteRules.value.length > 0 && !selectedMapRemoteId.value) {
+    selectedMapRemoteId.value = mapRemoteRules.value[0].id;
+  }
+  
+  showMapRemoteModal.value = true;
 }
 
 const openMapLocalModalFromContext = () => {
@@ -128,14 +165,19 @@ const openBreakpointModalFromContext = () => {
 
     <div v-if="contextMenu.show" class="context-menu" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
       <div class="context-menu-item" @click="handleRepeatFromContext">🔄 Repeat Request</div>
+      <div class="context-menu-item" @click="handleEditAndRepeatFromContext">✏️ Edit & Repeat</div>
+
       <div class="context-menu-item" @click="pinFromContextMenu">📌 Pin Domain</div>
       <div class="context-menu-item" @click="openMapLocalModalFromContext">⚡️ Map Local</div>
+      <div class="context-menu-item" @click="openMapRemoteModalFromContext">🔀 Map Remote</div>
       <div class="context-menu-item" @click="openBreakpointModalFromContext">🛑 Add Breakpoint</div>
     </div>
 
     <MapLocalModal />
+    <MapRemoteModal />
     <BreakpointHit />
     <BreakpointsModal />
+    <ComposeModal />
   </div>
 </template>
 

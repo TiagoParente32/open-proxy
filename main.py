@@ -41,6 +41,7 @@ class ProxyUIBridge:
         self.breakpoint_rules = []
         self.paused_flows = {} # Maps flow.id -> asyncio.Event
         self.breakpoints_enabled = True
+        self.map_remote_rules = []
 
     async def request(self, flow: http.HTTPFlow):
         # 1. Respect the Pause/Play button
@@ -98,6 +99,23 @@ class ProxyUIBridge:
             task.add_done_callback(self.bg_tasks.discard)
         except RuntimeError:
             pass
+        
+        # --- MAP REMOTE (REWRITE) LOGIC ---
+        for rule in self.map_remote_rules:
+            if rule.get("active"):
+                try:
+                    pattern = rule.get("pattern", "")
+                    target = rule.get("target", "")
+                    # If the URL matches the pattern...
+                    if re.search(pattern, flow.request.pretty_url):
+                        # Replace the matched part of the URL with the target!
+                        new_url = re.sub(pattern, target, flow.request.pretty_url)
+                        flow.request.url = new_url
+                        
+                        # Crucial: Update the Host header so the destination server doesn't reject it
+                        flow.request.headers["Host"] = flow.request.host
+                except re.error:
+                    pass
 
         # 3. Handle Map Local (Mocking)
         for rule in self.map_local_rules:
@@ -118,6 +136,7 @@ class ProxyUIBridge:
                 except Exception as e:
                     flow.response = http.Response.make(500, f"Editor Error: {e}".encode())
                     return
+                
         if self.breakpoints_enabled:
             for rule in self.breakpoint_rules:
                 if rule.get("active") and rule.get("is_request"):
@@ -249,6 +268,9 @@ class ProxyUIBridge:
                     
                 elif payload.get("type") == "TOGGLE_CACHE":
                     self.disable_cache = payload.get("disable_cache")
+
+                elif payload.get("type") == "UPDATE_MAP_REMOTE_RULES":
+                    self.map_remote_rules = payload.get("rules", [])
 
                 elif payload.get("type") == "SETUP_ANDROID":
                     try:

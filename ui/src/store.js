@@ -48,8 +48,61 @@ export const trappedFlows = ref([]) // <--- CHANGED TO AN ARRAY
 export const selectedBreakpointId = ref(null)
 export const breakpointsEnabled = ref(loadState('breakpointsEnabled', true)) // <--- MASTER TOGGLE
 
-// Watch for rule changes to save and sync
-// Watch the master toggle and tell Python immediately
+// --- MAP REMOTE STATE ---
+export const showMapRemoteModal = ref(false)
+export const mapRemoteRules = ref(loadState('mapRemoteRules', []))
+export const selectedMapRemoteId = ref(null)
+
+watch(mapRemoteRules, (newVals) => {
+    saveState('mapRemoteRules', newVals)
+    syncMapRemoteRules()
+}, { deep: true })
+
+export const syncMapRemoteRules = () => {
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "UPDATE_MAP_REMOTE_RULES", rules: mapRemoteRules.value }))
+    }
+}
+
+export const showComposeModal = ref(false)
+export const composeData = ref(null)
+
+export const openComposeModal = (req) => {
+    // Make a copy of the request so we don't accidentally edit the one in the table!
+    composeData.value = {
+        method: req.method,
+        url: req.url,
+        // Format headers as a pretty JSON string for the editor
+        req_headers: JSON.stringify(req.req_headers || {}, null, 2),
+        // If it was an image, clear the body text, otherwise load it
+        req_body: req.req_is_image ? '' : (req.req_body || '')
+    }
+    showComposeModal.value = true
+}
+
+export const sendComposedRequest = () => {
+    if (wsConnection?.readyState === WebSocket.OPEN && composeData.value) {
+
+        // Convert the stringified headers back into a real JavaScript object
+        let parsedHeaders = {}
+        try { parsedHeaders = JSON.parse(composeData.value.req_headers) } catch (e) { }
+
+        // Send the EXACT same message type we used for the standard repeat!
+        wsConnection.send(JSON.stringify({
+            type: "REPEAT_REQUEST",
+            request: {
+                method: composeData.value.method,
+                url: composeData.value.url,
+                req_headers: parsedHeaders,
+                req_body: composeData.value.req_body,
+                req_is_image: false
+            }
+        }))
+
+        showComposeModal.value = false // Close the modal
+    }
+}
+
 watch(breakpointsEnabled, (newVal) => {
     saveState('breakpointsEnabled', newVal)
     if (wsConnection?.readyState === WebSocket.OPEN) {
@@ -206,6 +259,7 @@ export const initWebSocket = () => {
         connectionStatus.value = '🟢 Intercepting Traffic'
         syncMapLocalRules() // Send the loaded rules to python immediately on boot!
         syncBreakpointRules()
+        syncMapRemoteRules()
         wsConnection.send(JSON.stringify({ type: "TOGGLE_BREAKPOINTS", enabled: breakpointsEnabled.value }))
         wsConnection.send(JSON.stringify({ type: "TOGGLE_CACHE", disable_cache: disableCache.value }))
     }
