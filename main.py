@@ -14,6 +14,7 @@ import urllib.request
 import ssl
 import os
 import sys
+import webview
 
 # --- 1. NETWORK HELPERS ---
 def get_local_ip():
@@ -55,8 +56,10 @@ class ProxyUIBridge:
         self.breakpoint_rules = []
         self.paused_flows = {}
         self.breakpoints_enabled = True
+        self.map_local_enabled = True
+        self.map_remote_enabled = True
         self.map_remote_rules = []
-        self.throttle_profile = "None" # "None", "Fast 3G", "Slow 3G"
+        self.throttle_profile = "None"
 
     async def request(self, flow: http.HTTPFlow):
         # 1. Respect the Pause/Play button
@@ -121,41 +124,43 @@ class ProxyUIBridge:
             pass
         
         # --- MAP REMOTE (REWRITE) LOGIC ---
-        for rule in self.map_remote_rules:
-            if rule.get("active"):
-                try:
-                    pattern = rule.get("pattern", "")
-                    target = rule.get("target", "")
-                    # If the URL matches the pattern...
-                    if re.search(pattern, flow.request.pretty_url):
-                        # Replace the matched part of the URL with the target!
-                        new_url = re.sub(pattern, target, flow.request.pretty_url)
-                        flow.request.url = new_url
-                        
-                        # Crucial: Update the Host header so the destination server doesn't reject it
-                        flow.request.headers["Host"] = flow.request.host
-                except re.error:
-                    pass
+        if self.map_remote_enabled:
+            for rule in self.map_remote_rules:
+                if rule.get("active"):
+                    try:
+                        pattern = rule.get("pattern", "")
+                        target = rule.get("target", "")
+                        # If the URL matches the pattern...
+                        if re.search(pattern, flow.request.pretty_url):
+                            # Replace the matched part of the URL with the target!
+                            new_url = re.sub(pattern, target, flow.request.pretty_url)
+                            flow.request.url = new_url
+                            
+                            # Crucial: Update the Host header so the destination server doesn't reject it
+                            flow.request.headers["Host"] = flow.request.host
+                    except re.error:
+                        pass
 
         # 3. Handle Map Local (Mocking)
-        for rule in self.map_local_rules:
-            if rule.get("active") and re.search(rule.get("pattern", ""), flow.request.pretty_url):
-                try:
-                    status_code = int(rule.get("status", 200))
-                    body_text = rule.get("body", "").encode('utf-8')
-                    headers_dict = {}
+        if self.map_local_enabled:
+            for rule in self.map_local_rules:
+                if rule.get("active") and re.search(rule.get("pattern", ""), flow.request.pretty_url):
                     try:
-                        if rule.get("headers"):
-                            headers_dict = json.loads(rule.get("headers"))
-                    except json.JSONDecodeError:
-                        headers_dict = {"Content-Type": "text/plain"}
+                        status_code = int(rule.get("status", 200))
+                        body_text = rule.get("body", "").encode('utf-8')
+                        headers_dict = {}
+                        try:
+                            if rule.get("headers"):
+                                headers_dict = json.loads(rule.get("headers"))
+                        except json.JSONDecodeError:
+                            headers_dict = {"Content-Type": "text/plain"}
 
-                    headers_dict["X-Map-Local"] = "Active"
-                    flow.response = http.Response.make(status_code, body_text, headers_dict)
-                    return 
-                except Exception as e:
-                    flow.response = http.Response.make(500, f"Editor Error: {e}".encode())
-                    return
+                        headers_dict["X-Map-Local"] = "Active"
+                        flow.response = http.Response.make(status_code, body_text, headers_dict)
+                        return 
+                    except Exception as e:
+                        flow.response = http.Response.make(500, f"Editor Error: {e}".encode())
+                        return
                 
         if self.breakpoints_enabled:
             for rule in self.breakpoint_rules:
@@ -419,6 +424,37 @@ class ProxyUIBridge:
                 elif payload.get("type") == "UPDATE_BREAKPOINT_RULES":
                     self.breakpoint_rules = payload.get("rules", [])
 
+                elif payload.get("type") == "TOGGLE_MAP_LOCAL":
+                    self.map_local_enabled = payload.get("enabled", True)
+                
+                elif payload.get("type") == "TOGGLE_MAP_REMOTE":
+                    self.map_remote_enabled = payload.get("enabled", True)
+
+                elif payload.get("type") == "EXPORT_FILE":
+                    filename = payload.get("filename", "export.json")
+                    file_data = payload.get("data", "")
+                    
+                    # Trigger the native OS Save Dialog
+                    try:
+                        window = webview.windows[0]
+                        # webview.SAVE_DIALOG tells it to open a "Save As" window
+                        result = window.create_file_dialog(
+                            webview.SAVE_DIALOG, 
+                            save_filename=filename
+                        )
+                        
+                        # result is a tuple of the chosen file path, or None if they clicked Cancel
+                        if result and len(result) > 0:
+                            save_path = result[0]
+                            if isinstance(save_path, tuple): # Sometimes macOS returns a nested tuple
+                                save_path = save_path[0]
+                                
+                            with open(save_path, 'w', encoding='utf-8') as f:
+                                f.write(file_data)
+                            print(f"Successfully exported to {save_path}")
+                    except Exception as e:
+                        print(f"Failed to open save dialog: {e}")
+                        
                 elif payload.get("type") == "RESOLVE_BREAKPOINT":
                     flow_id = payload.get("id")
                     action = payload.get("action") # "execute" or "drop"
@@ -494,4 +530,4 @@ if __name__ == "__main__":
     )
     
     icon_path = get_resource_path('icon.png')
-    webview.start(private_mode=False, debug=False, icon=icon_path)
+    webview.start(private_mode=False, debug=True, icon=icon_path)

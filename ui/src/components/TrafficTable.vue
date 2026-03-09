@@ -88,16 +88,29 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeyDown))
           </tr>
         </thead>
         <tbody>
-          <tr v-for="req in filteredRequests" :key="req.id" @click="selectedRequest = req" @contextmenu.prevent="openContextMenu($event, req)" :class="{ selected: selectedRequest?.id === req.id }">
-            <td class="text-muted text-id">{{ req.id.substring(0, 5) }}</td>
+          <tr 
+            v-for="req in filteredRequests" 
+            :key="req.id" 
+            @click="selectedRequest = req" 
+            @contextmenu.prevent="openContextMenu($event, req)" 
+            :class="[
+              { selected: selectedRequest?.id === req.id },
+              req.color ? `row-${req.color}` : ''
+            ]"
+          >
+
+            <td class="text-muted text-id">
+              <span v-if="req.starred" style="margin-right: 4px; font-size: 10px;">⭐</span>
+              {{ req.id.substring(0, 5) }}
+            </td>
             <td><span class="method-badge" :style="{ backgroundColor: getMethodColor(req.method) + '20', color: getMethodColor(req.method) }">{{ req.method }}</span></td>
             <td>
               <span v-if="req.status === '...'" class="text-muted">...</span>
               <span v-else class="status-badge" :class="{'text-green': req.status < 400, 'text-red': req.status >= 400}">{{ req.status }}</span>
             </td>
             
-            <td class="font-semibold truncate" :title="req.url" style="font-family: monospace;">{{ req.url }}</td>
-            
+            <td class="font-semibold truncate" :title="req.url" style="font-family: monospace; font-size: 10.5px; letter-spacing: -0.2px;">{{ req.url }}</td>
+
             <td class="text-muted">{{ formatTime(req.time) }}</td>
             <td class="text-muted">{{ req.duration ? req.duration + ' ms' : '...' }}</td>
             <td class="text-muted">{{ formatBytes(req.req_bytes) }}</td>
@@ -169,6 +182,13 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeyDown))
 
 .traffic-table tbody tr:hover { background-color: var(--bg-active); cursor: pointer; }
 .traffic-table tbody tr.selected { background-color: #1e3a5f; color: #fff; }
+.traffic-table tbody tr.row-red { background-color: rgba(239, 68, 68, 0.15); }
+.traffic-table tbody tr.row-yellow { background-color: rgba(245, 158, 11, 0.15); }
+.traffic-table tbody tr.row-green { background-color: rgba(16, 185, 129, 0.15); }
+.traffic-table tbody tr.row-blue { background-color: rgba(59, 130, 246, 0.15); }
+
+/* Ensure the selected state OVERRIDES the highlight color so you don't lose your cursor! */
+.traffic-table tbody tr.selected { background-color: #1e3a5f !important; color: #fff; }
 
 .text-id { font-family: monospace; font-size: 11px; }
 .method-badge { padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10px; }

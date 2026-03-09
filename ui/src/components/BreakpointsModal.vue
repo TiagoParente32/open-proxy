@@ -5,10 +5,11 @@ import {
   breakpointRules, 
   selectedBreakpointId, 
   syncBreakpointRules, 
-  breakpointsEnabled 
+  breakpointsEnabled,
+  importRules,
+  exportRules 
 } from '../store.js'
 
-// Get the currently selected rule to edit
 const activeRule = computed(() => breakpointRules.value.find(r => r.id === selectedBreakpointId.value))
 
 const addNewRule = () => {
@@ -38,23 +39,15 @@ const saveAndApplyRules = () => {
 
 <template>
   <div v-if="showBreakpointModal" class="modal-overlay" @mousedown.self="showBreakpointModal = false">
-    <div class="modal-content large" style="width: 800px; height: 500px; min-width: 600px; min-height: 400px;">
-      
-      <div class="modal-sidebar" style="width: 250px;">
+    <div class="modal-content large" style="display: flex;">      
+      <div class="modal-sidebar" style="width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column;">
         
-        <div style="padding: 16px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <strong style="color: white; font-size: 13px;">Breakpoints</strong>
-            <button class="action-btn" @click="addNewRule">+ Add</button>
-          </div>
-          
-          <div class="toggle" @click="breakpointsEnabled = !breakpointsEnabled" :class="{ active: breakpointsEnabled }" style="display: flex; justify-content: space-between; align-items: center; background: #1a1a1b; padding: 8px 12px; border-radius: 6px; border: 1px solid #333;">
-            <span style="font-size: 12px; font-weight: 600;">Enable Breakpoints</span>
-            <div class="switch"></div>
-          </div>
+        <div style="padding: 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+          <strong style="color: white; font-size: 13px;">Breakpoints</strong>
+          <button class="action-btn" style="padding: 4px 10px;" @click="addNewRule">+ Add</button>
         </div>
         
-        <div class="rule-list">
+        <div class="rule-list" style="flex: 1; overflow-y: auto;">
           <div v-for="rule in breakpointRules" :key="rule.id" class="rule-item" :class="{ active: selectedBreakpointId === rule.id }" @click="selectedBreakpointId = rule.id">
             <input type="checkbox" v-model="rule.active" @click.stop />
             <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; padding-left: 8px;">
@@ -67,9 +60,26 @@ const saveAndApplyRules = () => {
           </div>
           <div v-if="breakpointRules.length === 0" class="empty-state">No breakpoints set.</div>
         </div>
+
+        <div class="sidebar-footer">
+          <div class="toggle" @click="breakpointsEnabled = !breakpointsEnabled" :class="{ active: breakpointsEnabled }">
+            <span class="toggle-label">Enable Breakpoints</span>
+            <div class="switch"></div>
+          </div>
+          
+          <div class="divider" style="width: 100%; height: 1px; background: var(--border); margin: 8px 0;"></div>
+          
+          <div style="display: flex; gap: 8px;">
+            <button class="ghost-btn" style="flex: 1; justify-content: center;" @click="exportRules(breakpointRules, 'OpenProxy_Breakpoints')">⬇️ Export</button>
+            <label class="ghost-btn" style="flex: 1; justify-content: center; cursor: pointer; margin: 0;">
+              ⬆️ Import
+              <input type="file" accept=".json" style="display: none;" @change="(e) => importRules(e, breakpointRules)" />
+            </label>
+          </div>
+        </div>
       </div>
 
-      <div class="modal-editor">
+      <div class="modal-editor" style="flex: 1; display: flex; flex-direction: column; background: var(--bg-main); min-width: 0;">
         <div v-if="activeRule" style="display: flex; flex-direction: column; height: 100%;">
           
           <div style="padding: 24px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 24px;">
@@ -106,7 +116,7 @@ const saveAndApplyRules = () => {
           
         </div>
         
-        <div v-else class="global-empty">Select or create a breakpoint rule.</div>
+        <div v-else class="global-empty" style="display: flex; justify-content: center; align-items: center; height: 100%; color: #666; font-style: italic; font-size: 12px;">Select or create a breakpoint rule.</div>
       </div>
       
     </div>
@@ -114,22 +124,33 @@ const saveAndApplyRules = () => {
 </template>
 
 <style scoped>
-/* These styles mimic your existing MapLocal modal so it seamlessly integrates */
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); z-index: 100; display: flex; justify-content: center; align-items: center; }
-.modal-content.large { display: flex; background: var(--bg-main); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.6); resize: both; overflow: hidden; }
+/* Base Modal Styles */
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); z-index: 100; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(2px);}
+.modal-content.large { 
+  background: var(--bg-main); 
+  border: 1px solid var(--border); 
+  border-radius: 8px; 
+  width: 1000px;        /* Unified width */
+  height: 650px;        /* Unified height */
+  min-width: 800px; 
+  min-height: 500px; 
+  max-width: 95vw; 
+  max-height: 95vh; 
+  box-shadow: 0 10px 40px rgba(0,0,0,0.6); 
+  resize: both; 
+  overflow: hidden; 
+}
 
-.modal-sidebar { background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-.rule-list { flex: 1; overflow-y: auto; }
 .rule-item { padding: 10px 12px; border-bottom: 1px solid #333; display: flex; align-items: center; cursor: pointer; transition: background 0.2s; }
 .rule-item:hover { background: #2a2d2e; }
 .rule-item.active { background: rgba(245, 158, 11, 0.15); border-left: 3px solid #f59e0b; padding-left: 9px; }
 .empty-state { padding: 40px; text-align: center; color: #666; font-style: italic; font-size: 12px; }
 
-.modal-editor { flex: 1; display: flex; flex-direction: column; background: var(--bg-main); min-width: 0; }
 .form-group { display: flex; flex-direction: column; text-align: left; }
 .modal-label { font-size: 12px; color: #aaa; margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;}
 .modal-input { width: 100%; background: #111; border: 1px solid #444; color: #ccc; padding: 10px 12px; border-radius: 6px; font-size: 13px; box-sizing: border-box; outline: none; transition: border-color 0.2s; }
 .modal-input:focus { border-color: #f59e0b; }
+.truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Custom Checkboxes for the Breakpoint rules */
 .checkbox-group { display: flex; flex-direction: column; gap: 12px; background: #1a1a1b; padding: 16px; border-radius: 6px; border: 1px solid #333; }
@@ -140,11 +161,22 @@ const saveAndApplyRules = () => {
 .custom-checkbox input:checked + .checkbox-box::after { content: '✓'; color: white; font-size: 12px; font-weight: bold; }
 .custom-checkbox:hover .checkbox-box { border-color: #888; }
 
-/* Custom Checkboxes and Toggles */
-.toggle { cursor: pointer; color: #ccc; transition: color 0.2s; }
-.toggle.active { color: #f59e0b; }
-.switch { width: 30px; height: 16px; background: #444; border-radius: 20px; position: relative; transition: background 0.3s; }
-.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: white; border-radius: 50%; transition: transform 0.3s; }
-.toggle.active .switch { background: #f59e0b; border-color: #f59e0b; }
-.toggle.active .switch::after { transform: translateX(14px); }
+/* Buttons & Footer (Consistent across all modals) */
+.action-btn { background: #2a2d2e; border: 1px solid #444; color: #ccc; border-radius: 4px; padding: 6px 12px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+.action-btn:hover { background: #333; color: white; border-color: #555; }
+
+.sidebar-footer { padding: 16px; background: #1a1b1c; border-top: 1px solid var(--border); display: flex; flex-direction: column; }
+
+.ghost-btn { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; background: transparent; border: 1px solid #444; color: #aaa; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500; transition: all 0.2s; }
+.ghost-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; border-color: #666;}
+
+.toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: #888; font-weight: 600; transition: color 0.2s; }
+.toggle.active { color: #f59e0b; } /* Breakpoint Orange */
+.toggle:hover { color: #ccc; }
+.toggle-label { font-size: 12px; }
+
+.switch { width: 32px; height: 18px; background: #111; border: 1px solid #444; border-radius: 14px; position: relative; transition: all 0.3s; box-sizing: border-box;}
+.switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: #888; border-radius: 50%; transition: transform 0.3s, background 0.3s; }
+.toggle.active .switch { background: rgba(245, 158, 11, 0.15); border-color: #f59e0b; }
+.toggle.active .switch::after { transform: translateX(14px); background: #f59e0b; }
 </style>

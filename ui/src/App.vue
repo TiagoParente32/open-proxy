@@ -57,6 +57,24 @@ const handleRepeatFromContext = () => {
   closeContextMenu();
 }
 
+
+// --- COLOR & STAR LOGIC ---
+const toggleStar = () => {
+  if (contextMenu.value.request) {
+    // Flip the boolean
+    contextMenu.value.request.starred = !contextMenu.value.request.starred;
+  }
+  closeContextMenu();
+}
+
+const setRowColor = (colorClass) => {
+  if (contextMenu.value.request) {
+    // Assign a color string (e.g., 'red', 'blue', or null to clear)
+    contextMenu.value.request.color = colorClass;
+  }
+  closeContextMenu();
+}
+
 // --- Context Menu Actions ---
 const pinFromContextMenu = () => {
   if (contextMenu.value.request) {
@@ -164,10 +182,26 @@ const openBreakpointModalFromContext = () => {
 
     </splitpanes>
 
-    <div v-if="contextMenu.show" class="context-menu" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
+   <div v-if="contextMenu.show" class="context-menu" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
       <div class="context-menu-item" @click="handleRepeatFromContext">🔄 Repeat Request</div>
       <div class="context-menu-item" @click="handleEditAndRepeatFromContext">✏️ Edit & Repeat</div>
-
+      
+      <div class="context-menu-divider"></div>
+      
+      <div class="context-menu-item" @click="toggleStar">
+        {{ contextMenu.request?.starred ? '⭐ Unstar Request' : '⭐ Star Request' }}
+      </div>
+      
+      <div class="context-menu-colors">
+        <div class="color-dot red" @click="setRowColor('red')" title="Red"></div>
+        <div class="color-dot yellow" @click="setRowColor('yellow')" title="Yellow"></div>
+        <div class="color-dot green" @click="setRowColor('green')" title="Green"></div>
+        <div class="color-dot blue" @click="setRowColor('blue')" title="Blue"></div>
+        <div class="color-dot clear" @click="setRowColor(null)" title="Clear Color">🚫</div>
+      </div>
+      
+      <div class="context-menu-divider"></div>
+      
       <div class="context-menu-item" @click="pinFromContextMenu">📌 Pin Domain</div>
       <div class="context-menu-item" @click="openMapLocalModalFromContext">⚡️ Map Local</div>
       <div class="context-menu-item" @click="openMapRemoteModalFromContext">🔀 Map Remote</div>
@@ -219,4 +253,25 @@ body { margin: 0; padding: 0; }
 /* --- TEXT SELECTION FIXES --- */
 .traffic-table, .inspector-content, .modal-editor, .cm-editor, .cm-content { -webkit-user-select: text !important; user-select: text !important; cursor: text; }
 .toolbar, .sidebar, .action-btn, .panel-tabs, .sidebar-header, .splitpanes__splitter { -webkit-user-select: none !important; user-select: none !important; }
+
+.context-menu-divider { height: 1px; background: #333; margin: 4px 0; }
+
+.context-menu-colors {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 12px;
+  gap: 8px;
+}
+
+.color-dot {
+  width: 16px; height: 16px; border-radius: 50%; cursor: pointer;
+  transition: transform 0.1s; border: 1px solid #444;
+  display: flex; align-items: center; justify-content: center; font-size: 10px;
+}
+.color-dot:hover { transform: scale(1.2); }
+.color-dot.red { background: #ef4444; }
+.color-dot.yellow { background: #f59e0b; }
+.color-dot.green { background: #10b981; }
+.color-dot.blue { background: #3b82f6; }
+.color-dot.clear { background: transparent; border: none; font-size: 12px; }
 </style>

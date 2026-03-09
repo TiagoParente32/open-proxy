@@ -48,11 +48,76 @@ export const trappedFlows = ref([]) // <--- CHANGED TO AN ARRAY
 export const selectedBreakpointId = ref(null)
 export const breakpointsEnabled = ref(loadState('breakpointsEnabled', true)) // <--- MASTER TOGGLE
 
+export const enableMapLocal = ref(loadState('enableMapLocal', true))
+export const enableMapRemote = ref(loadState('enableMapRemote', true))
+
+
+export const exportRules = (rules, filename) => {
+    // 1. Get the actual array data
+    const data = rules.value !== undefined ? rules.value : rules;
+
+    // 2. Convert it to a formatted JSON string
+    const jsonString = JSON.stringify(data, null, 2);
+
+    // 3. Send it to Python to trigger the native OS Save Dialog
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({
+            type: "EXPORT_FILE",
+            filename: filename + ".json",
+            data: jsonString
+        }));
+    } else {
+        alert("Backend connection lost. Cannot export right now.");
+    }
+}
+
+export const importRules = (event, rulesRef) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const importedRules = JSON.parse(e.target.result);
+            if (Array.isArray(importedRules)) {
+                // Handle both Ref and unwrapped reactive arrays
+                if (rulesRef.value !== undefined) {
+                    rulesRef.value = [...rulesRef.value, ...importedRules];
+                } else {
+                    rulesRef.push(...importedRules); // Mutate in place if unwrapped
+                }
+            } else {
+                alert("Invalid file format. Expected an array of rules.");
+            }
+        } catch (err) {
+            alert("Failed to parse JSON file.");
+        }
+        event.target.value = '';
+    };
+    reader.readAsText(file);
+}
+
+watch(enableMapLocal, (val) => {
+    saveState('enableMapLocal', val)
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "TOGGLE_MAP_LOCAL", enabled: val }))
+    }
+})
+
+watch(enableMapRemote, (val) => {
+    saveState('enableMapRemote', val)
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "TOGGLE_MAP_REMOTE", enabled: val }))
+    }
+})
+
+
 // --- CHIP FILTERS STATE ---
 export const activeChips = ref(loadState('activeChips', {
     protocol: 'All',
     type: 'All',
-    status: 'All'
+    status: 'All',
+    starred: false
 }))
 
 watch(activeChips, (newVals) => {
@@ -304,6 +369,10 @@ export const filteredRequests = computed(() => {
         });
     }
 
+    if (activeChips.value.starred) {
+        baseList = baseList.filter(req => req.starred);
+    }
+
     baseList.sort((a, b) => {
         let valA = a[sortKey.value]
         let valB = b[sortKey.value]
@@ -327,6 +396,8 @@ export const initWebSocket = () => {
         syncBreakpointRules()
         syncMapRemoteRules()
         wsConnection.send(JSON.stringify({ type: "UPDATE_THROTTLE", profile: throttleProfile.value }))
+        wsConnection.send(JSON.stringify({ type: "TOGGLE_MAP_LOCAL", enabled: enableMapLocal.value }))
+        wsConnection.send(JSON.stringify({ type: "TOGGLE_MAP_REMOTE", enabled: enableMapRemote.value }))
         wsConnection.send(JSON.stringify({ type: "TOGGLE_BREAKPOINTS", enabled: breakpointsEnabled.value }))
         wsConnection.send(JSON.stringify({ type: "TOGGLE_CACHE", disable_cache: disableCache.value }))
     }

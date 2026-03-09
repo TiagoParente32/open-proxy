@@ -12,6 +12,17 @@ const setChip = (category, value) => {
 
 <template>
   <div class="filter-bar">
+    <div class="chip-group">
+      <button 
+        class="chip" :class="{ active: activeChips.starred }"
+        @click="activeChips.starred = !activeChips.starred"
+        style="color: #f59e0b;"
+      >
+        {{ activeChips.starred ? '⭐ Starred Only' : '⭐ Starred' }}
+      </button>
+    </div>
+
+    <div class="divider"></div>
     
     <div class="chip-group">
       <button 
