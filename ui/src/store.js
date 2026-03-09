@@ -51,6 +51,26 @@ export const breakpointsEnabled = ref(loadState('breakpointsEnabled', true)) // 
 export const enableMapLocal = ref(loadState('enableMapLocal', true))
 export const enableMapRemote = ref(loadState('enableMapRemote', true))
 
+// --- WEBSOCKET STATE ---
+// Stores messages keyed by the request ID: { "req-123": [{...msg}, {...msg}] }
+export const wsMessages = ref(loadState('wsMessages', {}))
+let wsSaveTimeout = null;
+
+
+watch(wsMessages, (newVal) => {
+    // Clear the previous timer if a new message arrives quickly
+    if (wsSaveTimeout) clearTimeout(wsSaveTimeout);
+
+    // Set a new timer to save exactly 1 second after the last message arrives
+    wsSaveTimeout = setTimeout(() => {
+        try {
+            saveState('wsMessages', newVal);
+            console.log("💾 Saved WS messages to local storage");
+        } catch (e) {
+            console.warn("⚠️ LocalStorage is full! Could not save WS messages.");
+        }
+    }, 1000);
+}, { deep: true })
 
 export const exportRules = (rules, filename) => {
     // 1. Get the actual array data
@@ -329,7 +349,7 @@ export const filteredRequests = computed(() => {
         baseList = baseList.filter(req => {
             if (p === 'HTTP') return req.url.startsWith('http://');
             if (p === 'HTTPS') return req.url.startsWith('https://');
-            if (p === 'WS') return req.url.startsWith('ws://') || req.url.startsWith('wss://');
+            if (p === 'WS') return req.status === 101 || req.url.startsWith('ws://') || req.url.startsWith('wss://');
             return true;
         });
     }
@@ -424,6 +444,25 @@ export const initWebSocket = () => {
             const newFlow = payload.data
             newFlow.headersStr = JSON.stringify(newFlow.headers, null, 2)
             trappedFlows.value.push(newFlow)
+        } else if (payload.type === 'WS_MESSAGE') {
+            // We can drop the alert now since we found the bug!
+            const reqId = String(payload.id);
+
+            // Initialize the array if this is the first message
+            if (!wsMessages.value[reqId]) {
+                wsMessages.value[reqId] = [];
+            }
+
+            // Push the new frame
+            wsMessages.value[reqId].push({
+                is_client: payload.is_client,
+                content: payload.content,
+                size: payload.size,
+                time: payload.timestamp
+            });
+
+            // Violently shake Vue so it updates the UI
+            wsMessages.value = { ...wsMessages.value };
         }
     }
     wsConnection.onclose = () => { connectionStatus.value = '🔴 Disconnected' }

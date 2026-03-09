@@ -4,6 +4,7 @@ import re
 import socket
 import subprocess
 import threading
+import time
 import websockets
 import webview
 from mitmproxy import http, options
@@ -187,7 +188,48 @@ class ProxyUIBridge:
                         # If the user typed an invalid regex like "*google", ignore the rule so we don't crash
                         print(f"⚠️ Invalid regex in breakpoint rule: {rule.get('pattern')}")
                         pass
+    
+    async def websocket_message(self, flow: http.HTTPFlow):
+        # 1. Check if the hook is even firing
+        print(f"💡 [WS HOOK] Intercepted a message on flow {flow.id}")
 
+        if not self.is_recording:
+            return
+
+        if not flow.websocket or not flow.websocket.messages:
+            print("❌ [WS HOOK] No websocket messages found on this flow.")
+            return
+            
+        latest_msg = flow.websocket.messages[-1]
+        
+        try:
+            content_str = latest_msg.content.decode('utf-8')
+        except UnicodeDecodeError:
+            content_str = f"<Binary Data: {len(latest_msg.content)} bytes>"
+
+        payload = {
+            "type": "WS_MESSAGE",
+            "id": str(flow.id), 
+            "is_client": latest_msg.from_client,
+            "content": content_str,
+            "size": len(latest_msg.content),
+            "timestamp": time.time()
+        }
+
+        # 2. Check if the payload is built and ready to send
+        print(f"🚀 [WS HOOK] Broadcasting frame to UI: {content_str[:50]}...")
+
+        if hasattr(self, 'connected_clients') and self.connected_clients:
+            for ws in self.connected_clients:
+                try:
+                    await ws.send(json.dumps(payload))
+                    print("✅ [WS HOOK] Successfully sent to Vue UI!")
+                except Exception as e:
+                    print(f"❌ [WS HOOK] Failed to send to UI: {e}")
+        else:
+            print("❌ [WS HOOK] No connected Vue UI clients found!")
+            
+                
     async def response(self, flow: http.HTTPFlow):
         # 1. Respect the Pause/Play button
         if not self.is_recording:
@@ -454,7 +496,7 @@ class ProxyUIBridge:
                             print(f"Successfully exported to {save_path}")
                     except Exception as e:
                         print(f"Failed to open save dialog: {e}")
-                        
+
                 elif payload.get("type") == "RESOLVE_BREAKPOINT":
                     flow_id = payload.get("id")
                     action = payload.get("action") # "execute" or "drop"

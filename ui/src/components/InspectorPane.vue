@@ -6,6 +6,19 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView } from '@codemirror/view'
 
 import { selectedRequest, activeReqTab, activeResTab } from '../store.js'
+import { computed } from 'vue'
+import WebSocketInspector from './WebSocketInspector.vue'
+
+// Add this computed property right below your other variables
+const isWebSocket = computed(() => {
+  if (!selectedRequest.value) return false;
+  
+  // A WebSocket is officially recognized by a 101 status code, 
+  // or by explicitly having ws:// or wss:// in the URL
+  return selectedRequest.value.status === 101 || 
+         selectedRequest.value.url.startsWith('ws://') || 
+         selectedRequest.value.url.startsWith('wss://');
+})
 
 const extensions = [json(), oneDark, EditorView.lineWrapping]
 
@@ -22,6 +35,7 @@ const getMethodColor = (method) => {
 
 <template>
   <div class="detail-container">
+    
     <div v-if="selectedRequest" style="height: 100%; display: flex; flex-direction: column;">
       
       <div class="inspector-url-bar">
@@ -31,8 +45,11 @@ const getMethodColor = (method) => {
         <span class="url-text" :title="selectedRequest.url">{{ selectedRequest.url }}</span>
       </div>
 
-      <div style="flex: 1; overflow: hidden;">
-        <splitpanes class="custom-theme">
+      <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+        
+        <WebSocketInspector v-if="isWebSocket" style="flex: 1;" />
+        
+        <splitpanes v-else class="custom-theme">
           <pane size="50">
             <div class="inspector-panel">
               <div class="inspector-toolbar">
@@ -67,10 +84,12 @@ const getMethodColor = (method) => {
             </div>
           </pane>
         </splitpanes>
-      </div>
 
+      </div>
     </div>
+    
     <div v-else class="global-empty">Select a request to view details.</div>
+    
   </div>
 </template>
 

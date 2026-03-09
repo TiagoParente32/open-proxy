@@ -20,6 +20,7 @@ const toggleCache = () => {
 
 const clearTraffic = () => {
   requests.value.length = 0; 
+  wsMessages.value = {};
 }
 
 // --- NEW: Custom Dropdown Logic ---
