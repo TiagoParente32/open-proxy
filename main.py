@@ -572,4 +572,4 @@ if __name__ == "__main__":
     )
     
     icon_path = get_resource_path('icon.png')
-    webview.start(private_mode=False, debug=True, icon=icon_path)
+    webview.start(private_mode=False, debug=False, icon=icon_path)
