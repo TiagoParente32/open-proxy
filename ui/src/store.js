@@ -59,6 +59,16 @@ watch(activeChips, (newVals) => {
     saveState('activeChips', newVals)
 }, { deep: true })
 
+// --- NETWORK THROTTLING STATE ---
+export const throttleProfile = ref(loadState('throttleProfile', 'None'))
+
+watch(throttleProfile, (newVal) => {
+    saveState('throttleProfile', newVal)
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "UPDATE_THROTTLE", profile: newVal }))
+    }
+})
+
 // --- MAP REMOTE STATE ---
 export const showMapRemoteModal = ref(false)
 export const mapRemoteRules = ref(loadState('mapRemoteRules', []))
@@ -316,6 +326,7 @@ export const initWebSocket = () => {
         syncMapLocalRules() // Send the loaded rules to python immediately on boot!
         syncBreakpointRules()
         syncMapRemoteRules()
+        wsConnection.send(JSON.stringify({ type: "UPDATE_THROTTLE", profile: throttleProfile.value }))
         wsConnection.send(JSON.stringify({ type: "TOGGLE_BREAKPOINTS", enabled: breakpointsEnabled.value }))
         wsConnection.send(JSON.stringify({ type: "TOGGLE_CACHE", disable_cache: disableCache.value }))
     }

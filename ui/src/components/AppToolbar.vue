@@ -1,4 +1,6 @@
 <script setup>
+import { ref, onMounted, onUnmounted } from 'vue'
+
 import { 
   isRecording, 
   toggleRecording, 
@@ -8,7 +10,8 @@ import {
   setupAndroidEmulator, 
   showBreakpointModal,
   disableCache,
-  showMapRemoteModal
+  showMapRemoteModal,
+  throttleProfile,
 } from '../store.js'
 
 const toggleCache = () => {
@@ -18,6 +21,24 @@ const toggleCache = () => {
 const clearTraffic = () => {
   requests.value.length = 0; 
 }
+
+// --- NEW: Custom Dropdown Logic ---
+const showThrottleMenu = ref(false)
+const throttleOptions = ['None', 'Fast 3G', 'Slow 3G']
+
+const selectThrottle = (option) => {
+  throttleProfile.value = option
+  showThrottleMenu.value = false
+}
+
+// Close dropdown if user clicks anywhere else on the screen
+const closeDropdown = (e) => {
+  if (!e.target.closest('.throttle-wrapper')) {
+    showThrottleMenu.value = false
+  }
+}
+onMounted(() => document.addEventListener('click', closeDropdown))
+onUnmounted(() => document.removeEventListener('click', closeDropdown))
 </script>
 
 <template>
@@ -67,6 +88,40 @@ const clearTraffic = () => {
         Emulator
       </button>
 
+      <div class="throttle-wrapper" style="position: relative;">
+        <button 
+          class="secondary-pill" 
+          :class="{ 'active-throttle': throttleProfile !== 'None' }"
+          @click="showThrottleMenu = !showThrottleMenu"
+          title="Network Throttling"
+          style="padding-right: 6px; gap: 4px;"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line>
+          </svg>
+          
+          {{ throttleProfile === 'None' ? 'No Throttling' : throttleProfile }}
+          
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px;">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+
+        <div v-if="showThrottleMenu" class="custom-dropdown-menu">
+          <div 
+            v-for="opt in throttleOptions" 
+            :key="opt" 
+            class="dropdown-item"
+            :class="{ 'selected': throttleProfile === opt }"
+            @click="selectThrottle(opt)"
+          >
+            <span style="width: 12px; display: inline-block;">
+              <svg v-if="throttleProfile === opt" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </span>
+            {{ opt }}
+          </div>
+        </div>
+      </div>
       <div class="divider"></div>
 
       <div
@@ -189,4 +244,52 @@ const clearTraffic = () => {
 .switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 10px; height: 10px; background: #888; border-radius: 50%; transition: transform 0.3s, background 0.3s; }
 .toggle.active .switch { background: rgba(245, 158, 11, 0.15); border-color: #f59e0b; }
 .toggle.active .switch::after { transform: translateX(12px); background: #f59e0b; }
+
+/* --- Custom Dropdown Styles --- */
+.secondary-pill.active-throttle {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+.secondary-pill.active-throttle:hover {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.custom-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px); /* Float just below the button */
+  right: 0;
+  width: 130px;
+  background: #1a1a1b;
+  border: 1px solid #333;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dropdown-item {
+  padding: 6px 8px;
+  font-size: 11px;
+  color: #ccc;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.dropdown-item:hover {
+  background: #2a2d2e;
+  color: #fff;
+}
+
+.dropdown-item.selected {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
 </style>

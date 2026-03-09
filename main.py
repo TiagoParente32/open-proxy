@@ -13,7 +13,7 @@ import base64
 import urllib.request
 import ssl
 import os
-import shutil
+import sys
 
 # --- 1. NETWORK HELPERS ---
 def get_local_ip():
@@ -29,6 +29,18 @@ def get_local_ip():
         s.close()
     return ip
 
+def get_resource_path(relative_path):
+    """ Get the absolute path to a resource. Works for dev and for PyInstaller! """
+    try:
+        # PyInstaller creates a temp folder and stores the path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # If we are not running as an .exe, just use the normal current directory
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+
 LOCAL_IP = get_local_ip()
 PROXY_PORT = 8080
 
@@ -41,14 +53,20 @@ class ProxyUIBridge:
         self.disable_cache = False
         self.bg_tasks = set()
         self.breakpoint_rules = []
-        self.paused_flows = {} # Maps flow.id -> asyncio.Event
+        self.paused_flows = {}
         self.breakpoints_enabled = True
         self.map_remote_rules = []
+        self.throttle_profile = "None" # "None", "Fast 3G", "Slow 3G"
 
     async def request(self, flow: http.HTTPFlow):
         # 1. Respect the Pause/Play button
         if not self.is_recording:
             return
+        
+        if self.throttle_profile == "Slow 3G":
+            await asyncio.sleep(2.0) # Adds 2 seconds of lag
+        elif self.throttle_profile == "Fast 3G":
+            await asyncio.sleep(0.5) # Adds 500ms of lag
 
         # --- 1. AGGRESSIVE CACHE BUSTING (REQUEST) ---
         if self.disable_cache:
@@ -170,6 +188,11 @@ class ProxyUIBridge:
         if not self.is_recording:
             return
 
+        if self.throttle_profile == "Slow 3G":
+            await asyncio.sleep(2.0) # Adds 2 seconds of lag
+        elif self.throttle_profile == "Fast 3G":
+            await asyncio.sleep(0.5) # Adds 500ms of lag
+
         # --- 1. AGGRESSIVE CACHE BUSTING (RESPONSE) ---
         if self.disable_cache:
             flow.response.headers.pop("ETag", None)
@@ -239,11 +262,6 @@ class ProxyUIBridge:
             task.add_done_callback(self.bg_tasks.discard)
         except RuntimeError:
             pass
-        # try:
-        #     loop = asyncio.get_running_loop()
-        #     loop.create_task(self.broadcast_to_ui("UPDATE_REQUEST", update_data))
-        # except RuntimeError:
-        #     pass
 
     async def broadcast_to_ui(self, msg_type, data):
         if not self.connected_clients: return
@@ -265,6 +283,9 @@ class ProxyUIBridge:
                 if payload.get("type") == "UPDATE_MAP_LOCAL_RULES":
                     self.map_local_rules = payload.get("rules", [])
                 
+                elif payload.get("type") == "UPDATE_THROTTLE":
+                    self.throttle_profile = payload.get("profile", "None")
+
                 elif payload.get("type") == "TOGGLE_PROXY":
                     self.is_recording = payload.get("is_recording")
                     
@@ -458,10 +479,19 @@ def run_async_loop(bridge):
 if __name__ == "__main__":
     bridge = ProxyUIBridge()
     
-    # Start proxy and websockets in a background thread
     t = threading.Thread(target=run_async_loop, args=(bridge,), daemon=True)
     t.start()
 
-    # Create and start the UI (private_mode=False allows local storage to persist!)
-    window = webview.create_window('OpenProxy', 'ui/dist/index.html', width=1200, height=800)
-    webview.start(private_mode=False, debug=True)
+    html_path = get_resource_path('ui/dist/index.html')
+    
+    window = webview.create_window(
+        title='OpenProxy', 
+        url=html_path,  # <-- Updated!
+        width=1450, 
+        height=800,
+        min_size=(1450, 600),
+        background_color='#1a1a1b'
+    )
+    
+    icon_path = get_resource_path('icon.png')
+    webview.start(private_mode=False, debug=False, icon=icon_path)
