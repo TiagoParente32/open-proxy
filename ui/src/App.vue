@@ -13,6 +13,7 @@ import BreakpointHit from './components/BreakpointHit.vue'
 import BreakpointsModal from './components/BreakpointsModal.vue'
 import ComposeModal from './components/ComposeModal.vue'
 import MapRemoteModal from './components/MapRemoteModal.vue'
+import FilterBar from './components/FilterBar.vue'
 
 // Import just the logic needed for the top-level app overlay (WebSockets & Context Menu)
 import { 
@@ -140,7 +141,7 @@ const openBreakpointModalFromContext = () => {
 <template>
   <div class="app-wrapper">
     <AppToolbar />
-
+    <FilterBar />
     <splitpanes class="default-theme custom-theme" style="flex: 1; overflow: hidden;">
       
       <pane min-size="15" size="20">

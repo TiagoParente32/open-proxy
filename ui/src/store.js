@@ -48,6 +48,17 @@ export const trappedFlows = ref([]) // <--- CHANGED TO AN ARRAY
 export const selectedBreakpointId = ref(null)
 export const breakpointsEnabled = ref(loadState('breakpointsEnabled', true)) // <--- MASTER TOGGLE
 
+// --- CHIP FILTERS STATE ---
+export const activeChips = ref(loadState('activeChips', {
+    protocol: 'All',
+    type: 'All',
+    status: 'All'
+}))
+
+watch(activeChips, (newVals) => {
+    saveState('activeChips', newVals)
+}, { deep: true })
+
 // --- MAP REMOTE STATE ---
 export const showMapRemoteModal = ref(false)
 export const mapRemoteRules = ref(loadState('mapRemoteRules', []))
@@ -235,6 +246,51 @@ export const filteredRequests = computed(() => {
             return req.url.toLowerCase().includes(query) ||
                 req.method.toLowerCase().includes(query) ||
                 String(req.status).includes(query);
+        });
+    }
+    // 1. PROTOCOL FILTER
+    if (activeChips.value.protocol !== 'All') {
+        const p = activeChips.value.protocol;
+        baseList = baseList.filter(req => {
+            if (p === 'HTTP') return req.url.startsWith('http://');
+            if (p === 'HTTPS') return req.url.startsWith('https://');
+            if (p === 'WS') return req.url.startsWith('ws://') || req.url.startsWith('wss://');
+            return true;
+        });
+    }
+
+    // 2. STATUS CODE FILTER
+    if (activeChips.value.status !== 'All') {
+        const prefix = activeChips.value.status.charAt(0); // Gets '2' from '2xx'
+        baseList = baseList.filter(req => {
+            if (req.status === '...') return false; // Hide pending requests when filtering by status
+            return String(req.status).startsWith(prefix);
+        });
+    }
+
+    // 3. CONTENT TYPE FILTER
+    if (activeChips.value.type !== 'All') {
+        const t = activeChips.value.type;
+        baseList = baseList.filter(req => {
+            // Helper to safely grab the Content-Type header (ignoring case)
+            const getCT = (headers) => {
+                if (!headers) return '';
+                const key = Object.keys(headers).find(k => k.toLowerCase() === 'content-type');
+                return key ? headers[key].toLowerCase() : '';
+            };
+
+            // Check Response headers first, fallback to Request headers
+            const ct = getCT(req.res_headers) || getCT(req.req_headers);
+
+            if (t === 'JSON') return ct.includes('json');
+            if (t === 'Form') return ct.includes('form');
+            if (t === 'XML') return ct.includes('xml');
+            if (t === 'JS') return ct.includes('javascript');
+            if (t === 'CSS') return ct.includes('css');
+            if (t === 'GraphQL') return ct.includes('graphql') || req.url.toLowerCase().includes('graphql');
+            if (t === 'Document') return ct.includes('html');
+            if (t === 'Media') return ct.includes('image/') || ct.includes('audio/') || ct.includes('video/');
+            return true;
         });
     }
 
