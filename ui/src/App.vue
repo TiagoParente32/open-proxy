@@ -14,6 +14,7 @@ import BreakpointsModal from './components/BreakpointsModal.vue'
 import ComposeModal from './components/ComposeModal.vue'
 import MapRemoteModal from './components/MapRemoteModal.vue'
 import FilterBar from './components/FilterBar.vue'
+import HighlightModal from './components/HighlightModal.vue'
 
 // Import just the logic needed for the top-level app overlay (WebSockets & Context Menu)
 import { 
@@ -213,6 +214,8 @@ const openBreakpointModalFromContext = () => {
     <BreakpointHit />
     <BreakpointsModal />
     <ComposeModal />
+    <HighlightModal />
+    
   </div>
 </template>
 

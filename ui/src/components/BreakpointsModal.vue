@@ -38,7 +38,7 @@ const saveAndApplyRules = () => {
 </script>
 
 <template>
-  <div v-if="showBreakpointModal" class="modal-overlay" @mousedown.self="showBreakpointModal = false">
+  <div v-if="showBreakpointModal" class="modal-overlay" @mousedown.self="saveAndApplyRules">
     <div class="modal-content large" style="display: flex;">      
       <div class="modal-sidebar" style="width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column;">
         

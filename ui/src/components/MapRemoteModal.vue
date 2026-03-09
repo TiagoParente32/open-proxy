@@ -32,7 +32,7 @@ const deleteRule = (id) => {
 </script>
 
 <template>
-  <div v-if="showMapRemoteModal" class="modal-overlay" @mousedown.self="showMapRemoteModal = false">
+  <div v-if="showMapRemoteModal" class="modal-overlay" @mousedown.self="syncMapRemoteRules(); showMapRemoteModal = false;">
     <div class="modal-content large" style="display: flex;">      
       <div class="modal-sidebar" style="width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column;">
         <div style="padding: 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">

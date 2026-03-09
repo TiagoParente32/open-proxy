@@ -39,7 +39,7 @@ const saveAndApplyRules = () => {
 </script>
 
 <template>
-  <div v-if="showMapModal" class="modal-overlay" @mousedown.self="showMapModal = false">
+  <div v-if="showMapModal" class="modal-overlay" @mousedown.self="saveAndApplyRules">
     <div class="modal-content large" style="display: flex;">
       
       <div class="modal-sidebar">

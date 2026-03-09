@@ -12,6 +12,8 @@ import {
   disableCache,
   showMapRemoteModal,
   throttleProfile,
+  showHighlightModal,
+  wsMessages // Make sure this is imported if you are clearing it!
 } from '../store.js'
 
 const toggleCache = () => {
@@ -80,10 +82,13 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         Breakpoints
       </button>
       <button class="secondary-pill" @click="showMapModal = true" title="Map Local Rules">
-        Map Local
+       Map Local
       </button>
       <button class="secondary-pill" @click="showMapRemoteModal = true" title="Map Remote Rules">
-        Map Remote
+       Map Remote
+      </button>
+      <button class="secondary-pill" @click="showHighlightModal = true" title="Highlight Rules">
+        Highlight
       </button>
       <button class="secondary-pill" @click="setupAndroidEmulator" title="Setup Android Emulator">
         Emulator
@@ -95,15 +100,15 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
           :class="{ 'active-throttle': throttleProfile !== 'None' }"
           @click="showThrottleMenu = !showThrottleMenu"
           title="Network Throttling"
-          style="padding-right: 6px; gap: 4px;"
+          style="padding-right: 4px; gap: 3px;"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line>
           </svg>
           
           {{ throttleProfile === 'None' ? 'No Throttling' : throttleProfile }}
           
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 1px;">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
         </button>
@@ -123,6 +128,7 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
           </div>
         </div>
       </div>
+      
       <div class="divider"></div>
 
       <div
@@ -156,17 +162,18 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 /* --- Pure Text Action Button (Play/Pause) --- */
 .action-btn { 
   display: flex; align-items: center; justify-content: center; 
-  height: 24px; 
-  padding: 0 12px; 
+  height: 22px; /* Dropped from 24px */
+  padding: 0 8px; 
   border-radius: 4px; 
   cursor: pointer; 
-  font-size: 11px; 
+  font-size: 10px; /* Dropped from 11px */
   font-weight: 600;
   border: 1px solid transparent;
   transition: all 0.2s; 
   outline: none;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.15); 
+  white-space: nowrap;
 }
 .action-btn:active { transform: translateY(1px); box-shadow: none; }
 
@@ -175,7 +182,6 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 .action-btn.record-action { background: rgba(16, 185, 129, 0.15); color: #10b981; border-color: rgba(16, 185, 129, 0.3); }
 .action-btn.record-action:hover { background: rgba(16, 185, 129, 0.25); }
 
-/* --- Pure Icon Utility Button (Trashcan) --- */
 /* --- Pure Icon Utility Button (Trashcan) --- */
 .icon-btn {
   display: flex; align-items: center; justify-content: center;
@@ -195,17 +201,19 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 /* --- Pure Text Pill Buttons (The Tools) --- */
 .secondary-pill {
   display: flex; align-items: center; justify-content: center;
-  height: 24px; 
-  padding: 0 10px;
-  background: #212324; /* Solid subtle background */
-  border: 1px solid #303335; /* Sharp distinct border */
+  height: 22px; /* Dropped from 24px */
+  padding: 0 6px; /* Tightened padding */
+  background: #212324; 
+  border: 1px solid #303335; 
   color: #a1aab3; 
   border-radius: 4px; 
   cursor: pointer; 
-  font-size: 11px; 
+  font-size: 10px; /* Dropped from 11px */
+  letter-spacing: -0.2px; /* Pulls letters slightly closer to fit more */
   font-weight: 500;
   transition: all 0.15s ease;
   outline: none;
+  white-space: nowrap; /* Prevents text from breaking lines */
 }
 .secondary-pill:hover { 
   background: #2a2d2e; 
@@ -234,17 +242,18 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 .host { color: #8b949e; font-family: 'Consolas', monospace; font-size: 10px; }
 
 /* --- Right: Toggles --- */
-.divider { width: 1px; height: 14px; background: #444; margin: 0 4px; }
+.divider { width: 1px; height: 14px; background: #444; margin: 0 2px; }
 
-.toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; color: #888; font-weight: 500; transition: color 0.2s; height: 24px; }
+.toggle { display: flex; align-items: center; gap: 4px; cursor: pointer; color: #888; font-weight: 500; transition: color 0.2s; height: 22px; }
 .toggle.active { color: #f59e0b; }
 .toggle:hover { color: #ccc; }
-.toggle-label { font-size: 11px; }
+.toggle-label { font-size: 10px; letter-spacing: -0.2px; white-space: nowrap; }
 
-.switch { width: 26px; height: 14px; background: #111; border: 1px solid #444; border-radius: 14px; position: relative; transition: all 0.3s; box-sizing: border-box;}
-.switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 10px; height: 10px; background: #888; border-radius: 50%; transition: transform 0.3s, background 0.3s; }
+/* Shrunk the toggle switch slightly */
+.switch { width: 22px; height: 12px; background: #111; border: 1px solid #444; border-radius: 14px; position: relative; transition: all 0.3s; box-sizing: border-box;}
+.switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 8px; height: 8px; background: #888; border-radius: 50%; transition: transform 0.3s, background 0.3s; }
 .toggle.active .switch { background: rgba(245, 158, 11, 0.15); border-color: #f59e0b; }
-.toggle.active .switch::after { transform: translateX(12px); background: #f59e0b; }
+.toggle.active .switch::after { transform: translateX(10px); background: #f59e0b; }
 
 /* --- Custom Dropdown Styles --- */
 .secondary-pill.active-throttle {
@@ -259,7 +268,7 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 
 .custom-dropdown-menu {
   position: absolute;
-  top: calc(100% + 4px); /* Float just below the button */
+  top: calc(100% + 4px);
   right: 0;
   width: 130px;
   background: #1a1a1b;

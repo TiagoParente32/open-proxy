@@ -1,8 +1,10 @@
-# OpenProxy 🌐
+# <img src="icon.png" width="36" align="absmiddle" alt="OpenProxy Icon" /> OpenProxy
 
 OpenProxy is a fast, modern, lightweight network debugging proxy built for developers. It combines the raw power of `mitmproxy` with a sleek, native-feeling desktop UI built in Vue.js and Python (`pywebview`).
 
 Whether you need to mock API responses, rewrite routing rules on the fly, throttle your network, or automatically inject SSL certificates into an Android emulator, OpenProxy handles it without the bloat of traditional Java-based proxies.
+
+![OpenProxy Interface](screenshots/example.png)
 
 ## ✨ Key Features
 

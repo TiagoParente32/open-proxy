@@ -4,10 +4,12 @@ import { activeChips } from '../store.js'
 const protocols = ['All', 'HTTP', 'HTTPS', 'WS']
 const types = ['All', 'JSON', 'Form', 'XML', 'JS', 'CSS', 'GraphQL', 'Document', 'Media']
 const statuses = ['All', '1xx', '2xx', '3xx', '4xx', '5xx']
+const colors = ['All', 'red', 'yellow', 'green', 'blue'] // <-- NEW: Color array
 
 const setChip = (category, value) => {
   activeChips.value[category] = value;
 }
+
 </script>
 
 <template>
@@ -58,6 +60,18 @@ const setChip = (category, value) => {
       </button>
     </div>
 
+    <div class="divider"></div>
+
+    <div class="chip-group">
+      <button 
+        v-for="c in colors" :key="c" 
+        class="chip" :class="{ active: activeChips.color === c }"
+        @click="setChip('color', c)"
+      >
+        <span v-if="c !== 'All'" class="color-indicator" :class="c"></span>
+        {{ c === 'All' ? 'All Colors' : c.charAt(0).toUpperCase() + c.slice(1) }}
+      </button>
+    </div>
   </div>
 </template>
 
@@ -117,4 +131,17 @@ const setChip = (category, value) => {
   background: #333;
   flex-shrink: 0;
 }
+
+/* --- Tiny Color Indicators inside the buttons --- */
+.color-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+.color-indicator.red { background: #ef4444; }
+.color-indicator.yellow { background: #f59e0b; }
+.color-indicator.green { background: #10b981; }
+.color-indicator.blue { background: #3b82f6; }
 </style>
