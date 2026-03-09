@@ -42,7 +42,7 @@ def get_resource_path(relative_path):
 
 
 LOCAL_IP = get_local_ip()
-PROXY_PORT = 8080
+PROXY_PORT = 9090
 
 # --- 2. CORE BRIDGE LOGIC ---
 class ProxyUIBridge:
