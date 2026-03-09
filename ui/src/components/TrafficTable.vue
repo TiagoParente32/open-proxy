@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, onUnmounted } from 'vue'
+import { nextTick } from 'vue'
 import { 
   filteredRequests, selectedRequest, isFocusMode, pinnedSources, 
   formatUrl, contextMenu, searchQuery, 
@@ -22,7 +23,7 @@ const sortIcon = (key) => {
 }
 
 // NEW: Keyboard Navigation Logic
-const handleKeyDown = (e) => {
+const handleKeyDown = async (e) => {
   // Ignore keypresses if the user is typing in an input (like the search bar)
   if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
 
@@ -45,6 +46,16 @@ const handleKeyDown = (e) => {
     } else if (e.key === 'ArrowUp' && currentIndex > 0) {
       selectedRequest.value = filteredRequests.value[currentIndex - 1];
     }
+    
+    await nextTick()
+
+    // NEW: Look for the native table row that is selected!
+    const selectedRow = document.querySelector('tr.selected')
+    
+    if (selectedRow) {
+      selectedRow.scrollIntoView({ block: 'nearest' })
+    }
+
   }
 }
 
@@ -63,11 +74,12 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeyDown))
         <thead>
           <tr>
             <th><div class="resize-handle" style="width: 60px;" @click="toggleSort('id')">ID{{ sortIcon('id') }}</div></th>
-            <th><div class="resize-handle" style="width: 85px;" @click="toggleSort('time')">Time{{ sortIcon('time') }}</div></th>
             <th><div class="resize-handle" style="width: 75px;" @click="toggleSort('method')">Method{{ sortIcon('method') }}</div></th>
             <th><div class="resize-handle" style="width: 65px;" @click="toggleSort('status')">Status{{ sortIcon('status') }}</div></th>
-            <th><div class="resize-handle" style="width: 180px;" @click="toggleSort('url')">Host{{ sortIcon('url') }}</div></th>
-            <th><div class="resize-handle" style="width: 250px;">Path</div></th>
+            
+            <th><div class="resize-handle" style="width: 450px;" @click="toggleSort('url')">URL{{ sortIcon('url') }}</div></th>
+            
+            <th><div class="resize-handle" style="width: 85px;" @click="toggleSort('time')">Time{{ sortIcon('time') }}</div></th>
             <th><div class="resize-handle" style="width: 90px;" @click="toggleSort('duration')">Time (ms){{ sortIcon('duration') }}</div></th>
             <th><div class="resize-handle" style="width: 85px;" @click="toggleSort('req_bytes')">Req Size{{ sortIcon('req_bytes') }}</div></th>
             <th><div class="resize-handle" style="width: 85px;" @click="toggleSort('res_bytes')">Res Size{{ sortIcon('res_bytes') }}</div></th>
@@ -78,14 +90,15 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeyDown))
         <tbody>
           <tr v-for="req in filteredRequests" :key="req.id" @click="selectedRequest = req" @contextmenu.prevent="openContextMenu($event, req)" :class="{ selected: selectedRequest?.id === req.id }">
             <td class="text-muted text-id">{{ req.id.substring(0, 5) }}</td>
-            <td class="text-muted">{{ formatTime(req.time) }}</td>
             <td><span class="method-badge" :style="{ backgroundColor: getMethodColor(req.method) + '20', color: getMethodColor(req.method) }">{{ req.method }}</span></td>
             <td>
               <span v-if="req.status === '...'" class="text-muted">...</span>
               <span v-else class="status-badge" :class="{'text-green': req.status < 400, 'text-red': req.status >= 400}">{{ req.status }}</span>
             </td>
-            <td class="font-semibold truncate">{{ formatUrl(req.url).host }}</td>
-            <td class="text-muted truncate">{{ formatUrl(req.url).path }}</td>
+            
+            <td class="font-semibold truncate" :title="req.url" style="font-family: monospace;">{{ req.url }}</td>
+            
+            <td class="text-muted">{{ formatTime(req.time) }}</td>
             <td class="text-muted">{{ req.duration ? req.duration + ' ms' : '...' }}</td>
             <td class="text-muted">{{ formatBytes(req.req_bytes) }}</td>
             <td class="text-muted">{{ formatBytes(req.res_bytes) }}</td>
