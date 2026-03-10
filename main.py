@@ -229,55 +229,57 @@ class ProxyUIBridge:
             print("❌ [WS HOOK] No connected Vue UI clients found!")
     
     async def setup_android_emulator(self, ws):
+        # Helper to broadcast live progress to the Vue UI
+        async def update(step_id, status, msg=""):
+            await ws.send(json.dumps({"type": "SETUP_PROGRESS", "step": step_id, "status": status, "message": msg}))
+
         try:
-            # 1. Check if adb is installed
+            # 1. Checking dependencies
+            await update("check_adb", "start")
             subprocess.run(["adb", "version"], check=True, capture_output=True)
-            
-            # 2. Locate the mitmproxy certificate
-            # mitmproxy auto-generates this the first time it runs!
+            await asyncio.sleep(0.5) # Tiny sleep for visual smoothness
+            await update("check_adb", "success")
+
+            # 2. Preparing Certificate
+            await update("cert_prepare", "start")
             cert_path = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.pem")
             if not os.path.exists(cert_path):
-                await ws.send(json.dumps({"type": "ALERT", "message": "Certificate not found. Please start the proxy and make one request first so mitmproxy generates it!"}))
+                await update("cert_prepare", "error", "Certificate not found. Start proxy first!")
                 return
 
-            # 3. Get the subject hash using OpenSSL (just like the bash script)
-            hash_proc = subprocess.run(
-                ["openssl", "x509", "-inform", "PEM", "-subject_hash_old", "-in", cert_path], 
-                capture_output=True, text=True, check=True
-            )
+            hash_proc = subprocess.run(["openssl", "x509", "-inform", "PEM", "-subject_hash_old", "-in", cert_path], capture_output=True, text=True, check=True)
             cert_hash = hash_proc.stdout.splitlines()[0].strip()
             hashed_cert_name = f"{cert_hash}.0"
 
-            # 4. Convert PEM to DER format
-            subprocess.run([
-                "openssl", "x509", "-in", cert_path, "-inform", "PEM", "-outform", "DER", "-out", hashed_cert_name
-            ], check=True)
+            subprocess.run(["openssl", "x509", "-in", cert_path, "-inform", "PEM", "-outform", "DER", "-out", hashed_cert_name], check=True)
+            await update("cert_prepare", "success")
 
-            # 5. Push to Android via ADB
-            await ws.send(json.dumps({"type": "ALERT", "message": "Rooting emulator and installing certificate... Please wait."}))
-            
+            # 3. Rooting Emulator
+            await update("root_emu", "start")
             subprocess.run(["adb", "root"], check=True)
-            await asyncio.sleep(2) # Give adb a moment to restart as root
-            
+            await asyncio.sleep(1.5) # Give adb a moment to restart as root
+            await update("root_emu", "success")
+
+            # 4. Installing Certificate
+            await update("push_cert", "start")
             subprocess.run(["adb", "push", hashed_cert_name, f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True)
             subprocess.run(["adb", "shell", "su", "0", "chmod", "644", f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True)
-
-            # 6. Override HTTP Proxy to point to OpenProxy
-            subprocess.run(["adb", "shell", "settings", "put", "global", "http_proxy", "127.0.0.1:8080"], check=True)
-
-            # Clean up the temporary hash file from the user's computer
             if os.path.exists(hashed_cert_name):
                 os.remove(hashed_cert_name)
+            await update("push_cert", "success")
 
-            await ws.send(json.dumps({"type": "ALERT", "message": "✅ Success! Android Emulator is now routing traffic through OpenProxy.\n\nPlease restart the app on your emulator."}))
+            # 5. Configuring Proxy
+            await update("set_proxy", "start")
+            subprocess.run(["adb", "shell", "settings", "put", "global", "http_proxy", "10.0.2.2:9090"], check=True)
+            await asyncio.sleep(0.5)
+            await update("set_proxy", "success")
 
-        except FileNotFoundError as e:
-            # This catches if 'adb' or 'openssl' aren't installed on the system
-            await ws.send(json.dumps({"type": "ALERT", "message": "❌ Missing Dependency! Ensure 'adb' and 'openssl' are installed and added to your system PATH."}))
-        except subprocess.CalledProcessError as e:
-            await ws.send(json.dumps({"type": "ALERT", "message": f"❌ ADB Command Failed! Make sure ONE emulator with Google APIs is running.\n\nError: {e}"}))
+            # Done! Tell the UI to dismiss the modal.
+            await update("done", "success")
+
         except Exception as e:
-            await ws.send(json.dumps({"type": "ALERT", "message": f"❌ Setup Failed: {str(e)}"}))
+            # If any step fails, broadcast the error so the UI stops spinning
+            await update("current_active_step", "error", str(e))
                 
     async def response(self, flow: http.HTTPFlow):
         # 1. Respect the Pause/Play button
@@ -536,9 +538,9 @@ if __name__ == "__main__":
     window = webview.create_window(
         title='OpenProxy', 
         url=html_path,  # <-- Updated!
-        width=1450, 
-        height=800,
-        min_size=(1450, 600),
+        width=1024, 
+        height=720,
+        min_size=(1024, 720),
         background_color='#1a1a1b'
     )
     

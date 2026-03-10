@@ -143,7 +143,20 @@ export const composeData = ref(null)
 
 // Device Setup Modal
 export const showDeviceSetupModal = ref(false)
-export const deviceSetupType = ref('emulator') 
+export const deviceSetupType = ref('emulator')
+
+
+export const setupProgress = ref({
+    show: false,
+    error: null,
+    steps: [
+        { id: 'check_adb', label: 'Checking dependencies...', status: 'pending' },
+        { id: 'cert_prepare', label: 'Preparing certificate...', status: 'pending' },
+        { id: 'root_emu', label: 'Rooting emulator...', status: 'pending' },
+        { id: 'push_cert', label: 'Installing certificate...', status: 'pending' },
+        { id: 'set_proxy', label: 'Configuring global proxy...', status: 'pending' }
+    ]
+});
 
 // ============================================================================
 // 4. ACTIONS & LOGIC
@@ -485,7 +498,33 @@ export const initWebSocket = () => {
             newFlow.headersStr = JSON.stringify(newFlow.headers, null, 2)
             trappedFlows.value.push(newFlow)
         }
-        else if (payload.type === 'WS_MESSAGE') {
+        else if (payload.type === "SETUP_PROGRESS") {
+            // Reset and show modal if this is the first step
+            if (payload.step === 'check_adb' && payload.status === 'start') {
+                setupProgress.value.show = true;
+                setupProgress.value.error = null;
+                setupProgress.value.steps.forEach(s => s.status = 'pending');
+            }
+
+            // If we hit the "done" event, wait 1.5 seconds so the user sees all green checkmarks, then close!
+            if (payload.step === 'done') {
+                setTimeout(() => { setupProgress.value.show = false; }, 1500);
+                return;
+            }
+
+            // Find the step Python is talking about (or fallback to whatever is currently loading if an error occurs)
+            const step = setupProgress.value.steps.find(s => s.id === payload.step) ||
+                setupProgress.value.steps.find(s => s.status === 'loading');
+
+            if (step) {
+                if (payload.status === 'start') step.status = 'loading';
+                else if (payload.status === 'success') step.status = 'success';
+                else if (payload.status === 'error') {
+                    step.status = 'error';
+                    setupProgress.value.error = payload.message;
+                }
+            }
+        } else if (payload.type === 'WS_MESSAGE') {
             const reqId = String(payload.id);
             if (!wsMessages.value[reqId]) wsMessages.value[reqId] = [];
 

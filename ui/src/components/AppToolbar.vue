@@ -115,8 +115,8 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         </button>
 
         <div v-if="showCertMenu" class="custom-dropdown-menu">
-          <div class="dropdown-item" @click="openDeviceSetup('emulator')">📱 Android Emulator</div>
-          <div class="dropdown-item" @click="openDeviceSetup('device')">📲 Physical Device</div>
+          <div class="dropdown-item" @click="openDeviceSetup('emulator')">Android Emulator</div>
+          <div class="dropdown-item" @click="openDeviceSetup('device')">Android Device</div>
         </div>
       </div>
 
