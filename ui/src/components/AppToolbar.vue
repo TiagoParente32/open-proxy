@@ -13,8 +13,19 @@ import {
   showMapRemoteModal,
   throttleProfile,
   showHighlightModal,
-  wsMessages // Make sure this is imported if you are clearing it!
+  wsMessages,
+  showDeviceSetupModal,
+  deviceSetupType
 } from '../store.js'
+
+// Add the state for the new dropdown
+const showCertMenu = ref(false)
+
+const openDeviceSetup = (type) => {
+  deviceSetupType.value = type
+  showDeviceSetupModal.value = true
+  showCertMenu.value = false
+}
 
 const toggleCache = () => {
   disableCache.value = !disableCache.value
@@ -34,12 +45,12 @@ const selectThrottle = (option) => {
   showThrottleMenu.value = false
 }
 
-// Close dropdown if user clicks anywhere else on the screen
 const closeDropdown = (e) => {
-  if (!e.target.closest('.throttle-wrapper')) {
-    showThrottleMenu.value = false
-  }
+  if (!e.target.closest('.throttle-wrapper')) showThrottleMenu.value = false
+  if (!e.target.closest('.cert-wrapper')) showCertMenu.value = false
 }
+
+
 onMounted(() => document.addEventListener('click', closeDropdown))
 onUnmounted(() => document.removeEventListener('click', closeDropdown))
 </script>
@@ -90,9 +101,24 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
       <button class="secondary-pill" @click="showHighlightModal = true" title="Highlight Rules">
         Highlight
       </button>
-      <button class="secondary-pill" @click="setupAndroidEmulator" title="Setup Android Emulator">
-        Emulator
-      </button>
+      <div class="cert-wrapper" style="position: relative;">
+        <button 
+          class="secondary-pill" 
+          @click="showCertMenu = !showCertMenu"
+          title="Install Certificates"
+          style="padding-right: 4px; gap: 3px;"
+        >
+          Certificate
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 1px;">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+
+        <div v-if="showCertMenu" class="custom-dropdown-menu">
+          <div class="dropdown-item" @click="openDeviceSetup('emulator')">📱 Android Emulator</div>
+          <div class="dropdown-item" @click="openDeviceSetup('device')">📲 Physical Device</div>
+        </div>
+      </div>
 
       <div class="throttle-wrapper" style="position: relative;">
         <button 

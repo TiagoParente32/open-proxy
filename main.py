@@ -15,7 +15,6 @@ import urllib.request
 import ssl
 import os
 import sys
-import webview
 
 # --- 1. NETWORK HELPERS ---
 def get_local_ip():
@@ -228,7 +227,57 @@ class ProxyUIBridge:
                     print(f"❌ [WS HOOK] Failed to send to UI: {e}")
         else:
             print("❌ [WS HOOK] No connected Vue UI clients found!")
+    
+    async def setup_android_emulator(self, ws):
+        try:
+            # 1. Check if adb is installed
+            subprocess.run(["adb", "version"], check=True, capture_output=True)
             
+            # 2. Locate the mitmproxy certificate
+            # mitmproxy auto-generates this the first time it runs!
+            cert_path = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.pem")
+            if not os.path.exists(cert_path):
+                await ws.send(json.dumps({"type": "ALERT", "message": "Certificate not found. Please start the proxy and make one request first so mitmproxy generates it!"}))
+                return
+
+            # 3. Get the subject hash using OpenSSL (just like the bash script)
+            hash_proc = subprocess.run(
+                ["openssl", "x509", "-inform", "PEM", "-subject_hash_old", "-in", cert_path], 
+                capture_output=True, text=True, check=True
+            )
+            cert_hash = hash_proc.stdout.splitlines()[0].strip()
+            hashed_cert_name = f"{cert_hash}.0"
+
+            # 4. Convert PEM to DER format
+            subprocess.run([
+                "openssl", "x509", "-in", cert_path, "-inform", "PEM", "-outform", "DER", "-out", hashed_cert_name
+            ], check=True)
+
+            # 5. Push to Android via ADB
+            await ws.send(json.dumps({"type": "ALERT", "message": "Rooting emulator and installing certificate... Please wait."}))
+            
+            subprocess.run(["adb", "root"], check=True)
+            await asyncio.sleep(2) # Give adb a moment to restart as root
+            
+            subprocess.run(["adb", "push", hashed_cert_name, f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True)
+            subprocess.run(["adb", "shell", "su", "0", "chmod", "644", f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True)
+
+            # 6. Override HTTP Proxy to point to OpenProxy
+            subprocess.run(["adb", "shell", "settings", "put", "global", "http_proxy", "127.0.0.1:8080"], check=True)
+
+            # Clean up the temporary hash file from the user's computer
+            if os.path.exists(hashed_cert_name):
+                os.remove(hashed_cert_name)
+
+            await ws.send(json.dumps({"type": "ALERT", "message": "✅ Success! Android Emulator is now routing traffic through OpenProxy.\n\nPlease restart the app on your emulator."}))
+
+        except FileNotFoundError as e:
+            # This catches if 'adb' or 'openssl' aren't installed on the system
+            await ws.send(json.dumps({"type": "ALERT", "message": "❌ Missing Dependency! Ensure 'adb' and 'openssl' are installed and added to your system PATH."}))
+        except subprocess.CalledProcessError as e:
+            await ws.send(json.dumps({"type": "ALERT", "message": f"❌ ADB Command Failed! Make sure ONE emulator with Google APIs is running.\n\nError: {e}"}))
+        except Exception as e:
+            await ws.send(json.dumps({"type": "ALERT", "message": f"❌ Setup Failed: {str(e)}"}))
                 
     async def response(self, flow: http.HTTPFlow):
         # 1. Respect the Pause/Play button
@@ -343,85 +392,7 @@ class ProxyUIBridge:
                     self.map_remote_rules = payload.get("rules", [])
 
                 elif payload.get("type") == "SETUP_ANDROID":
-                    # Run this in a background thread so we don't freeze the proxy!
-                    def _smart_setup():
-                        import time
-                        
-                        # Helper function to safely send messages back to Vue from this thread
-                        def send_alert(msg):
-                            asyncio.run_coroutine_threadsafe(
-                                websocket.send(json.dumps({"type": "ALERT", "message": msg})),
-                                loop
-                            )
-                            
-                        try:
-                            # 1. Set proxy
-                            subprocess.run(["adb", "shell", "settings", "put", "global", "http_proxy", f"{LOCAL_IP}:{PROXY_PORT}"], check=True)
-                            
-                            cert_path = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.pem")
-                            is_root_successful = False
-
-                            # 2. Try the Root System Install
-                            try:
-                                root_res = subprocess.run(["adb", "root"], capture_output=True, text=True)
-                                if "cannot run as root" not in root_res.stdout and root_res.returncode == 0:
-                                    
-                                    # Get Hash
-                                    hash_cmd = subprocess.run(["openssl", "x509", "-inform", "PEM", "-subject_hash_old", "-in", cert_path], capture_output=True, text=True, check=True)
-                                    cert_hash = hash_cmd.stdout.splitlines()[0].strip()
-                                    hashed_filename = f"{cert_hash}.0"
-                                    hashed_cert_path = os.path.join(os.path.expanduser("~/.mitmproxy"), hashed_filename)
-                                    
-                                    import shutil
-                                    shutil.copy(cert_path, hashed_cert_path)
-                                    
-                                    # Disable verity and Reboot
-                                    subprocess.run(["adb", "disable-verity"], capture_output=True)
-                                    subprocess.run(["adb", "reboot"], check=True)
-                                    
-                                    send_alert("⏳ Rebooting emulator to unlock system...\n\nPlease wait, this takes about 10-20 seconds.")
-                                    
-                                    # Wait for ADB connection
-                                    subprocess.run(["adb", "wait-for-device"], check=True)
-                                    
-                                    # THE MAGIC FIX: Wait for Android to actually finish booting!
-                                    while True:
-                                        boot_res = subprocess.run(["adb", "shell", "getprop", "sys.boot_completed"], capture_output=True, text=True)
-                                        if "1" in boot_res.stdout:
-                                            break
-                                        time.sleep(2)
-                                        
-                                    subprocess.run(["adb", "root"], check=True)
-                                    subprocess.run(["adb", "wait-for-device"], check=True)
-                                    subprocess.run(["adb", "remount"], check=True)
-                                    
-                                    # Push to sdcard first, then move to system (safest method)
-                                    subprocess.run(["adb", "push", hashed_cert_path, "/sdcard/"], check=True)
-                                    subprocess.run(["adb", "shell", "mv", f"/sdcard/{hashed_filename}", f"/system/etc/security/cacerts/{hashed_filename}"], check=True)
-                                    subprocess.run(["adb", "shell", "chmod", "644", f"/system/etc/security/cacerts/{hashed_filename}"], check=True)
-                                    
-                                    # Final Reboot
-                                    subprocess.run(["adb", "reboot"], check=True)
-                                    is_root_successful = True
-                                    
-                            except Exception as e:
-                                print(f"Root bypass triggered: {e}")
-                                
-                            # 3. Handle UI Response
-                            if is_root_successful:
-                                send_alert("🌟 Smart Setup Complete!\n\nSystem Certificate installed. The emulator is rebooting one last time. Once it wakes up, all apps will automatically trust OpenProxy!")
-                            else:
-                                # FALLBACK: User Cert
-                                user_cert = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.cer")
-                                subprocess.run(["adb", "push", user_cert, "/sdcard/Download/mitmproxy.cer"], check=True)
-                                subprocess.run(["adb", "shell", "am", "start", "-a", "android.settings.SECURITY_SETTINGS"], check=True)
-                                send_alert("⚠️ Standard Install (System is read-only or Play Store emulator).\n\n✅ Proxy set & Cert pushed to Downloads!\n\nFinish manually in the emulator:\n1. Go to 'Encryption & credentials'\n2. 'Install a certificate' -> 'CA Certificate'\n3. Select 'mitmproxy.cer' from Downloads.")
-                                
-                        except Exception as e:
-                            send_alert(f"❌ ADB Error: {e}\n\nMake sure your emulator is running!")
-
-                    loop = asyncio.get_running_loop()
-                    threading.Thread(target=_smart_setup, daemon=True).start()
+                    asyncio.create_task(self.setup_android_emulator(websocket))
 
                 elif payload.get("type") == "REPEAT_REQUEST":
                     req_data = payload.get("request", {})

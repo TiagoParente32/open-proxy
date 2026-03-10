@@ -141,6 +141,9 @@ export const highlightRules = ref(loadState('highlightRules', []))
 export const showComposeModal = ref(false)
 export const composeData = ref(null)
 
+// Device Setup Modal
+export const showDeviceSetupModal = ref(false)
+export const deviceSetupType = ref('emulator') 
 
 // ============================================================================
 // 4. ACTIONS & LOGIC
@@ -162,6 +165,12 @@ const applyHighlightRules = (req) => {
             req.color = rule.color;
             break;
         }
+    }
+}
+
+export const injectEmulatorCert = () => {
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "SETUP_ANDROID" }))
     }
 }
 
