@@ -93,6 +93,7 @@ class ProxyUIBridge:
         # --- SAFE BODY EXTRACTION ---
         req_body = ""
         req_is_image = False
+        req_is_binary = False
         content_type = flow.request.headers.get("Content-Type", "").lower()
 
         if flow.request.raw_content:
@@ -106,8 +107,13 @@ class ProxyUIBridge:
                 except Exception:
                     req_body = "// [Error encoding image data]"
             else:
-                req_body = flow.request.get_text(strict=False) or "// [Binary or unreadable data]"
-        
+                text = flow.request.get_text(strict=False)
+                if text is None:
+                    # It's pure binary! Send it as base64 so Vue can hex-dump it
+                    req_body = base64.b64encode(flow.request.raw_content).decode('utf-8')
+                    req_is_binary = True
+                else:
+                    req_body = text        
         request_data = {
             "id": flow.id,
             "method": flow.request.method,
@@ -120,9 +126,11 @@ class ProxyUIBridge:
             "req_headers": dict(flow.request.headers),
             "req_body": req_body,
             "req_is_image": req_is_image,
+            "req_is_binary": req_is_binary,
             "res_headers": {},
             "res_body": "",
-            "res_is_image": False 
+            "res_is_image": False,
+            "res_is_binary": False 
         }
         
         try:
@@ -211,6 +219,7 @@ class ProxyUIBridge:
         # --- SAFE BODY EXTRACTION ---
         res_body = ""
         res_is_image = False
+        res_is_binary = False
         content_type = flow.response.headers.get("Content-Type", "").lower()
 
         if flow.response.raw_content:
@@ -225,7 +234,13 @@ class ProxyUIBridge:
                     res_body = "// [Error encoding image data]"
             else:
                 flow.response.decode(strict=False) 
-                res_body = flow.response.get_text(strict=False) or "// [Binary or unreadable data]"
+                text = flow.response.get_text(strict=False)
+                if text is None:
+                    # It's pure binary! Send it as base64
+                    res_body = base64.b64encode(flow.response.raw_content).decode('utf-8')
+                    res_is_binary = True
+                else:
+                    res_body = text
         
         duration_ms = (flow.response.timestamp_end - flow.request.timestamp_start) * 1000 if flow.response.timestamp_end else 0
         
@@ -236,7 +251,8 @@ class ProxyUIBridge:
             "res_bytes": len(flow.response.raw_content) if flow.response.raw_content else 0,
             "res_headers": dict(flow.response.headers),
             "res_body": res_body,
-            "res_is_image": res_is_image 
+            "res_is_image": res_is_image,
+            "res_is_binary": res_is_binary
         }
 
         # --- BREAKPOINTS (RESPONSE) ---
@@ -530,4 +546,4 @@ if __name__ == "__main__":
         background_color='#1a1a1b'
     )
     
-    webview.start(private_mode=False, debug=False, icon=icon_path)
+    webview.start(private_mode=False, debug=True, icon=icon_path)
