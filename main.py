@@ -508,7 +508,7 @@ def run_async_loop(bridge, proxy_port):
 if __name__ == "__main__":
     # --- GET DYNAMIC PORT FIRST ---
     ACTIVE_PROXY_PORT = get_free_port(9090)
-    print(f"🚀 Starting OpenProxy on port {ACTIVE_PROXY_PORT}")
+    print(f"Starting OpenProxy on port {ACTIVE_PROXY_PORT}")
 
     # Pass the port into our bridge
     bridge = ProxyUIBridge(proxy_port=ACTIVE_PROXY_PORT)
