@@ -1,27 +1,27 @@
+import os
+import sys
 import json
+import time
+import socket
 import asyncio
 import re
-import socket
+import base64
 import subprocess
 import threading
-import time
+import ssl
+import urllib.request
 import websockets
 import webview
 from mitmproxy import http, options
 from mitmproxy.tools.dump import DumpMaster
-import asyncio
-import base64
-import urllib.request
-import ssl
-import os
-import sys
 
-# --- 1. NETWORK HELPERS ---
+# ============================================================================
+# 1. NETWORK & SYSTEM HELPERS
+# ============================================================================
 def get_local_ip():
     """Hacks a UDP socket to discover the computer's true LAN IP."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        # Doesn't even have to be reachable
         s.connect(('10.255.255.255', 1))
         ip = s.getsockname()[0]
     except Exception:
@@ -30,55 +30,67 @@ def get_local_ip():
         s.close()
     return ip
 
+def get_free_port(starting_port=9090):
+    port = starting_port
+    while port <= 65535:
+        print(f"Checking port {port}")
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('0.0.0.0', port))
+                return port
+            except OSError:
+                port += 1
+
 def get_resource_path(relative_path):
     """ Get the absolute path to a resource. Works for dev and for PyInstaller! """
     try:
-        # PyInstaller creates a temp folder and stores the path in _MEIPASS
         base_path = sys._MEIPASS
     except Exception:
-        # If we are not running as an .exe, just use the normal current directory
         base_path = os.path.abspath(".")
-
     return os.path.join(base_path, relative_path)
 
-
 LOCAL_IP = get_local_ip()
-PROXY_PORT = 9090
 
-# --- 2. CORE BRIDGE LOGIC ---
+# ============================================================================
+# 2. CORE BRIDGE LOGIC (Mitmproxy -> Vue UI)
+# ============================================================================
 class ProxyUIBridge:
-    def __init__(self):
+    def __init__(self, proxy_port):
+        self.proxy_port = proxy_port
         self.connected_clients = set()
-        self.map_local_rules = []
+        self.bg_tasks = set()
+        
+        # State
         self.is_recording = True
         self.disable_cache = False
-        self.bg_tasks = set()
-        self.breakpoint_rules = []
-        self.paused_flows = {}
-        self.breakpoints_enabled = True
+        self.throttle_profile = "None"
+        
+        # Rules & Modals
         self.map_local_enabled = True
+        self.map_local_rules = []
         self.map_remote_enabled = True
         self.map_remote_rules = []
-        self.throttle_profile = "None"
+        self.breakpoints_enabled = True
+        self.breakpoint_rules = []
+        self.paused_flows = {}
 
     async def request(self, flow: http.HTTPFlow):
-        # 1. Respect the Pause/Play button
         if not self.is_recording:
             return
         
         if self.throttle_profile == "Slow 3G":
-            await asyncio.sleep(2.0) # Adds 2 seconds of lag
+            await asyncio.sleep(2.0)
         elif self.throttle_profile == "Fast 3G":
-            await asyncio.sleep(0.5) # Adds 500ms of lag
+            await asyncio.sleep(0.5)
 
-        # --- 1. AGGRESSIVE CACHE BUSTING (REQUEST) ---
+        # --- CACHE BUSTING ---
         if self.disable_cache:
             flow.request.headers.pop("If-Modified-Since", None)
             flow.request.headers.pop("If-None-Match", None)
             flow.request.headers["Cache-Control"] = "no-cache"
             flow.request.headers["Pragma"] = "no-cache"
 
-        # --- 2. SAFE BODY EXTRACTION (REQUEST) ---
+        # --- SAFE BODY EXTRACTION ---
         req_body = ""
         req_is_image = False
         content_type = flow.request.headers.get("Content-Type", "").lower()
@@ -88,7 +100,6 @@ class ProxyUIBridge:
                 req_body = "// [Request Body too large to display (Over 1MB)]"
             elif content_type.startswith("image/"):
                 try:
-                    # Convert raw image bytes to a base64 string that HTML can read
                     b64_data = base64.b64encode(flow.request.raw_content).decode('utf-8')
                     req_body = f"data:{content_type};base64,{b64_data}"
                     req_is_image = True
@@ -97,7 +108,6 @@ class ProxyUIBridge:
             else:
                 req_body = flow.request.get_text(strict=False) or "// [Binary or unreadable data]"
         
-        # Now update your request_data dictionary to include the new flag!
         request_data = {
             "id": flow.id,
             "method": flow.request.method,
@@ -109,39 +119,35 @@ class ProxyUIBridge:
             "res_bytes": 0,
             "req_headers": dict(flow.request.headers),
             "req_body": req_body,
-            "req_is_image": req_is_image, # <-- NEW FLAG
+            "req_is_image": req_is_image,
             "res_headers": {},
             "res_body": "",
-            "res_is_image": False         # <-- NEW FLAG (placeholder for now)
+            "res_is_image": False 
         }
         
         try:
             loop = asyncio.get_running_loop()
-            task = loop.create_task(self.broadcast_to_ui("NEW_REQUEST", request_data)) # Or "UPDATE_REQUEST"
+            task = loop.create_task(self.broadcast_to_ui("NEW_REQUEST", request_data))
             self.bg_tasks.add(task)
             task.add_done_callback(self.bg_tasks.discard)
         except RuntimeError:
             pass
         
-        # --- MAP REMOTE (REWRITE) LOGIC ---
+        # --- MAP REMOTE ---
         if self.map_remote_enabled:
             for rule in self.map_remote_rules:
                 if rule.get("active"):
                     try:
                         pattern = rule.get("pattern", "")
                         target = rule.get("target", "")
-                        # If the URL matches the pattern...
                         if re.search(pattern, flow.request.pretty_url):
-                            # Replace the matched part of the URL with the target!
                             new_url = re.sub(pattern, target, flow.request.pretty_url)
                             flow.request.url = new_url
-                            
-                            # Crucial: Update the Host header so the destination server doesn't reject it
                             flow.request.headers["Host"] = flow.request.host
                     except re.error:
                         pass
 
-        # 3. Handle Map Local (Mocking)
+        # --- MAP LOCAL ---
         if self.map_local_enabled:
             for rule in self.map_local_rules:
                 if rule.get("active") and re.search(rule.get("pattern", ""), flow.request.pretty_url):
@@ -162,11 +168,11 @@ class ProxyUIBridge:
                         flow.response = http.Response.make(500, f"Editor Error: {e}".encode())
                         return
                 
+        # --- BREAKPOINTS (REQUEST) ---
         if self.breakpoints_enabled:
             for rule in self.breakpoint_rules:
                 if rule.get("active") and rule.get("is_request"):
                     try:
-                        # Safe regex check
                         if re.search(rule.get("pattern", ""), flow.request.pretty_url):
                             pause_event = asyncio.Event()
                             self.paused_flows[flow.id] = {"event": pause_event, "flow": flow}
@@ -184,121 +190,25 @@ class ProxyUIBridge:
                             await pause_event.wait()
                             break
                     except re.error:
-                        # If the user typed an invalid regex like "*google", ignore the rule so we don't crash
-                        print(f"⚠️ Invalid regex in breakpoint rule: {rule.get('pattern')}")
                         pass
-    
-    async def websocket_message(self, flow: http.HTTPFlow):
-        # 1. Check if the hook is even firing
-        print(f"💡 [WS HOOK] Intercepted a message on flow {flow.id}")
 
-        if not self.is_recording:
-            return
-
-        if not flow.websocket or not flow.websocket.messages:
-            print("❌ [WS HOOK] No websocket messages found on this flow.")
-            return
-            
-        latest_msg = flow.websocket.messages[-1]
-        
-        try:
-            content_str = latest_msg.content.decode('utf-8')
-        except UnicodeDecodeError:
-            content_str = f"<Binary Data: {len(latest_msg.content)} bytes>"
-
-        payload = {
-            "type": "WS_MESSAGE",
-            "id": str(flow.id), 
-            "is_client": latest_msg.from_client,
-            "content": content_str,
-            "size": len(latest_msg.content),
-            "timestamp": time.time()
-        }
-
-        # 2. Check if the payload is built and ready to send
-        print(f"🚀 [WS HOOK] Broadcasting frame to UI: {content_str[:50]}...")
-
-        if hasattr(self, 'connected_clients') and self.connected_clients:
-            for ws in self.connected_clients:
-                try:
-                    await ws.send(json.dumps(payload))
-                    print("✅ [WS HOOK] Successfully sent to Vue UI!")
-                except Exception as e:
-                    print(f"❌ [WS HOOK] Failed to send to UI: {e}")
-        else:
-            print("❌ [WS HOOK] No connected Vue UI clients found!")
-    
-    async def setup_android_emulator(self, ws):
-        # Helper to broadcast live progress to the Vue UI
-        async def update(step_id, status, msg=""):
-            await ws.send(json.dumps({"type": "SETUP_PROGRESS", "step": step_id, "status": status, "message": msg}))
-
-        try:
-            # 1. Checking dependencies
-            await update("check_adb", "start")
-            subprocess.run(["adb", "version"], check=True, capture_output=True)
-            await asyncio.sleep(0.5) # Tiny sleep for visual smoothness
-            await update("check_adb", "success")
-
-            # 2. Preparing Certificate
-            await update("cert_prepare", "start")
-            cert_path = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.pem")
-            if not os.path.exists(cert_path):
-                await update("cert_prepare", "error", "Certificate not found. Start proxy first!")
-                return
-
-            hash_proc = subprocess.run(["openssl", "x509", "-inform", "PEM", "-subject_hash_old", "-in", cert_path], capture_output=True, text=True, check=True)
-            cert_hash = hash_proc.stdout.splitlines()[0].strip()
-            hashed_cert_name = f"{cert_hash}.0"
-
-            subprocess.run(["openssl", "x509", "-in", cert_path, "-inform", "PEM", "-outform", "DER", "-out", hashed_cert_name], check=True)
-            await update("cert_prepare", "success")
-
-            # 3. Rooting Emulator
-            await update("root_emu", "start")
-            subprocess.run(["adb", "root"], check=True)
-            await asyncio.sleep(1.5) # Give adb a moment to restart as root
-            await update("root_emu", "success")
-
-            # 4. Installing Certificate
-            await update("push_cert", "start")
-            subprocess.run(["adb", "push", hashed_cert_name, f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True)
-            subprocess.run(["adb", "shell", "su", "0", "chmod", "644", f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True)
-            if os.path.exists(hashed_cert_name):
-                os.remove(hashed_cert_name)
-            await update("push_cert", "success")
-
-            # 5. Configuring Proxy
-            await update("set_proxy", "start")
-            subprocess.run(["adb", "shell", "settings", "put", "global", "http_proxy", "10.0.2.2:9090"], check=True)
-            await asyncio.sleep(0.5)
-            await update("set_proxy", "success")
-
-            # Done! Tell the UI to dismiss the modal.
-            await update("done", "success")
-
-        except Exception as e:
-            # If any step fails, broadcast the error so the UI stops spinning
-            await update("current_active_step", "error", str(e))
-                
     async def response(self, flow: http.HTTPFlow):
-        # 1. Respect the Pause/Play button
         if not self.is_recording:
             return
 
         if self.throttle_profile == "Slow 3G":
-            await asyncio.sleep(2.0) # Adds 2 seconds of lag
+            await asyncio.sleep(2.0)
         elif self.throttle_profile == "Fast 3G":
-            await asyncio.sleep(0.5) # Adds 500ms of lag
+            await asyncio.sleep(0.5)
 
-        # --- 1. AGGRESSIVE CACHE BUSTING (RESPONSE) ---
+        # --- CACHE BUSTING ---
         if self.disable_cache:
             flow.response.headers.pop("ETag", None)
             flow.response.headers.pop("Last-Modified", None)
             flow.response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             flow.response.headers["Expires"] = "0"
 
-        # --- 2. SAFE BODY EXTRACTION (RESPONSE) ---
+        # --- SAFE BODY EXTRACTION ---
         res_body = ""
         res_is_image = False
         content_type = flow.response.headers.get("Content-Type", "").lower()
@@ -319,7 +229,6 @@ class ProxyUIBridge:
         
         duration_ms = (flow.response.timestamp_end - flow.request.timestamp_start) * 1000 if flow.response.timestamp_end else 0
         
-        # Update your update_data dictionary
         update_data = {
             "id": flow.id,
             "status": flow.response.status_code,
@@ -327,9 +236,10 @@ class ProxyUIBridge:
             "res_bytes": len(flow.response.raw_content) if flow.response.raw_content else 0,
             "res_headers": dict(flow.response.headers),
             "res_body": res_body,
-            "res_is_image": res_is_image # <-- NEW FLAG
+            "res_is_image": res_is_image 
         }
-        # --- BREAKPOINT LOGIC (RESPONSE) ---
+
+        # --- BREAKPOINTS (RESPONSE) ---
         if self.breakpoints_enabled:
             for rule in self.breakpoint_rules:
                 if rule.get("active") and rule.get("is_response"):
@@ -361,6 +271,87 @@ class ProxyUIBridge:
         except RuntimeError:
             pass
 
+    async def websocket_message(self, flow: http.HTTPFlow):
+        if not self.is_recording:
+            return
+
+        if not hasattr(flow, 'messages') or not flow.messages:
+            return
+            
+        latest_msg = flow.messages[-1]
+        
+        try:
+            content_str = latest_msg.content.decode('utf-8')
+        except UnicodeDecodeError:
+            content_str = f"<Binary Data: {len(latest_msg.content)} bytes>"
+
+        if hasattr(flow, 'handshake_flow') and flow.handshake_flow:
+            target_id = str(flow.handshake_flow.id)
+        else:
+            target_id = str(flow.id)
+
+        payload = {
+            "type": "WS_MESSAGE",
+            "id": target_id, 
+            "is_client": latest_msg.from_client,
+            "content": content_str,
+            "size": len(latest_msg.content),
+            "timestamp": time.time()
+        }
+
+        if hasattr(self, 'connected_clients') and self.connected_clients:
+            for ws in self.connected_clients:
+                try:
+                    await ws.send(json.dumps(payload))
+                except Exception:
+                    pass
+
+    async def setup_android_emulator(self, ws):
+        async def update(step_id, status, msg=""):
+            await ws.send(json.dumps({"type": "SETUP_PROGRESS", "step": step_id, "status": status, "message": msg}))
+
+        try:
+            await update("check_adb", "start")
+            subprocess.run(["adb", "version"], check=True, capture_output=True)
+            await asyncio.sleep(0.5)
+            await update("check_adb", "success")
+
+            await update("cert_prepare", "start")
+            cert_path = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.pem")
+            if not os.path.exists(cert_path):
+                await update("cert_prepare", "error", "Certificate not found. Start proxy first!")
+                return
+
+            hash_proc = subprocess.run(["openssl", "x509", "-inform", "PEM", "-subject_hash_old", "-in", cert_path], capture_output=True, text=True, check=True)
+            cert_hash = hash_proc.stdout.splitlines()[0].strip()
+            hashed_cert_name = f"{cert_hash}.0"
+
+            subprocess.run(["openssl", "x509", "-in", cert_path, "-inform", "PEM", "-outform", "DER", "-out", hashed_cert_name], check=True)
+            await update("cert_prepare", "success")
+
+            await update("root_emu", "start")
+            subprocess.run(["adb", "root"], check=True)
+            await asyncio.sleep(1.5)
+            await update("root_emu", "success")
+
+            await update("push_cert", "start")
+            subprocess.run(["adb", "push", hashed_cert_name, f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True)
+            subprocess.run(["adb", "shell", "su", "0", "chmod", "644", f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True)
+            if os.path.exists(hashed_cert_name):
+                os.remove(hashed_cert_name)
+            await update("push_cert", "success")
+
+            await update("set_proxy", "start")
+            # --- DYNAMIC PORT INJECTED HERE ---
+            subprocess.run(["adb", "shell", "settings", "put", "global", "http_proxy", f"10.0.2.2:{self.proxy_port}"], check=True)
+            await asyncio.sleep(0.5)
+            await update("set_proxy", "success")
+
+            await update("done", "success")
+
+        except Exception as e:
+            await update("current_active_step", "error", str(e))
+
     async def broadcast_to_ui(self, msg_type, data):
         if not self.connected_clients: return
         message = json.dumps({"type": msg_type, "data": data})
@@ -369,10 +360,10 @@ class ProxyUIBridge:
     async def websocket_handler(self, websocket):
         self.connected_clients.add(websocket)
         try:
-            # Tell Vue what our real network IP is on boot
+            # Tell Vue what our real network IP and dynamic port are
             await websocket.send(json.dumps({
                 "type": "SYSTEM_INFO", 
-                "data": {"ip": LOCAL_IP, "port": PROXY_PORT}
+                "data": {"ip": LOCAL_IP, "port": self.proxy_port} # <-- Dynamic
             }))
 
             async for message in websocket:
@@ -404,23 +395,20 @@ class ProxyUIBridge:
                             url = req_data.get("url")
                             req = urllib.request.Request(url, method=req_data.get("method"))
                             
-                            # Safely copy headers, skipping ones that urllib manages automatically
                             for k, v in req_data.get("req_headers", {}).items():
                                 if k.lower() not in ["host", "content-length", "accept-encoding"]:
                                     req.add_header(k, v)
                             
-                            # Attach body if it's raw text/JSON
                             body = req_data.get("req_body")
                             if body and not req_data.get("req_is_image") and not str(body).startswith("//"):
                                 req.data = body.encode('utf-8')
                                 
-                            # Route through our own mitmproxy!
+                            # --- DYNAMIC PORT INJECTED HERE ---
                             proxy_handler = urllib.request.ProxyHandler({
-                                'http': f'http://127.0.0.1:{PROXY_PORT}',
-                                'https': f'http://127.0.0.1:{PROXY_PORT}'
+                                'http': f'http://127.0.0.1:{self.proxy_port}',
+                                'https': f'http://127.0.0.1:{self.proxy_port}'
                             })
                             
-                            # Ignore SSL errors from our own proxy cert
                             ctx = ssl.create_default_context()
                             ctx.check_hostname = False
                             ctx.verify_mode = ssl.CERT_NONE
@@ -430,7 +418,6 @@ class ProxyUIBridge:
                         except Exception as e:
                             print(f"⚠️ Replay failed: {e}")
 
-                    # Run it in a background thread so it doesn't freeze the WebSocket!
                     threading.Thread(target=_replay, daemon=True).start()
 
                 elif payload.get("type") == "TOGGLE_BREAKPOINTS":
@@ -448,31 +435,21 @@ class ProxyUIBridge:
                 elif payload.get("type") == "EXPORT_FILE":
                     filename = payload.get("filename", "export.json")
                     file_data = payload.get("data", "")
-                    
-                    # Trigger the native OS Save Dialog
                     try:
                         window = webview.windows[0]
-                        # webview.SAVE_DIALOG tells it to open a "Save As" window
-                        result = window.create_file_dialog(
-                            webview.SAVE_DIALOG, 
-                            save_filename=filename
-                        )
-                        
-                        # result is a tuple of the chosen file path, or None if they clicked Cancel
+                        result = window.create_file_dialog(webview.SAVE_DIALOG, save_filename=filename)
                         if result and len(result) > 0:
                             save_path = result[0]
-                            if isinstance(save_path, tuple): # Sometimes macOS returns a nested tuple
+                            if isinstance(save_path, tuple): 
                                 save_path = save_path[0]
-                                
                             with open(save_path, 'w', encoding='utf-8') as f:
                                 f.write(file_data)
-                            print(f"Successfully exported to {save_path}")
                     except Exception as e:
                         print(f"Failed to open save dialog: {e}")
 
                 elif payload.get("type") == "RESOLVE_BREAKPOINT":
                     flow_id = payload.get("id")
-                    action = payload.get("action") # "execute" or "drop"
+                    action = payload.get("action") 
                     mod_data = payload.get("modified_data", {})
 
                     if flow_id in self.paused_flows:
@@ -482,11 +459,9 @@ class ProxyUIBridge:
                         if action == "drop":
                             flow.kill()
                         elif action == "execute":
-                            # Apply modifications from the UI
                             if payload.get("phase") == "request":
                                 flow.request.method = mod_data.get("method", flow.request.method)
                                 flow.request.url = mod_data.get("url", flow.request.url)
-                                # Update headers and body...
                                 for k, v in mod_data.get("headers", {}).items():
                                     flow.request.headers[k] = v
                                 flow.request.text = mod_data.get("body", "")
@@ -496,16 +471,17 @@ class ProxyUIBridge:
                                     flow.response.headers[k] = v
                                 flow.response.text = mod_data.get("body", "")
 
-                        # Resume the mitmproxy pipeline!
                         flow_dict["event"].set()
         finally:
             self.connected_clients.remove(websocket)
 
-# --- 3. ASYNC RUNNERS ---
-async def start_proxy(bridge):
-    # Bind to 0.0.0.0 so external devices (like phones) can connect
-    opts = options.Options(listen_host='0.0.0.0', listen_port=PROXY_PORT)
-    master = DumpMaster(opts)
+
+# ============================================================================
+# 3. ASYNC RUNNERS (Background Threads)
+# ============================================================================
+async def start_proxy(bridge, proxy_port):
+    opts = options.Options(listen_host='0.0.0.0', listen_port=proxy_port)
+    master = DumpMaster(opts, with_termlog=False, with_dumper=False)
     master.addons.add(bridge)
     try:
         await master.run()
@@ -514,35 +490,44 @@ async def start_proxy(bridge):
 
 async def start_websocket_server(bridge):
     async with websockets.serve(bridge.websocket_handler, "127.0.0.1", 8765):
-        await asyncio.Future()  # Run forever
+        await asyncio.Future()
 
-def run_async_loop(bridge):
+def run_async_loop(bridge, proxy_port):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
-    # NEW: Assigning to variables prevents the Garbage Collector from killing them!
-    proxy_task = loop.create_task(start_proxy(bridge))
+    proxy_task = loop.create_task(start_proxy(bridge, proxy_port))
     ws_task = loop.create_task(start_websocket_server(bridge))
     
     loop.run_forever()
 
-# --- 4. STARTUP SCRIPT ---
+
+# ============================================================================
+# 4. APP ENTRY POINT
+# ============================================================================
 if __name__ == "__main__":
-    bridge = ProxyUIBridge()
+    # --- GET DYNAMIC PORT FIRST ---
+    ACTIVE_PROXY_PORT = get_free_port(9090)
+    print(f"🚀 Starting OpenProxy on port {ACTIVE_PROXY_PORT}")
+
+    # Pass the port into our bridge
+    bridge = ProxyUIBridge(proxy_port=ACTIVE_PROXY_PORT)
     
-    t = threading.Thread(target=run_async_loop, args=(bridge,), daemon=True)
+    # Start the async systems in the background
+    t = threading.Thread(target=run_async_loop, args=(bridge, ACTIVE_PROXY_PORT), daemon=True)
     t.start()
 
+    # Boot up the Vue UI Window
     html_path = get_resource_path('ui/dist/index.html')
+    icon_path = get_resource_path('icon.png')
     
     window = webview.create_window(
         title='OpenProxy', 
-        url=html_path,  # <-- Updated!
+        url=html_path, 
         width=1024, 
         height=720,
         min_size=(1024, 720),
         background_color='#1a1a1b'
     )
     
-    icon_path = get_resource_path('icon.png')
-    webview.start(private_mode=False, debug=False, icon=icon_path)
+    webview.start(private_mode=False, debug=True, icon=icon_path)

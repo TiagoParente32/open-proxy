@@ -7,7 +7,6 @@ import {
   proxyHost, 
   requests, 
   showMapModal, 
-  setupAndroidEmulator, 
   showBreakpointModal,
   disableCache,
   showMapRemoteModal,
@@ -49,7 +48,6 @@ const closeDropdown = (e) => {
   if (!e.target.closest('.throttle-wrapper')) showThrottleMenu.value = false
   if (!e.target.closest('.cert-wrapper')) showCertMenu.value = false
 }
-
 
 onMounted(() => document.addEventListener('click', closeDropdown))
 onUnmounted(() => document.removeEventListener('click', closeDropdown))
@@ -93,14 +91,15 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         Breakpoints
       </button>
       <button class="secondary-pill" @click="showMapModal = true" title="Map Local Rules">
-       Map Local
+       Local
       </button>
       <button class="secondary-pill" @click="showMapRemoteModal = true" title="Map Remote Rules">
-       Map Remote
+       Remote
       </button>
       <button class="secondary-pill" @click="showHighlightModal = true" title="Highlight Rules">
         Highlight
       </button>
+      
       <div class="cert-wrapper" style="position: relative;">
         <button 
           class="secondary-pill" 
@@ -116,14 +115,14 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 
         <div v-if="showCertMenu" class="custom-dropdown-menu">
           <div style="padding: 4px 8px; font-size: 9px; color: #666; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Android</div>
-          <div class="dropdown-item" @click="openDeviceSetup('android_emulator')">Emulator</div>
-          <div class="dropdown-item" @click="openDeviceSetup('android_device')">Physical Device</div>
+          <div class="dropdown-item" @click="openDeviceSetup('android_emulator')">📱 Emulator</div>
+          <div class="dropdown-item" @click="openDeviceSetup('android_device')">📲 Physical Device</div>
           
           <div style="height: 1px; background: #333; margin: 4px 0;"></div>
           
           <div style="padding: 4px 8px; font-size: 9px; color: #666; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Apple iOS</div>
-          <div class="dropdown-item" @click="openDeviceSetup('ios_simulator')">Simulator</div>
-          <div class="dropdown-item" @click="openDeviceSetup('ios_device')">Physical Device</div>
+          <div class="dropdown-item" @click="openDeviceSetup('ios_simulator')">💻 Simulator</div>
+          <div class="dropdown-item" @click="openDeviceSetup('ios_device')">📱 Physical Device</div>
         </div>
       </div>
 
@@ -195,11 +194,11 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 /* --- Pure Text Action Button (Play/Pause) --- */
 .action-btn { 
   display: flex; align-items: center; justify-content: center; 
-  height: 22px; /* Dropped from 24px */
+  height: 22px; 
   padding: 0 8px; 
   border-radius: 4px; 
   cursor: pointer; 
-  font-size: 10px; /* Dropped from 11px */
+  font-size: 10px; 
   font-weight: 600;
   border: 1px solid transparent;
   transition: all 0.2s; 
@@ -234,19 +233,19 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 /* --- Pure Text Pill Buttons (The Tools) --- */
 .secondary-pill {
   display: flex; align-items: center; justify-content: center;
-  height: 22px; /* Dropped from 24px */
-  padding: 0 6px; /* Tightened padding */
+  height: 22px; 
+  padding: 0 6px; 
   background: #212324; 
   border: 1px solid #303335; 
   color: #a1aab3; 
   border-radius: 4px; 
   cursor: pointer; 
-  font-size: 10px; /* Dropped from 11px */
-  letter-spacing: -0.2px; /* Pulls letters slightly closer to fit more */
+  font-size: 10px; 
+  letter-spacing: -0.2px; 
   font-weight: 500;
   transition: all 0.15s ease;
   outline: none;
-  white-space: nowrap; /* Prevents text from breaking lines */
+  white-space: nowrap; 
 }
 .secondary-pill:hover { 
   background: #2a2d2e; 
@@ -282,7 +281,6 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 .toggle:hover { color: #ccc; }
 .toggle-label { font-size: 10px; letter-spacing: -0.2px; white-space: nowrap; }
 
-/* Shrunk the toggle switch slightly */
 .switch { width: 22px; height: 12px; background: #111; border: 1px solid #444; border-radius: 14px; position: relative; transition: all 0.3s; box-sizing: border-box;}
 .switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 8px; height: 8px; background: #888; border-radius: 50%; transition: transform 0.3s, background 0.3s; }
 .toggle.active .switch { background: rgba(245, 158, 11, 0.15); border-color: #f59e0b; }
@@ -303,7 +301,7 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  width: 130px;
+  width: 140px;
   background: #1a1a1b;
   border: 1px solid #333;
   border-radius: 6px;

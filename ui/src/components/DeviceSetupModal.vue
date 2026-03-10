@@ -1,5 +1,5 @@
 <script setup>
-import { showDeviceSetupModal, deviceSetupType, injectEmulatorCert, proxyHost } from '../store.js'
+import { showDeviceSetupModal, deviceSetupType, injectEmulatorCert, proxyIP, proxyPort } from '../store.js'
 
 const triggerInjection = () => {
   injectEmulatorCert()
@@ -42,7 +42,13 @@ const getTitle = () => {
         <ol class="instruction-list numbered">
           <li>Ensure your phone and computer are on the <strong>same Wi-Fi network</strong>.</li>
           <li>Go to <strong>Settings > Wi-Fi</strong>, tap the gear icon next to your network, and edit <strong>Proxy</strong> settings to <strong>Manual</strong>.</li>
-          <li>Enter your Proxy IP and Port: <code class="inline-code highlighted">{{ proxyHost }}</code></li>
+          <li>
+            Enter your Proxy details:<br>
+            <div class="ip-box">
+              <div style="margin-bottom: 4px;">Hostname: <code class="inline-code highlighted">{{ proxyIP }}</code></div>
+              <div>Port: <code class="inline-code highlighted">{{ proxyPort }}</code></div>
+            </div>
+          </li>          
           <li>Open your mobile browser and go to <code class="inline-code">http://mitm.it</code> to download the certificate.</li>
           <li>Go to <strong>Settings > Security > Encryption & Credentials > Install a certificate</strong> and select the downloaded file.</li>
         </ol>
@@ -51,7 +57,13 @@ const getTitle = () => {
       <div v-if="deviceSetupType === 'ios_simulator'" class="modal-body">
         <p style="margin-bottom: 12px;">iOS Simulators inherit their network connection directly from your Mac.</p>
         <ol class="instruction-list numbered">
-          <li>Ensure your macOS <strong>System Settings > Network > Proxies</strong> is pointing to <code class="inline-code highlighted">{{ proxyHost }}</code>.</li>
+          <li>
+            Ensure your macOS <strong>System Settings > Network > Proxies</strong> is configured with:<br>
+            <div class="ip-box">
+              <div style="margin-bottom: 4px;">Server: <code class="inline-code highlighted">{{ proxyIP }}</code></div>
+              <div>Port: <code class="inline-code highlighted">{{ proxyPort }}</code></div>
+            </div>
+          </li>
           <li>Boot up your iOS Simulator and open the <strong>Safari</strong> app.</li>
           <li>Navigate to <code class="inline-code">http://mitm.it</code> and download the certificate profile.</li>
           <li>Go to the Simulator's <strong>Settings > General > VPN & Device Management</strong> and install the Profile.</li>
@@ -64,7 +76,13 @@ const getTitle = () => {
         <ol class="instruction-list numbered">
           <li>Ensure your iPhone and computer are on the <strong>same Wi-Fi network</strong>.</li>
           <li>Go to <strong>Settings > Wi-Fi</strong>, tap the <strong>(i)</strong> next to your network, scroll down to <strong>Configure Proxy</strong>, and select <strong>Manual</strong>.</li>
-          <li>Enter your Proxy Server and Port: <code class="inline-code highlighted">{{ proxyHost }}</code></li>
+          <li>
+            Enter your Proxy details:<br>
+            <div class="ip-box">
+              <div style="margin-bottom: 4px;">Server: <code class="inline-code highlighted">{{ proxyIP }}</code></div>
+              <div>Port: <code class="inline-code highlighted">{{ proxyPort }}</code></div>
+            </div>
+          </li>
           <li>Open Safari and go to <code class="inline-code">http://mitm.it</code> to download the configuration profile.</li>
           <li>Go to <strong>Settings > General > VPN & Device Management</strong> and install the Profile.</li>
           <li><strong>Crucial Step:</strong> Go to <strong>Settings > General > About > Certificate Trust Settings</strong> and toggle the switch ON for the mitmproxy certificate!</li>
@@ -89,6 +107,9 @@ const getTitle = () => {
 
 .instruction-list { margin-left: 20px; margin-bottom: 16px; color: #aaa; display: flex; flex-direction: column; gap: 10px; text-align: left; }
 .instruction-list.numbered { list-style-type: decimal; }
+
+/* The nice dark box for IP/Port details */
+.ip-box { margin-top: 6px; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 6px; border: 1px solid #333; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); }
 
 .inline-code { background: #222; padding: 2px 6px; border-radius: 4px; font-family: monospace; color: #e5e7eb; border: 1px solid #333; }
 .inline-code.highlighted { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border-color: rgba(59, 130, 246, 0.3); font-weight: bold; font-size: 14px; }

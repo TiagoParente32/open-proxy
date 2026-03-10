@@ -86,7 +86,15 @@ export const importRules = (event, rulesRef) => {
 export const requests = ref(loadState('requests', []))
 export const connectionStatus = ref('Connecting...')
 export const isRecording = ref(true)
-export const proxyHost = ref('127.0.0.1:8080')
+export const proxyHost = ref('Detecting...')
+
+export const proxyIP = computed(() => {
+    return proxyHost.value.includes(':') ? proxyHost.value.split(':')[0] : '...'
+})
+
+export const proxyPort = computed(() => {
+    return proxyHost.value.includes(':') ? proxyHost.value.split(':')[1] : '...'
+})
 
 export const selectedRequest = ref(null)
 export const activeReqTab = ref('Header')
