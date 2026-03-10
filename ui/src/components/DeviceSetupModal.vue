@@ -1,50 +1,75 @@
 <script setup>
-// IMPORT proxyHost from the store!
 import { showDeviceSetupModal, deviceSetupType, injectEmulatorCert, proxyHost } from '../store.js'
 
 const triggerInjection = () => {
   injectEmulatorCert()
-  showDeviceSetupModal.value = false // Close modal so they can see the alerts
+  showDeviceSetupModal.value = false 
+}
+
+// Helper to get a clean title based on the state
+const getTitle = () => {
+  if (deviceSetupType.value === 'android_emulator') return '📱 Android Emulator Setup'
+  if (deviceSetupType.value === 'android_device') return '📲 Android Device Setup'
+  if (deviceSetupType.value === 'ios_simulator') return '💻 iOS Simulator Setup'
+  if (deviceSetupType.value === 'ios_device') return '📱 iOS Physical Device Setup'
+  return 'Device Setup'
 }
 </script>
 
 <template>
   <div v-if="showDeviceSetupModal" class="modal-overlay" @mousedown.self="showDeviceSetupModal = false">
-    <div class="modal-content" style="width: 500px; max-width: 90vw; display: flex; flex-direction: column;">
+    <div class="modal-content" style="width: 550px; max-width: 90vw; display: flex; flex-direction: column;">
       
       <div style="padding: 16px; border-bottom: 1px solid var(--border); background: var(--bg-sidebar); text-align: left;">
-        <strong style="color: white; font-size: 14px;">
-          {{ deviceSetupType === 'emulator' ? '📱 Android Emulator Setup' : '📲 Physical Device Setup' }}
-        </strong>
+        <strong style="color: white; font-size: 14px;">{{ getTitle() }}</strong>
       </div>
       
-      <div v-if="deviceSetupType === 'emulator'" class="modal-body">
+      <div v-if="deviceSetupType === 'android_emulator'" class="modal-body">
         <p style="margin-bottom: 12px;">To automatically inject the OpenProxy certificate and configure the proxy, your emulator must meet these requirements:</p>
-        
         <ul class="instruction-list">
           <li>Must be an <strong>Android Emulator with Google APIs</strong> (Google Play versions block root access).</li>
           <li>The emulator must be currently running.</li>
           <li>You must have <code class="inline-code">adb</code> and <code class="inline-code">openssl</code> installed on your system.</li>
         </ul>
-        
         <p class="warning-text">⚠️ Note: This script will restart the ADB daemon as root, push the certificate to system files, and override global proxy settings.</p>
-        
         <button class="inject-btn" @click="triggerInjection">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           Inject Certificate & Set Proxy
         </button>
       </div>
 
-      <div v-if="deviceSetupType === 'device'" class="modal-body">
-        <p style="margin-bottom: 16px;">To intercept traffic from a physical Android device, you must manually configure your Wi-Fi and install the certificate.</p>
-        
+      <div v-if="deviceSetupType === 'android_device'" class="modal-body">
         <ol class="instruction-list numbered">
           <li>Ensure your phone and computer are on the <strong>same Wi-Fi network</strong>.</li>
-          <li>On your Android device, go to <strong>Settings > Wi-Fi</strong>, tap the gear icon next to your network, and edit the <strong>Proxy</strong> settings.</li>
-          <li>Set the proxy to <strong>Manual</strong>.</li>
+          <li>Go to <strong>Settings > Wi-Fi</strong>, tap the gear icon next to your network, and edit <strong>Proxy</strong> settings to <strong>Manual</strong>.</li>
           <li>Enter your Proxy IP and Port: <code class="inline-code highlighted">{{ proxyHost }}</code></li>
-          <li>Open your mobile browser and navigate to <code class="inline-code">http://mitm.it</code> to download and install the OpenProxy certificate.</li>
+          <li>Open your mobile browser and go to <code class="inline-code">http://mitm.it</code> to download the certificate.</li>
+          <li>Go to <strong>Settings > Security > Encryption & Credentials > Install a certificate</strong> and select the downloaded file.</li>
         </ol>
+      </div>
+
+      <div v-if="deviceSetupType === 'ios_simulator'" class="modal-body">
+        <p style="margin-bottom: 12px;">iOS Simulators inherit their network connection directly from your Mac.</p>
+        <ol class="instruction-list numbered">
+          <li>Ensure your macOS <strong>System Settings > Network > Proxies</strong> is pointing to <code class="inline-code highlighted">{{ proxyHost }}</code>.</li>
+          <li>Boot up your iOS Simulator and open the <strong>Safari</strong> app.</li>
+          <li>Navigate to <code class="inline-code">http://mitm.it</code> and download the certificate profile.</li>
+          <li>Go to the Simulator's <strong>Settings > General > VPN & Device Management</strong> and install the Profile.</li>
+          <li><strong>Crucial Step:</strong> Go to <strong>Settings > General > About > Certificate Trust Settings</strong> and toggle the switch ON for the mitmproxy certificate!</li>
+        </ol>
+        <p class="warning-text" style="margin-top: 10px; margin-bottom: 0;">⚠️ If you skip Step 5, all HTTPS traffic will fail with SSL errors.</p>
+      </div>
+
+      <div v-if="deviceSetupType === 'ios_device'" class="modal-body">
+        <ol class="instruction-list numbered">
+          <li>Ensure your iPhone and computer are on the <strong>same Wi-Fi network</strong>.</li>
+          <li>Go to <strong>Settings > Wi-Fi</strong>, tap the <strong>(i)</strong> next to your network, scroll down to <strong>Configure Proxy</strong>, and select <strong>Manual</strong>.</li>
+          <li>Enter your Proxy Server and Port: <code class="inline-code highlighted">{{ proxyHost }}</code></li>
+          <li>Open Safari and go to <code class="inline-code">http://mitm.it</code> to download the configuration profile.</li>
+          <li>Go to <strong>Settings > General > VPN & Device Management</strong> and install the Profile.</li>
+          <li><strong>Crucial Step:</strong> Go to <strong>Settings > General > About > Certificate Trust Settings</strong> and toggle the switch ON for the mitmproxy certificate!</li>
+        </ol>
+        <p class="warning-text" style="margin-top: 10px; margin-bottom: 0;">⚠️ If you skip Step 6, all HTTPS traffic will fail with SSL errors.</p>
       </div>
 
       <div class="modal-footer">
@@ -59,11 +84,10 @@ const triggerInjection = () => {
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); z-index: 99999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(2px); }
 .modal-content { background: var(--bg-main); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.6); overflow: hidden; }
 
-/* Enforced text-align: left here so everything reads cleanly left-to-right */
 .modal-body { padding: 24px; background: var(--bg-main); font-size: 13px; color: #ccc; line-height: 1.5; text-align: left; }
 .modal-footer { padding: 16px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; background: var(--bg-sidebar); }
 
-.instruction-list { margin-left: 20px; margin-bottom: 20px; color: #aaa; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.instruction-list { margin-left: 20px; margin-bottom: 16px; color: #aaa; display: flex; flex-direction: column; gap: 10px; text-align: left; }
 .instruction-list.numbered { list-style-type: decimal; }
 
 .inline-code { background: #222; padding: 2px 6px; border-radius: 4px; font-family: monospace; color: #e5e7eb; border: 1px solid #333; }
