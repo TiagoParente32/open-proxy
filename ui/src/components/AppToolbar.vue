@@ -114,15 +114,13 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         </button>
 
         <div v-if="showCertMenu" class="custom-dropdown-menu">
-          <div style="padding: 4px 8px; font-size: 9px; color: #666; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Android</div>
-          <div class="dropdown-item" @click="openDeviceSetup('android_emulator')">📱 Emulator</div>
-          <div class="dropdown-item" @click="openDeviceSetup('android_device')">📲 Physical Device</div>
+          <div class="dropdown-item" @click="openDeviceSetup('android_emulator')">Android Emulator</div>
+          <div class="dropdown-item" @click="openDeviceSetup('android_device')">Android Device</div>
           
           <div style="height: 1px; background: #333; margin: 4px 0;"></div>
           
-          <div style="padding: 4px 8px; font-size: 9px; color: #666; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Apple iOS</div>
-          <div class="dropdown-item" @click="openDeviceSetup('ios_simulator')">💻 Simulator</div>
-          <div class="dropdown-item" @click="openDeviceSetup('ios_device')">📱 Physical Device</div>
+          <div class="dropdown-item" @click="openDeviceSetup('ios_simulator')">iOS Simulator</div>
+          <div class="dropdown-item" @click="openDeviceSetup('ios_device')">iOS Device</div>
         </div>
       </div>
 
