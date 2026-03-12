@@ -409,17 +409,36 @@ class ProxyUIBridge:
                     def _replay():
                         try:
                             url = req_data.get("url")
-                            req = urllib.request.Request(url, method=req_data.get("method"))
+                            if not url or url == "https://":
+                                print("[WARNING] Invalid URL in composer.")
+                                return
+
+                            method = req_data.get("method", "GET").upper()
+                            req = urllib.request.Request(url, method=method)
                             
-                            for k, v in req_data.get("req_headers", {}).items():
+                            # 1. Safely handle headers (in case Vue sent them as a JSON string)
+                            raw_headers = req_data.get("req_headers", {})
+                            if isinstance(raw_headers, str):
+                                import json
+                                try:
+                                    raw_headers = json.loads(raw_headers)
+                                except Exception:
+                                    raw_headers = {}
+
+                            for k, v in raw_headers.items():
                                 if k.lower() not in ["host", "content-length", "accept-encoding"]:
-                                    req.add_header(k, v)
+                                    req.add_header(k, str(v))
                             
+                            # 2. Safely handle the body and calculate Content-Length
                             body = req_data.get("req_body")
-                            if body and not req_data.get("req_is_image") and not str(body).startswith("//"):
-                                req.data = body.encode('utf-8')
-                                
-                            # --- DYNAMIC PORT INJECTED HERE ---
+                            # Only attach bodies for methods that expect them
+                            if body and method in ["POST", "PUT", "PATCH"]:
+                                # Don't send placeholder warnings as data
+                                if not req_data.get("req_is_image") and not str(body).startswith("//"):
+                                    req.data = body.encode('utf-8')
+                                    req.add_header('Content-Length', str(len(req.data)))
+                            
+                            # 3. Dynamic proxy injection
                             proxy_handler = urllib.request.ProxyHandler({
                                 'http': f'http://127.0.0.1:{self.proxy_port}',
                                 'https': f'http://127.0.0.1:{self.proxy_port}'
@@ -430,9 +449,13 @@ class ProxyUIBridge:
                             ctx.verify_mode = ssl.CERT_NONE
                             
                             opener = urllib.request.build_opener(proxy_handler, urllib.request.HTTPSHandler(context=ctx))
-                            opener.open(req, timeout=10)
+                            
+                            # Bumped timeout to 30s so you have time to interact with breakpoints!
+                            opener.open(req, timeout=300)
+                            print(f"[INFO] Successfully injected {method} to {url}")
+                            
                         except Exception as e:
-                            print(f"⚠️ Replay failed: {e}")
+                            print(f"[ERROR] Replay failed: {e}")
 
                     threading.Thread(target=_replay, daemon=True).start()
 

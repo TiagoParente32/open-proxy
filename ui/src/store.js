@@ -9,6 +9,19 @@ const MAX_SAVED_REQUESTS = 500;
 export let wsConnection = null;
 let wsSaveTimeout = null;
 
+export const isComposeEditMode = ref(false)
+
+export const openComposeNew = () => {
+    isComposeEditMode.value = false
+    composeData.value = {
+        method: 'GET',
+        url: 'https://',
+        req_headers: '{\n  "Accept": "*/*",\n  "User-Agent": "OpenProxy/1.0"\n}',
+        req_body: ''
+    }
+    showComposeModal.value = true
+}
+
 const loadState = (key, defaultVal) => {
     try {
         const saved = localStorage.getItem(`openproxy_${key}`)

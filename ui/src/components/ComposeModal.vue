@@ -3,7 +3,8 @@ import { Codemirror } from 'vue-codemirror'
 import { json } from '@codemirror/lang-json'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView } from '@codemirror/view'
-import { showComposeModal, composeData, sendComposedRequest } from '../store.js'
+// NEW: Imported isComposeEditMode
+import { showComposeModal, composeData, sendComposedRequest, isComposeEditMode } from '../store.js'
 
 const extensions = [json(), oneDark, EditorView.lineWrapping]
 </script>
@@ -15,7 +16,9 @@ const extensions = [json(), oneDark, EditorView.lineWrapping]
       <div class="modal-content large" style="border-color: #3b82f6; box-shadow: 0 0 40px rgba(59, 130, 246, 0.2); width: 800px; height: 600px; display: flex; flex-direction: column; resize: both; overflow: hidden; min-width: 500px; min-height: 400px;">
         
         <div style="padding: 16px 24px; background: #2a2d2e; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
-          <strong style="color: #3b82f6; font-size: 14px;">✏️ Edit & Repeat Request</strong>
+          <strong style="color: #3b82f6; font-size: 14px;">
+            {{ isComposeEditMode ? '✏️ Edit & Repeat Request' : '✨ Compose New Request' }}
+          </strong>
         </div>
 
         <div style="padding: 20px 24px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px;">

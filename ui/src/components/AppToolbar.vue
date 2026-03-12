@@ -14,7 +14,8 @@ import {
   showHighlightModal,
   wsMessages,
   showDeviceSetupModal,
-  deviceSetupType
+  deviceSetupType,
+  openComposeNew,
 } from '../store.js'
 
 // Add the state for the new dropdown
@@ -74,6 +75,13 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
           <line x1="14" y1="11" x2="14" y2="17"></line>
         </svg>
       </button>
+
+      <button class="icon-btn" @click="openComposeNew" title="Compose New Request">
+        <svg style="min-width: 14px; min-height: 14px; stroke: #a1aab3; fill: none;" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9"></path>
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+        </svg>
+      </button>
     </div>
 
     <div class="toolbar-center">
@@ -91,10 +99,10 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         Breakpoints
       </button>
       <button class="secondary-pill" @click="showMapModal = true" title="Map Local Rules">
-       Local
+       Map Local
       </button>
       <button class="secondary-pill" @click="showMapRemoteModal = true" title="Map Remote Rules">
-       Remote
+       Map Remote
       </button>
       <button class="secondary-pill" @click="showHighlightModal = true" title="Highlight Rules">
         Highlight
@@ -330,5 +338,18 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 .dropdown-item.selected {
   color: #10b981;
   background: rgba(16, 185, 129, 0.1);
+}
+
+/* --- Compose Button Styling --- */
+.compose-btn {
+  color: #a1aab3; /* Sets the exact 'currentColor' for the SVG */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.compose-btn:hover {
+  color: #fff; /* Brightens up when hovered! */
 }
 </style>
