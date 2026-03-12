@@ -569,4 +569,4 @@ if __name__ == "__main__":
         background_color='#1a1a1b'
     )
     
-    webview.start(private_mode=False, debug=True, icon=icon_path)
+    webview.start(private_mode=False, debug=False, icon=icon_path)
