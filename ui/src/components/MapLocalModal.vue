@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Codemirror } from 'vue-codemirror'
 import { json } from '@codemirror/lang-json'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -18,11 +18,25 @@ import {
 const extensions = [json(), oneDark, EditorView.lineWrapping]
 const activeRule = computed(() => mapLocalRules.value.find(r => r.id === selectedRuleId.value))
 
-// NEW: Tab state for the Map Local editor
 const activeTab = ref('Body')
 
+// Auto-select the first rule if nothing is selected but rules exist
+watch(mapLocalRules, (newRules) => {
+  if (newRules.length > 0 && !selectedRuleId.value) {
+    selectedRuleId.value = newRules[0].id
+  }
+}, { immediate: true, deep: true })
+
 const addNewRule = () => {
-  const newRule = { id: Date.now(), active: true, pattern: 'api.example.com/*', status: 200, headers: '{\n  "Content-Type": "application/json"\n}', body: '' }
+  const newRule = { 
+    id: Date.now(), 
+    active: true, 
+    label: '', 
+    pattern: 'api.example.com/*', 
+    status: 200, 
+    headers: '{\n  "Content-Type": "application/json"\n}', 
+    body: '' 
+  }
   mapLocalRules.value.unshift(newRule)
   selectedRuleId.value = newRule.id
 }
@@ -47,7 +61,6 @@ const saveAndApplyRules = () => {
       <div class="pm-split-modal">
         
         <div class="pm-sidebar">
-          
           <div class="pm-sidebar-header">
             <strong style="color: #e0e0e0; font-size: 13px;">Map Local Rules</strong>
             <button class="pm-add-btn" @click="addNewRule">+ Add</button>
@@ -64,7 +77,12 @@ const saveAndApplyRules = () => {
                 <span class="pm-checkmark"></span>
               </label>
 
-              <span class="pm-rule-pattern" :title="rule.pattern">{{ rule.pattern || 'New Rule' }}</span>
+              <div class="pm-rule-text-stack">
+                <span class="pm-rule-pattern" :title="rule.label || rule.pattern">
+                  {{ rule.label || rule.pattern || 'New Rule' }}
+                </span>
+                <span v-if="rule.label" class="pm-rule-subtext">{{ rule.pattern }}</span>
+              </div>
               
               <button class="pm-rule-del" @click.stop="deleteRule(rule.id)" title="Delete Rule">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -74,11 +92,10 @@ const saveAndApplyRules = () => {
                   <line x1="14" y1="11" x2="14" y2="17"></line>
                 </svg>
               </button>
-
             </div>
             
-            <div v-if="mapLocalRules.length === 0" class="pm-empty-sidebar">
-              No rules yet. Click + Add to start mocking traffic.
+            <div v-if="mapLocalRules.length === 0" class="empty-state">
+              No rules yet.
             </div>
           </div>
 
@@ -87,9 +104,7 @@ const saveAndApplyRules = () => {
               <span class="toggle-label">Enable Map Local</span>
               <div class="switch"></div>
             </div>
-            
             <div class="pm-divider-horizontal"></div>
-            
             <div style="display: flex; gap: 8px;">
               <button class="ghost-btn" style="flex: 1; justify-content: center;" @click="exportRules(mapLocalRules, 'OpenProxy_MapLocal')">Export</button>
               <label class="ghost-btn" style="flex: 1; justify-content: center; cursor: pointer; margin: 0;">
@@ -101,12 +116,17 @@ const saveAndApplyRules = () => {
         </div>
 
         <div class="pm-main-area">
-          
           <div v-if="activeRule" style="display: flex; flex-direction: column; height: 100%;">
-            
             <div class="pm-header">
               <strong class="pm-title text-blue">Mock Response Editor</strong>
               <button class="pm-close-btn" @click="saveAndApplyRules">✕</button>
+            </div>
+
+            <div style="padding: 16px 20px 0 20px;">
+                <div class="pm-label-container">
+                    <span class="pm-routing-label">Rule Name (Optional)</span>
+                    <input type="text" v-model="activeRule.label" class="pm-routing-input" placeholder="e.g., Get User Profile Mock" />
+                </div>
             </div>
 
             <div class="pm-omnibar-container">
@@ -128,168 +148,105 @@ const saveAndApplyRules = () => {
             </div>
 
             <div class="pm-editor-area">
-              
               <div v-if="activeTab === 'Body'" class="pm-editor-wrapper">
                 <div class="pm-helper-text">Response Payload (Returned to client)</div>
                 <codemirror v-model="activeRule.body" :extensions="extensions" class="pm-codemirror" />
               </div>
-
               <div v-if="activeTab === 'Headers'" class="pm-editor-wrapper">
                 <div class="pm-helper-text">Response Headers (Format as JSON)</div>
                 <codemirror v-model="activeRule.headers" :extensions="extensions" class="pm-codemirror" />
               </div>
-
             </div>
 
             <div class="pm-footer">
               <button class="pm-btn-cancel" @click="showMapModal = false">Cancel</button>
               <button class="pm-btn-execute" @click="saveAndApplyRules">Save & Apply</button>
             </div>
-
           </div>
-          
           <div v-else class="pm-main-empty">
-            Select or create a rule to edit its mock response.
+            Select or create a rule to edit.
           </div>
-
         </div>
-
       </div>
     </div>
   </Teleport>
 </template>
 
 <style scoped>
-/* OVERLAY & MODAL */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); z-index: 99999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
 .pm-split-modal { background: #1e1e1e; border-radius: 8px; border: 1px solid #333; width: 1000px; height: 650px; display: flex; flex-direction: row; box-shadow: 0 20px 50px rgba(0,0,0,0.5); overflow: hidden; }
 
-/* SIDEBAR STYLES */
 .pm-sidebar { width: 300px; background: #1a1a1b; border-right: 1px solid #333; display: flex; flex-direction: column; flex-shrink: 0; }
 .pm-sidebar-header { padding: 16px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: #222;}
 .pm-add-btn { background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
 .pm-add-btn:hover { background: #3b82f6; color: white; border-color: #3b82f6; }
 
 .pm-rule-list { flex: 1; overflow-y: auto; }
-/* --- FIXED RULE LIST STYLES --- */
-.pm-rule-item { 
-  height: 38px; /* Locking height ensures perfect vertical centering */
-  padding: 0 16px; 
-  border-bottom: 1px solid #2a2a2b; 
-  display: flex; 
-  align-items: center; 
-  gap: 12px; 
-  cursor: pointer; 
-  transition: background 0.2s; 
-  box-sizing: border-box;
-}
+.pm-rule-item { min-height: 48px; padding: 0 16px; border-bottom: 1px solid #2a2a2b; display: flex; align-items: center; gap: 12px; cursor: pointer; box-sizing: border-box;}
 .pm-rule-item:hover { background: #222; }
 .pm-rule-item.active { background: #252d38; border-left: 3px solid #3b82f6; padding-left: 13px; }
 
-/* Custom Sleek Checkbox - Centered Perfectly */
-.pm-checkbox-container { 
-  display: flex; 
-  align-items: center; 
-  justify-content: center; 
-  position: relative; 
-  cursor: pointer; 
-  user-select: none; 
-  width: 16px; 
-  height: 16px; 
-  flex-shrink: 0; 
-  margin: 0; /* Strips any default margins pushing it off-center */
-}
-.pm-checkbox-container input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
-.pm-checkmark { position: absolute; top: 0; left: 0; height: 16px; width: 16px; background-color: #111; border: 1px solid #555; border-radius: 4px; transition: border-color 0.2s, background-color 0.2s; box-sizing: border-box; }
-.pm-checkbox-container:hover input ~ .pm-checkmark { border-color: #3b82f6; }
+/* Reverted Empty States */
+.empty-state { padding: 40px; text-align: center; color: #666; font-style: italic; font-size: 12px; }
+.pm-main-empty { flex: 1; display: flex; justify-content: center; align-items: center; color: #666; font-style: italic; font-size: 12px; }
+
+/* Text Stack */
+.pm-rule-text-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.pm-rule-pattern { font-family: 'Consolas', monospace; font-size: 11px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+.pm-rule-subtext { font-size: 9px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+
+/* Checkbox */
+.pm-checkbox-container { display: flex; align-items: center; justify-content: center; position: relative; width: 16px; height: 16px; flex-shrink: 0; cursor: pointer; }
+.pm-checkbox-container input { position: absolute; opacity: 0; }
+.pm-checkmark { position: absolute; top: 0; left: 0; height: 16px; width: 16px; background-color: #111; border: 1px solid #555; border-radius: 4px; }
 .pm-checkbox-container input:checked ~ .pm-checkmark { background-color: #3b82f6; border-color: #3b82f6; }
-.pm-checkmark:after { content: ""; position: absolute; display: none; }
+.pm-checkmark:after { content: ""; position: absolute; display: none; left: 50%; top: 45%; width: 4px; height: 9px; border: solid white; border-width: 0 2px 2px 0; transform: translate(-50%, -50%) rotate(45deg); }
 .pm-checkbox-container input:checked ~ .pm-checkmark:after { display: block; }
-/* Re-aligned the inner white checkmark so it is mathematically centered */
-.pm-checkbox-container .pm-checkmark:after { 
-  left: 50%; 
-  top: 45%; /* 45% instead of 50% visually compensates for the bottom-heavy shape */
-  width: 4px; 
-  height: 9px; 
-  border: solid white; 
-  border-width: 0 2px 2px 0; 
-  /* Translate centers it perfectly BEFORE rotating it! */
-  transform: translate(-50%, -50%) rotate(45deg); 
-}
-.pm-rule-pattern { flex: 1; font-family: 'Consolas', monospace; font-size: 11px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1; }
-.pm-rule-item.active .pm-rule-pattern { color: #fff; font-weight: bold; }
 
-/* The Permanent Rounded Trashcan */
-.pm-rule-del { 
-  background: transparent; 
-  border: 1px solid transparent; 
-  color: #666; 
-  cursor: pointer; 
-  padding: 5px; 
-  border-radius: 6px; 
-  display: flex; 
-  align-items: center; 
-  justify-content: center; 
-  transition: all 0.2s; 
-}
-/* When you hover the row, the button gets a subtle outline */
-.pm-rule-item:hover .pm-rule-del { background: #2a2d2e; border-color: #333; color: #888; }
-/* When you hover the button itself, it turns red */
-.pm-rule-del:hover { background: rgba(239, 68, 68, 0.15) !important; border-color: rgba(239, 68, 68, 0.4) !important; color: #ef4444 !important; }
+/* Trashcan */
+.pm-rule-del { background: transparent; border: none; color: #666; cursor: pointer; padding: 5px; border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.pm-rule-item:hover .pm-rule-del { color: #888; }
+.pm-rule-del:hover { background: rgba(239, 68, 68, 0.15) !important; color: #ef4444 !important; }
 
-.pm-empty-sidebar { padding: 40px 20px; text-align: center; color: #666; font-size: 12px; line-height: 1.5; }
-
-/* Sidebar Footer & Toggles */
 .pm-sidebar-footer { padding: 16px; background: #151515; border-top: 1px solid #333; display: flex; flex-direction: column; gap: 12px;}
-.toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: #888; font-weight: 600; transition: color 0.2s; }
+.toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: #888; font-weight: 600; }
 .toggle.active { color: #10b981; }
-.toggle:hover { color: #ccc; }
-.toggle-label { font-size: 12px; }
-.switch { width: 32px; height: 18px; background: #111; border: 1px solid #444; border-radius: 14px; position: relative; transition: all 0.3s; box-sizing: border-box;}
-.switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: #888; border-radius: 50%; transition: transform 0.3s, background 0.3s; }
-.toggle.active .switch { background: rgba(16, 185, 129, 0.15); border-color: #10b981; }
+.switch { width: 32px; height: 18px; background: #111; border: 1px solid #444; border-radius: 14px; position: relative; }
+.switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: #888; border-radius: 50%; transition: transform 0.3s; }
 .toggle.active .switch::after { transform: translateX(14px); background: #10b981; }
 .pm-divider-horizontal { width: 100%; height: 1px; background: #333; }
+.ghost-btn { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; background: transparent; border: 1px solid #444; color: #aaa; border-radius: 4px; cursor: pointer; font-size: 11px; }
 
-.ghost-btn { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; background: transparent; border: 1px solid #444; color: #aaa; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500; transition: all 0.2s; }
-.ghost-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; border-color: #666;}
-
-/* MAIN EDITOR STYLES */
+/* MAIN EDITOR */
 .pm-main-area { flex: 1; display: flex; flex-direction: column; background: #1e1e1e; min-width: 0; }
-.pm-main-empty { flex: 1; display: flex; justify-content: center; align-items: center; color: #555; font-size: 13px; }
+.pm-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #252525; border-bottom: 1px solid #333; }
+.pm-title { font-size: 13px; font-weight: 700; color: #3b82f6; }
+.pm-close-btn { background: transparent; border: none; color: #888; font-size: 16px; cursor: pointer; }
 
-.pm-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #252525; border-bottom: 1px solid #333; flex-shrink: 0; }
-.pm-title { font-size: 13px; font-weight: 700; }
-.text-blue { color: #3b82f6 !important; }
-.pm-close-btn { background: transparent; border: none; color: #888; font-size: 16px; cursor: pointer; transition: color 0.2s; }
-.pm-close-btn:hover { color: #ef4444; }
+.pm-label-container { display: flex; flex-direction: column; gap: 6px; }
+.pm-routing-label { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+.pm-routing-input { background: #111; border: 1px solid #444; color: #eee; padding: 10px 12px; border-radius: 6px; font-size: 13px; outline: none; }
+.pm-routing-input:focus { border-color: #3b82f6; }
 
-.pm-omnibar-container { display: flex; gap: 8px; padding: 16px 20px 8px 20px; flex-shrink: 0; }
-.pm-omnibar { display: flex; flex: 1; align-items: center; background: #121212; border: 1px solid #444; border-radius: 6px; transition: border-color 0.2s; }
-.pm-omnibar:focus-within { border-color: #3b82f6; }
-.pm-divider { width: 1px; height: 24px; background: #333; }
+.pm-omnibar-container { padding: 12px 20px; }
+.pm-omnibar { display: flex; align-items: center; background: #121212; border: 1px solid #444; border-radius: 6px; }
 .pm-url-input { flex: 1; background: transparent; border: none; color: #e0e0e0; padding: 10px 12px; font-size: 13px; outline: none; font-family: 'Consolas', monospace; }
-.pm-method-display.read-only { padding: 10px 16px; font-weight: 700; font-size: 11px; color: #888; letter-spacing: 0.5px; }
-
+.pm-divider { width: 1px; height: 24px; background: #333; }
+.pm-method-display.read-only { padding: 10px 16px; font-weight: 700; font-size: 11px; color: #888; }
 .pm-status-wrapper { display: flex; align-items: center; padding: 0 12px; gap: 8px; }
-.pm-status-label { font-size: 11px; color: #888; font-weight: 600; text-transform: uppercase; }
-.pm-status-input { background: #111; border: 1px solid #444; color: #10b981; padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; width: 60px; text-align: center; outline: none; transition: border 0.2s; }
-.pm-status-input:focus { border-color: #10b981; }
+.pm-status-input { background: #111; border: 1px solid #444; color: #10b981; padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; width: 60px; text-align: center; }
 
-.pm-tabs { display: flex; gap: 24px; padding: 0 24px; border-bottom: 1px solid #333; flex-shrink: 0; margin-top: 8px; }
-.pm-tab { color: #888; font-size: 13px; font-weight: 500; padding: 10px 0; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
-.pm-tab:hover { color: #e0e0e0; }
+.pm-tabs { display: flex; gap: 24px; padding: 0 24px; border-bottom: 1px solid #333; }
+.pm-tab { color: #888; font-size: 13px; padding: 10px 0; cursor: pointer; border-bottom: 2px solid transparent; }
 .pm-tab.active { color: #e0e0e0; border-bottom-color: #3b82f6; }
 
 .pm-editor-area { flex: 1; display: flex; flex-direction: column; background: #111; overflow: hidden; }
 .pm-editor-wrapper { display: flex; flex-direction: column; height: 100%; }
-.pm-helper-text { font-size: 11px; color: #666; padding: 8px 24px; border-bottom: 1px solid #222; background: #181818; }
+.pm-helper-text { font-size: 11px; color: #666; padding: 8px 24px; background: #181818; }
 .pm-codemirror { flex: 1; overflow: hidden; font-size: 13px; }
 .pm-codemirror :deep(.cm-editor) { height: 100% !important; }
 
-.pm-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 20px; background: #1a1a1b; border-top: 1px solid #333; flex-shrink: 0; }
-.pm-btn-cancel { background: transparent; color: #ccc; border: 1px solid #444; border-radius: 6px; padding: 8px 24px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; }
-.pm-btn-cancel:hover { background: #333; color: white; border-color: #555; }
-.pm-btn-execute { background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 8px 32px; font-weight: 600; font-size: 13px; cursor: pointer; transition: background 0.2s; }
-.pm-btn-execute:hover { background: #2563eb; }
+.pm-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 20px; background: #1a1a1b; border-top: 1px solid #333; }
+.pm-btn-cancel { background: transparent; border: 1px solid #444; color: #ccc; padding: 8px 24px; border-radius: 6px; cursor: pointer; }
+.pm-btn-execute { background: #3b82f6; border: none; color: white; padding: 8px 32px; border-radius: 6px; cursor: pointer; font-weight: 600; }
 </style>

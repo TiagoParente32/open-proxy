@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { 
   showMapRemoteModal, 
   mapRemoteRules, 
@@ -9,6 +9,12 @@ import {
   importRules,
   exportRules
 } from '../store.js'
+
+watch(mapRemoteRules, (newRules) => {
+  if (newRules.length > 0 && !selectedMapRemoteId.value) {
+    selectedMapRemoteId.value = newRules[0].id
+  }
+}, { immediate: true, deep: true })
 
 const activeRule = computed(() => mapRemoteRules.value.find(r => r.id === selectedMapRemoteId.value))
 

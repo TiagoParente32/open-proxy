@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { 
   showBreakpointModal, 
   breakpointRules, 
@@ -11,6 +11,13 @@ import {
 } from '../store.js'
 
 const activeRule = computed(() => breakpointRules.value.find(r => r.id === selectedBreakpointId.value))
+
+watch(breakpointRules, (newRules) => {
+  if (newRules.length > 0 && !selectedBreakpointId.value) {
+    selectedBreakpointId.value = newRules[0].id
+  }
+}, { immediate: true, deep: true })
+
 
 const addNewRule = () => {
   const newRule = { 

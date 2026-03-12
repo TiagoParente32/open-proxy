@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { 
   showHighlightModal, 
   highlightRules, 
@@ -11,6 +11,12 @@ import {
 const selectedRuleId = ref(null)
 
 const activeRule = computed(() => highlightRules.value.find(r => r.id === selectedRuleId.value))
+
+watch(highlightRules, (newRules) => {
+  if (newRules.length > 0 && !selectedRuleId.value) {
+    selectedRuleId.value = newRules[0].id
+  }
+}, { immediate: true, deep: true })
 
 // --- Custom Dropdown State ---
 const showTypeMenu = ref(false)
