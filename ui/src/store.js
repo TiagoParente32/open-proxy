@@ -155,7 +155,9 @@ export const trappedFlows = ref([])
 export const selectedBreakpointId = ref(null)
 
 // Auto-Highlights
+// Auto-Highlights
 export const showHighlightModal = ref(false)
+export const highlightsEnabled = ref(loadState('highlightsEnabled', true))
 export const highlightRules = ref(loadState('highlightRules', []))
 
 // Compose
@@ -185,6 +187,7 @@ export const setupProgress = ref({
 const applyHighlightRules = (req) => {
     if (req.manualColor) return;
     req.color = null;
+    if (!highlightsEnabled.value) return;
 
     for (const rule of highlightRules.value) {
         if (!rule.active) continue;
@@ -415,6 +418,7 @@ watch(pinnedSources, (newVals) => saveState('pinnedSources', newVals), { deep: t
 watch(isFocusMode, (newVal) => saveState('isFocusMode', newVal))
 watch(activeChips, (newVals) => saveState('activeChips', newVals), { deep: true })
 watch(highlightRules, (val) => saveState('highlightRules', val), { deep: true })
+watch(highlightsEnabled, (val) => saveState('highlightsEnabled', val))
 
 watch(wsMessages, (newVal) => {
     if (wsSaveTimeout) clearTimeout(wsSaveTimeout);

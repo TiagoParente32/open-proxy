@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { 
   showHighlightModal, 
   highlightRules, 
+  highlightsEnabled, // <--- Add this import
   importRules, 
   exportRules,
   applyAllHighlightRules,
@@ -105,6 +106,12 @@ const deleteRule = (id) => {
           </div>
 
           <div class="pm-sidebar-footer" style="margin-top: auto;">
+            <div class="toggle" @click="highlightsEnabled = !highlightsEnabled" :class="{ active: highlightsEnabled }">
+              <span class="toggle-label">Enable Highlights</span>
+              <div class="switch"></div>
+            </div>
+            <div class="pm-divider-horizontal"></div>
+
             <div style="display: flex; gap: 8px;">
               <button class="ghost-btn" style="flex: 1; justify-content: center;" @click="exportRules(highlightRules, 'OpenProxy_Highlights')">Export</button>
               <label class="ghost-btn" style="flex: 1; justify-content: center; cursor: pointer; margin: 0;">
@@ -243,8 +250,16 @@ const deleteRule = (id) => {
 
 .pm-empty-sidebar { padding: 40px 20px; text-align: center; color: #666; font-size: 12px; line-height: 1.5; }
 
-/* Sidebar Footer & Buttons */
+/* Sidebar Footer & Toggle Elements */
 .pm-sidebar-footer { padding: 16px; background: #151515; border-top: 1px solid #333; display: flex; flex-direction: column; gap: 12px;}
+
+.toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: #888; font-weight: 600; font-size: 12px;}
+.toggle.active { color: #10b981; }
+.switch { width: 32px; height: 18px; background: #111; border: 1px solid #444; border-radius: 14px; position: relative; }
+.switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: #888; border-radius: 50%; transition: transform 0.3s; }
+.toggle.active .switch::after { transform: translateX(14px); background: #10b981; }
+.pm-divider-horizontal { width: 100%; height: 1px; background: #333; }
+
 .ghost-btn { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; background: transparent; border: 1px solid #444; color: #aaa; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500; transition: all 0.2s; }
 .ghost-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; border-color: #666;}
 
@@ -263,7 +278,6 @@ const deleteRule = (id) => {
   display: flex; 
   flex-direction: column; 
   gap: 12px; 
-  /* Changed from hidden to visible */
   overflow: visible !important; 
 }
 
@@ -272,16 +286,12 @@ const deleteRule = (id) => {
   background: #1a1a1b; 
   border: 1px solid #333; 
   border-radius: 8px; 
-  /* Changed from hidden to visible */
   overflow: visible !important; 
   flex-shrink: 0; 
   position: relative;
 }
 
-/* 2. Lift the top box higher than the bottom box so the menu overlaps correctly */
-.pm-routing-box:first-child {
-  z-index: 10;
-}
+.pm-routing-box:first-child { z-index: 10; }
 
 .pm-routing-header { 
   background: #222; 
@@ -321,7 +331,7 @@ const deleteRule = (id) => {
   border: 1px solid #444; 
   border-radius: 6px; 
   box-shadow: 0 10px 30px rgba(0,0,0,0.8); 
-  z-index: 9999; /* Super high z-index */
+  z-index: 9999; 
   padding: 4px 0; 
 }
 .pm-custom-select-option { padding: 10px 12px; font-size: 13px; font-family: 'Consolas', monospace; color: #ccc; cursor: pointer; transition: background 0.1s; }
