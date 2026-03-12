@@ -118,11 +118,26 @@ const openMapLocalModalFromContext = () => {
   if (contextMenu.value.request) {
     const req = contextMenu.value.request;
     const realStatus = req.status !== '...' ? Number(req.status) : 200;
-    const realHeaders = req.res_headers && Object.keys(req.res_headers).length > 0 ? JSON.stringify(req.res_headers, null, 2) : '{\n  "Content-Type": "application/json"\n}';
+    
+    const realHeaders = req.res_headers && Object.keys(req.res_headers).length > 0 
+      ? JSON.stringify(req.res_headers, null, 2) 
+      : '{\n  "Content-Type": "application/json"\n}';
+      
     let realBody = req.res_body || '';
-    try { if (realBody) realBody = JSON.stringify(JSON.parse(realBody), null, 2); } catch (e) {}
+    try { 
+      if (realBody) realBody = JSON.stringify(JSON.parse(realBody), null, 2); 
+    } catch (e) {}
 
-    const newRule = { id: Date.now(), active: true, pattern: req.url.split('?')[0], status: realStatus, headers: realHeaders, body: realBody };
+    const newRule = { 
+      id: Date.now(), 
+      active: true, 
+      // Keep the FULL URL so the Map Local grid can parse the parameters
+      pattern: req.url, 
+      status: realStatus, 
+      headers: realHeaders, 
+      body: realBody 
+    };
+    
     mapLocalRules.value.unshift(newRule);
     selectedRuleId.value = newRule.id;
   } else if (mapLocalRules.value.length > 0 && !selectedRuleId.value) {

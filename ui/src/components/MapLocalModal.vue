@@ -15,52 +15,13 @@ import {
   exportRules
 } from '../store.js'
 
+// --- 1. CORE REFS & COMPUTEDS ---
 const extensions = [json(), oneDark, EditorView.lineWrapping]
 const activeRule = computed(() => mapLocalRules.value.find(r => r.id === selectedRuleId.value))
-
 const activeTab = ref('Body')
-
-// Auto-select the first rule if nothing is selected but rules exist
-watch(mapLocalRules, (newRules) => {
-  if (newRules.length > 0 && !selectedRuleId.value) {
-    selectedRuleId.value = newRules[0].id
-  }
-}, { immediate: true, deep: true })
-
-watch(activeRule, (rule) => {
-  if (rule) {
-    syncPatternToParams()
-  }
-}, { immediate: true })
-
-const addNewRule = () => {
-  const newRule = {
-    id: Date.now(),
-    active: true,
-    label: '',
-    pattern: 'api.example.com/*',
-    status: 200,
-    headers: '{\n  "Content-Type": "application/json"\n}',
-    body: ''
-  }
-  mapLocalRules.value.unshift(newRule)
-  selectedRuleId.value = newRule.id
-}
-
-const deleteRule = (id) => {
-  mapLocalRules.value = mapLocalRules.value.filter(r => r.id !== id)
-  if (selectedRuleId.value === id) {
-    selectedRuleId.value = mapLocalRules.value.length ? mapLocalRules.value[0].id : null
-  }
-}
-
-const saveAndApplyRules = () => {
-  syncMapLocalRules()
-  showMapModal.value = false
-}
-
-// --- QUERY PARAM GRID LOGIC (same as compose modal) ---
 const queryParams = ref([{ key: '', value: '' }])
+
+// --- 2. PARAMETER SYNC LOGIC (Defined first to avoid init errors) ---
 
 // URL/PATTERN -> GRID
 const syncPatternToParams = () => {
@@ -74,17 +35,26 @@ const syncPatternToParams = () => {
     const pairs = parts[1].split('&')
 
     pairs.forEach(pair => {
-      const [k, v] = pair.split('=')
-
-      if (k) {
+      // Hardened split: only splits on the first '=' to protect base64 values
+      const eqIndex = pair.indexOf('=')
+      
+      if (eqIndex !== -1) {
+        const k = pair.slice(0, eqIndex)
+        const v = pair.slice(eqIndex + 1)
         newParams.push({
           key: decodeURIComponent(k),
-          value: v !== undefined ? decodeURIComponent(v) : ''
+          value: decodeURIComponent(v)
+        })
+      } else if (pair) {
+        newParams.push({
+          key: decodeURIComponent(pair),
+          value: ''
         })
       }
     })
   }
 
+  // Always keep one empty row at the bottom for easy typing
   newParams.push({ key: '', value: '' })
   queryParams.value = newParams
 }
@@ -123,6 +93,57 @@ const removeParamRow = (index) => {
   }
 
   syncParamsToPattern()
+}
+
+// --- 3. WATCHERS ---
+
+// Auto-select the first rule if nothing is selected but rules exist
+watch(mapLocalRules, (newRules) => {
+  if (newRules.length > 0 && !selectedRuleId.value) {
+    selectedRuleId.value = newRules[0].id
+  }
+}, { immediate: true, deep: true })
+
+// Sync params when the active rule changes (e.g. clicking a different rule in the sidebar)
+watch(activeRule, (rule) => {
+  if (rule) {
+    syncPatternToParams()
+  }
+}, { immediate: true })
+
+// Sync params when the modal opens (e.g. intercepted request triggered it)
+watch(showMapModal, (isOpen) => {
+  if (isOpen && activeRule.value) {
+    syncPatternToParams()
+  }
+})
+
+// --- 4. RULE MANAGEMENT ---
+
+const addNewRule = () => {
+  const newRule = {
+    id: Date.now(),
+    active: true,
+    label: '',
+    pattern: 'api.example.com/*',
+    status: 200,
+    headers: '{\n  "Content-Type": "application/json"\n}',
+    body: ''
+  }
+  mapLocalRules.value.unshift(newRule)
+  selectedRuleId.value = newRule.id
+}
+
+const deleteRule = (id) => {
+  mapLocalRules.value = mapLocalRules.value.filter(r => r.id !== id)
+  if (selectedRuleId.value === id) {
+    selectedRuleId.value = mapLocalRules.value.length ? mapLocalRules.value[0].id : null
+  }
+}
+
+const saveAndApplyRules = () => {
+  syncMapLocalRules()
+  showMapModal.value = false
 }
 </script>
 
