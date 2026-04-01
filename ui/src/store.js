@@ -61,21 +61,11 @@ export const formatBytes = (bytes) => {
 export const exportRules = (rules, filename) => {
     const data = rules.value !== undefined ? rules.value : rules;
     const jsonString = JSON.stringify(data, null, 2);
-    
-    // Create a native browser Blob and trigger a download link
-    const blob = new Blob([jsonString], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    
-    a.href = url;
-    a.download = filename + '.json';
-    document.body.appendChild(a);
-    
-    // PyWebView will intercept this click and open the native OS Save dialog safely
-    a.click();
-    
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "EXPORT_FILE", filename: filename + ".json", data: jsonString }));
+    } else {
+        alert("Backend connection lost. Cannot export right now.");
+    }
 }
 
 export const importRules = (event, rulesRef) => {

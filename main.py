@@ -474,17 +474,26 @@ class ProxyUIBridge:
                 elif payload.get("type") == "EXPORT_FILE":
                     filename = payload.get("filename", "export.json")
                     file_data = payload.get("data", "")
-                    try:
-                        window = webview.windows[0]
-                        result = window.create_file_dialog(webview.SAVE_DIALOG, save_filename=filename)
-                        if result and len(result) > 0:
-                            save_path = result[0]
-                            if isinstance(save_path, tuple): 
-                                save_path = save_path[0]
-                            with open(save_path, 'w', encoding='utf-8') as f:
-                                f.write(file_data)
-                    except Exception as e:
-                        print(f"Failed to open save dialog: {e}")
+                    
+                    def _save_dialog():
+                        try:
+                            # pywebview safely routes this to the main thread internally
+                            window = webview.windows[0]
+                            result = window.create_file_dialog(webview.SAVE_DIALOG, save_filename=filename)
+                            
+                            if result and len(result) > 0:
+                                save_path = result[0]
+                                if isinstance(save_path, tuple): 
+                                    save_path = save_path[0]
+                                with open(save_path, 'w', encoding='utf-8') as f:
+                                    f.write(file_data)
+                                print(f"[INFO] Export saved to {save_path}")
+                        except Exception as e:
+                            print(f"[ERROR] Failed to open save dialog: {e}")
+
+                    # Run the blocking dialog in a completely separate thread
+                    # so the asyncio WebSocket loop keeps spinning freely!
+                    threading.Thread(target=_save_dialog, daemon=True).start()
 
                 elif payload.get("type") == "RESOLVE_BREAKPOINT":
                     flow_id = payload.get("id")
@@ -580,9 +589,12 @@ def run_async_loop(bridge, proxy_port):
     except Exception as e:
         print(f"[FATAL] Supervisor died: {e}")
 
-# ============================================================================
-# 4. APP ENTRY POINT
-# ============================================================================
+
+def on_closed():
+    """Triggered when the user closes the UI window."""
+    print("[INFO] UI window closed. Terminating OpenProxy...")
+    os._exit(0)  # Hard kill to destroy all background threads and release ports instantly
+
 if __name__ == "__main__":
     # --- GET DYNAMIC PORT FIRST ---
     ACTIVE_PROXY_PORT = get_free_port(9090)
@@ -607,5 +619,8 @@ if __name__ == "__main__":
         min_size=(1024, 720),
         background_color='#1a1a1b'
     )
+    
+    # --- BIND THE CLOSE EVENT HERE ---
+    window.events.closed += on_closed
     
     webview.start(private_mode=False, debug=False, icon=icon_path)
