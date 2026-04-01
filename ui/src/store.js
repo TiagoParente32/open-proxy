@@ -61,13 +61,19 @@ export const formatBytes = (bytes) => {
 export const exportRules = (rules, filename) => {
     const data = rules.value !== undefined ? rules.value : rules;
     const jsonString = JSON.stringify(data, null, 2);
-    if (wsConnection?.readyState === WebSocket.OPEN) {
-        wsConnection.send(JSON.stringify({ type: "EXPORT_FILE", filename: filename + ".json", data: jsonString }));
+    
+    // PyWebView takes a fraction of a second to inject the API on boot.
+    // We check if it's ready, and fire the save dialog safely!
+    if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.save_file(filename + '.json', jsonString)
+            .then((success) => {
+                if (!success) console.log("Export canceled by user.");
+            })
+            .catch(err => console.error("Export failed:", err));
     } else {
-        alert("Backend connection lost. Cannot export right now.");
+        alert("System API not ready yet. Please wait a moment and try again.");
     }
 }
-
 export const importRules = (event, rulesRef) => {
     const file = event.target.files[0];
     if (!file) return;

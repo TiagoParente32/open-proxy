@@ -51,6 +51,66 @@ def get_resource_path(relative_path):
 
 LOCAL_IP = get_local_ip()
 
+
+class PyWebViewAPI:
+    def __init__(self):
+        self.window = None
+
+    def save_file(self, filename, content):
+        import webview
+        import os
+
+        try:
+            dialog_type = webview.FileDialog.SAVE if hasattr(webview, 'FileDialog') else webview.SAVE_DIALOG
+            safe_dir = os.path.expanduser('~/Desktop')
+
+            result = self.window.create_file_dialog(
+                dialog_type,
+                directory=safe_dir,
+                save_filename=filename
+            )
+
+            print(f"[DEBUG] Dialog result: {result}")
+
+            # --- USER CANCEL ---
+            if not result or len(result) == 0:
+                print("[INFO] User cancelled save dialog")
+                return False
+
+            save_path = result[0]
+
+            if isinstance(save_path, tuple):
+                save_path = save_path[0]
+
+            # --- 🧠 MACOS BUG HANDLING ---
+            if not save_path or save_path == "/" or os.path.isdir(save_path):
+                print(f"[WARNING] Invalid path from dialog: {save_path}")
+
+                # ✅ FALLBACK (THIS SAVES YOUR APP)
+                fallback_path = os.path.join(safe_dir, filename)
+
+                if not fallback_path.endswith(".json"):
+                    fallback_path += ".json"
+
+                with open(fallback_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+
+                print(f"[INFO] Saved via fallback to {fallback_path}")
+                return True
+
+            # Ensure extension
+            if not save_path.endswith(".json"):
+                save_path += ".json"
+
+            with open(save_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+            print(f"[INFO] Export saved to {save_path}")
+            return True
+
+        except Exception as e:
+            print(f"[ERROR] API Save File failed: {e}")
+            return False
 # ============================================================================
 # 2. CORE BRIDGE LOGIC (Mitmproxy -> Vue UI)
 # ============================================================================
@@ -477,9 +537,20 @@ class ProxyUIBridge:
                     
                     def _save_dialog():
                         try:
-                            # pywebview safely routes this to the main thread internally
                             window = webview.windows[0]
-                            result = window.create_file_dialog(webview.SAVE_DIALOG, save_filename=filename)
+                            
+                            # 1. Silence the deprecation warning using the new FileDialog Enum
+                            # (with a fallback just in case you ever run this on an older pywebview version)
+                            dialog_type = webview.FileDialog.SAVE if hasattr(webview, 'FileDialog') else webview.SAVE_DIALOG
+                            
+                            # 2. Fix the macOS "/" crash by explicitly setting a starting directory
+                            safe_dir = os.path.expanduser('~/Desktop')
+                            
+                            result = window.create_file_dialog(
+                                dialog_type, 
+                                directory=safe_dir,        # <-- This saves macOS from panicking
+                                save_filename=filename
+                            )
                             
                             if result and len(result) > 0:
                                 save_path = result[0]
@@ -491,8 +562,6 @@ class ProxyUIBridge:
                         except Exception as e:
                             print(f"[ERROR] Failed to open save dialog: {e}")
 
-                    # Run the blocking dialog in a completely separate thread
-                    # so the asyncio WebSocket loop keeps spinning freely!
                     threading.Thread(target=_save_dialog, daemon=True).start()
 
                 elif payload.get("type") == "RESOLVE_BREAKPOINT":
@@ -596,20 +665,19 @@ def on_closed():
     os._exit(0)  # Hard kill to destroy all background threads and release ports instantly
 
 if __name__ == "__main__":
-    # --- GET DYNAMIC PORT FIRST ---
     ACTIVE_PROXY_PORT = get_free_port(9090)
     print(f"Starting OpenProxy on port {ACTIVE_PROXY_PORT}")
 
-    # Pass the port into our bridge
     bridge = ProxyUIBridge(proxy_port=ACTIVE_PROXY_PORT)
     
-    # Start the async systems in the background
     t = threading.Thread(target=run_async_loop, args=(bridge, ACTIVE_PROXY_PORT), daemon=True)
     t.start()
 
-    # Boot up the Vue UI Window
     html_path = get_resource_path('ui/dist/index.html')
     icon_path = get_resource_path('icon.png')
+    
+    # --- 1. INSTANTIATE THE API ---
+    webview_api = PyWebViewAPI()
     
     window = webview.create_window(
         title='OpenProxy', 
@@ -617,10 +685,17 @@ if __name__ == "__main__":
         width=1024, 
         height=720,
         min_size=(1024, 720),
-        background_color='#1a1a1b'
+        background_color='#1a1a1b',
+        js_api=webview_api  # --- 2. BIND THE API TO THE FRONTEND ---
     )
     
-    # --- BIND THE CLOSE EVENT HERE ---
+    # --- 3. GIVE THE API ACCESS TO THE WINDOW ---
+    webview_api.window = window
+    
+    def on_closed():
+        print("[INFO] UI window closed. Terminating OpenProxy...")
+        os._exit(0)
+        
     window.events.closed += on_closed
     
     webview.start(private_mode=False, debug=False, icon=icon_path)
