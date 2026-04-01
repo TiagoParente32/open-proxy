@@ -218,7 +218,14 @@ class ProxyUIBridge:
         # --- MAP LOCAL ---
         if self.map_local_enabled:
             for rule in self.map_local_rules:
-                if rule.get("active") and re.search(rule.get("pattern", ""), flow.request.pretty_url):
+                pattern = rule.get("pattern", "")
+                
+                # 1. Escape the string so dots/slashes are treated as literal characters
+                # 2. Convert the escaped asterisk (\*) into a regex catch-all (.*)
+                # 3. Anchor it with ^ and $ to enforce an exact match
+                strict_regex = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
+                
+                if rule.get("active") and re.search(strict_regex, flow.request.pretty_url):
                     try:
                         status_code = int(rule.get("status", 200))
                         body_text = rule.get("body", "").encode('utf-8')
@@ -235,13 +242,17 @@ class ProxyUIBridge:
                     except Exception as e:
                         flow.response = http.Response.make(500, f"Editor Error: {e}".encode())
                         return
-                
+                    
         # --- BREAKPOINTS (REQUEST) ---
         if self.breakpoints_enabled:
             for rule in self.breakpoint_rules:
                 if rule.get("active") and rule.get("is_request"):
                     try:
-                        if re.search(rule.get("pattern", ""), flow.request.pretty_url):
+                        pattern = rule.get("pattern", "")
+                        # Escape, convert * to .*, and anchor
+                        strict_regex = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
+                        
+                        if re.search(strict_regex, flow.request.pretty_url):
                             pause_event = asyncio.Event()
                             self.paused_flows[flow.id] = {"event": pause_event, "flow": flow}
                             
@@ -320,7 +331,11 @@ class ProxyUIBridge:
             for rule in self.breakpoint_rules:
                 if rule.get("active") and rule.get("is_response"):
                     try:
-                        if re.search(rule.get("pattern", ""), flow.request.pretty_url):
+                        pattern = rule.get("pattern", "")
+                        # Escape, convert * to .*, and anchor
+                        strict_regex = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
+                        
+                        if re.search(strict_regex, flow.request.pretty_url):
                             pause_event = asyncio.Event()
                             self.paused_flows[flow.id] = {"event": pause_event, "flow": flow}
                             
@@ -698,4 +713,4 @@ if __name__ == "__main__":
         
     window.events.closed += on_closed
     
-    webview.start(private_mode=False, debug=False, icon=icon_path)
+    webview.start(private_mode=False, debug=True, icon=icon_path)

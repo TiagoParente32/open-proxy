@@ -180,6 +180,12 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeyDown))
   max-width: 0; /* <--- THE MAGIC FIX */
 }
 
+.traffic-table tbody tr {
+  /* This creates an invisible bumper above the row when scrolling it into view. */
+  /* Adjust this value if your sticky header is taller or shorter! */
+  scroll-margin-top: 30px; 
+}
+
 .traffic-table tbody tr:hover { background-color: var(--bg-active); cursor: pointer; }
 .traffic-table tbody tr.selected { background-color: #1e3a5f; color: #fff; }
 .traffic-table tbody tr.row-red { background-color: rgba(239, 68, 68, 0.15); }
