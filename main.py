@@ -518,28 +518,67 @@ class ProxyUIBridge:
 # ============================================================================
 # 3. ASYNC RUNNERS (Background Threads)
 # ============================================================================
-async def start_proxy(bridge, proxy_port):
-    opts = options.Options(listen_host='0.0.0.0', listen_port=proxy_port)
-    master = DumpMaster(opts, with_termlog=False, with_dumper=False)
-    master.addons.add(bridge)
-    try:
-        await master.run()
-    except KeyboardInterrupt:
-        master.shutdown()
+# ============================================================================
+# 3. ASYNC RUNNERS (Background Threads)
+# ============================================================================
+async def run_proxy_forever(bridge, proxy_port):
+    """Keeps Mitmproxy alive. If it crashes due to a network drop, it re-initializes."""
+    while True:
+        try:
+            print(f"[INFO] Starting Mitmproxy on port {proxy_port}...")
+            opts = options.Options(listen_host='0.0.0.0', listen_port=proxy_port)
+            master = DumpMaster(opts, with_termlog=False, with_dumper=False)
+            master.addons.add(bridge)
+            await master.run()
+        except asyncio.CancelledError:
+            break  # Allow graceful shutdown if the app closes
+        except Exception as e:
+            print(f"[ERROR] Mitmproxy crashed: {e}. Restarting in 3 seconds...")
+            await asyncio.sleep(3)
+        finally:
+            if 'master' in locals():
+                try:
+                    master.shutdown()
+                except Exception:
+                    pass
 
-async def start_websocket_server(bridge):
-    async with websockets.serve(bridge.websocket_handler, "127.0.0.1", 8765):
-        await asyncio.Future()
+async def run_ws_forever(bridge):
+    """Keeps the WebSocket server alive with Ping/Pong to detect dead sockets."""
+    while True:
+        try:
+            print("[INFO] Starting WebSocket server on port 8765...")
+            # ping_interval and ping_timeout are crucial here!
+            # They detect if the Mac went to sleep and dropped the connection.
+            async with websockets.serve(
+                bridge.websocket_handler, 
+                "127.0.0.1", 
+                8765, 
+                ping_interval=20,   # Ping the client every 20s
+                ping_timeout=20     # Drop connection if no pong in 20s
+            ):
+                # Run forever until an exception breaks it
+                await asyncio.Future()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[ERROR] WebSocket server crashed: {e}. Restarting in 3 seconds...")
+            await asyncio.sleep(3)
 
 def run_async_loop(bridge, proxy_port):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
-    proxy_task = loop.create_task(start_proxy(bridge, proxy_port))
-    ws_task = loop.create_task(start_websocket_server(bridge))
-    
-    loop.run_forever()
+    async def supervisor():
+        # Run both tasks concurrently. If one fails, the while-loops inside them will restart them.
+        await asyncio.gather(
+            run_proxy_forever(bridge, proxy_port),
+            run_ws_forever(bridge)
+        )
 
+    try:
+        loop.run_until_complete(supervisor())
+    except Exception as e:
+        print(f"[FATAL] Supervisor died: {e}")
 
 # ============================================================================
 # 4. APP ENTRY POINT

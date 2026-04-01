@@ -200,11 +200,12 @@ const saveAndApplyRules = () => {
             <div style="display: flex; gap: 8px;">
               <button class="ghost-btn" style="flex: 1; justify-content: center;"
                 @click="exportRules(mapLocalRules, 'OpenProxy_MapLocal')">Export</button>
-              <label class="ghost-btn" style="flex: 1; justify-content: center; cursor: pointer; margin: 0;">
+              <div class="ghost-btn" style="position: relative; overflow: hidden; flex: 1; justify-content: center;">
                 Import
-                <input type="file" accept=".json" style="display: none;"
+                <input type="file" accept=".json" 
+                  style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;"
                   @change="(e) => importRules(e, mapLocalRules)" />
-              </label>
+              </div>
             </div>
           </div>
         </div>

@@ -61,11 +61,21 @@ export const formatBytes = (bytes) => {
 export const exportRules = (rules, filename) => {
     const data = rules.value !== undefined ? rules.value : rules;
     const jsonString = JSON.stringify(data, null, 2);
-    if (wsConnection?.readyState === WebSocket.OPEN) {
-        wsConnection.send(JSON.stringify({ type: "EXPORT_FILE", filename: filename + ".json", data: jsonString }));
-    } else {
-        alert("Backend connection lost. Cannot export right now.");
-    }
+    
+    // Create a native browser Blob and trigger a download link
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    
+    a.href = url;
+    a.download = filename + '.json';
+    document.body.appendChild(a);
+    
+    // PyWebView will intercept this click and open the native OS Save dialog safely
+    a.click();
+    
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 export const importRules = (event, rulesRef) => {
@@ -154,7 +164,6 @@ export const breakpointRules = ref(loadState('breakpointRules', []))
 export const trappedFlows = ref([])
 export const selectedBreakpointId = ref(null)
 
-// Auto-Highlights
 // Auto-Highlights
 export const showHighlightModal = ref(false)
 export const highlightsEnabled = ref(loadState('highlightsEnabled', true))
@@ -485,11 +494,22 @@ watch(disableCache, (newVal) => {
 // ============================================================================
 // 7. WEBSOCKET CONNECTION
 // ============================================================================
+let reconnectTimeout = null;
+let reconnectDelay = 1000; // Start with a 1-second delay
+
 export const initWebSocket = () => {
+    // Prevent multiple reconnect loops from stacking
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+    }
+
     wsConnection = new WebSocket("ws://127.0.0.1:8765")
 
     wsConnection.onopen = () => {
         connectionStatus.value = '🟢 Intercepting Traffic'
+        reconnectDelay = 1000; // Reset the delay on a successful connection
+        
         syncMapLocalRules()
         syncBreakpointRules()
         syncMapRemoteRules()
@@ -501,6 +521,7 @@ export const initWebSocket = () => {
     }
 
     wsConnection.onmessage = (event) => {
+        // ... (Keep all your existing onmessage logic exactly as it is) ...
         const payload = JSON.parse(event.data)
 
         if (payload.type === "SYSTEM_INFO") {
@@ -524,20 +545,15 @@ export const initWebSocket = () => {
             trappedFlows.value.push(newFlow)
         }
         else if (payload.type === "SETUP_PROGRESS") {
-            // Reset and show modal if this is the first step
             if (payload.step === 'check_adb' && payload.status === 'start') {
                 setupProgress.value.show = true;
                 setupProgress.value.error = null;
                 setupProgress.value.steps.forEach(s => s.status = 'pending');
             }
-
-            // If we hit the "done" event, wait 1.5 seconds so the user sees all green checkmarks, then close!
             if (payload.step === 'done') {
                 setTimeout(() => { setupProgress.value.show = false; }, 1500);
                 return;
             }
-
-            // Find the step Python is talking about (or fallback to whatever is currently loading if an error occurs)
             const step = setupProgress.value.steps.find(s => s.id === payload.step) ||
                 setupProgress.value.steps.find(s => s.status === 'loading');
 
@@ -563,5 +579,22 @@ export const initWebSocket = () => {
         }
     }
 
-    wsConnection.onclose = () => { connectionStatus.value = '🔴 Disconnected' }
+    wsConnection.onerror = () => {
+        // Force the socket closed on error so onclose handles the reconnect logic
+        if (wsConnection.readyState === WebSocket.OPEN) {
+            wsConnection.close();
+        }
+    }
+
+    wsConnection.onclose = () => { 
+        connectionStatus.value = `🟡 Reconnecting in ${reconnectDelay / 1000}s...`
+        
+        // Schedule the next connection attempt
+        reconnectTimeout = setTimeout(() => {
+            initWebSocket()
+        }, reconnectDelay)
+
+        // Exponential backoff: increase the delay for the next attempt, cap at 10 seconds
+        reconnectDelay = Math.min(reconnectDelay * 2, 10000)
+    }
 }
