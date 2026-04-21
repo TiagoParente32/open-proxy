@@ -49,6 +49,8 @@ npm install
 ```bash
 # Return to the root directory
 cd ..
+python3 -m venv venv
+source ./venv/bin/activate
 pip install mitmproxy pywebview websockets
 ```
 
