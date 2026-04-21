@@ -18,6 +18,64 @@ from mitmproxy.tools.dump import DumpMaster
 # ============================================================================
 # 1. NETWORK & SYSTEM HELPERS
 # ============================================================================
+def get_executable_path(base_name):
+    """Finds the absolute path for an executable across Windows, macOS, and Linux."""
+    import shutil
+    import os
+    import sys
+
+    # Windows requires .exe extensions for reliable manual path checking
+    exe_name = f"{base_name}.exe" if os.name == "nt" else base_name
+
+    # 1. Check system PATH first
+    path = shutil.which(exe_name) or shutil.which(base_name)
+    if path: 
+        return path
+
+    # 2. Hardcoded fallbacks for ADB
+    if base_name == "adb":
+        # Check Android environment variables (Works on all OS)
+        android_home = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
+        if android_home:
+            fallback = os.path.join(android_home, "platform-tools", exe_name)
+            if os.path.exists(fallback): return fallback
+        
+        # Check OS-specific default install locations
+        if os.name == "nt": # Windows
+            fallback = os.path.expandvars(rf"%LOCALAPPDATA%\Android\Sdk\platform-tools\{exe_name}")
+            if os.path.exists(fallback): return fallback
+            
+        elif sys.platform == "darwin": # macOS
+            for f in [
+                os.path.expanduser("~/Library/Android/sdk/platform-tools/adb"),
+                "/opt/homebrew/bin/adb",
+                "/usr/local/bin/adb"
+            ]:
+                if os.path.exists(f): return f
+                
+        else: # Linux
+            for f in [
+                os.path.expanduser("~/Android/Sdk/platform-tools/adb"),
+                "/usr/bin/adb",
+                "/usr/local/bin/adb"
+            ]:
+                if os.path.exists(f): return f
+                
+    # 3. Hardcoded fallbacks for OpenSSL (Mainly for Windows users)
+    if base_name == "openssl" and os.name == "nt":
+        fallbacks = [
+            r"C:\Program Files\Git\usr\bin\openssl.exe",
+            r"C:\Program Files\OpenSSL-Win64\bin\openssl.exe",
+            r"C:\Program Files (x86)\GnuWin32\bin\openssl.exe"
+        ]
+        for f in fallbacks:
+            if os.path.exists(f): return f
+            
+        # Give a Windows-specific error if OpenSSL is completely missing
+        raise FileNotFoundError("OpenSSL not found. On Windows, please install 'Git for Windows' (which includes OpenSSL) or install OpenSSL directly.")
+
+    raise FileNotFoundError(f"Could not find '{base_name}'. Please ensure it is installed and in your PATH.")
+
 def get_local_ip():
     """Hacks a UDP socket to discover the computer's true LAN IP."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -402,8 +460,12 @@ class ProxyUIBridge:
             await ws.send(json.dumps({"type": "SETUP_PROGRESS", "step": step_id, "status": status, "message": msg}))
 
         try:
+            # --- DYNAMICALLY RESOLVE PATHS ---
+            adb_cmd = get_executable_path("adb")
+            openssl_cmd = get_executable_path("openssl")
+
             await update("check_adb", "start")
-            subprocess.run(["adb", "version"], check=True, capture_output=True)
+            subprocess.run([adb_cmd, "version"], check=True, capture_output=True)
             await asyncio.sleep(0.5)
             await update("check_adb", "success")
 
@@ -413,33 +475,42 @@ class ProxyUIBridge:
                 await update("cert_prepare", "error", "Certificate not found. Start proxy first!")
                 return
 
-            hash_proc = subprocess.run(["openssl", "x509", "-inform", "PEM", "-subject_hash_old", "-in", cert_path], capture_output=True, text=True, check=True)
+            hash_proc = subprocess.run([openssl_cmd, "x509", "-inform", "PEM", "-subject_hash_old", "-in", cert_path], capture_output=True, text=True, check=True)
             cert_hash = hash_proc.stdout.splitlines()[0].strip()
             hashed_cert_name = f"{cert_hash}.0"
 
-            subprocess.run(["openssl", "x509", "-in", cert_path, "-inform", "PEM", "-outform", "DER", "-out", hashed_cert_name], check=True)
+            subprocess.run([openssl_cmd, "x509", "-in", cert_path, "-inform", "PEM", "-outform", "DER", "-out", hashed_cert_name], check=True)
             await update("cert_prepare", "success")
 
             await update("root_emu", "start")
-            subprocess.run(["adb", "root"], check=True)
+            
+            # Catch stdout/stderr specifically for the root command
+            root_proc = subprocess.run([adb_cmd, "root"], capture_output=True, text=True)
+            if root_proc.returncode != 0:
+                error_msg = root_proc.stderr.strip() or root_proc.stdout.strip()
+                raise Exception(f"adb root failed: {error_msg}")
+                
             await asyncio.sleep(1.5)
             await update("root_emu", "success")
 
             await update("push_cert", "start")
-            subprocess.run(["adb", "push", hashed_cert_name, f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True)
-            subprocess.run(["adb", "shell", "su", "0", "chmod", "644", f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True)
+            subprocess.run([adb_cmd, "push", hashed_cert_name, f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True, capture_output=True, text=True)
+            subprocess.run([adb_cmd, "shell", "su", "0", "chmod", "644", f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True, capture_output=True, text=True)
             if os.path.exists(hashed_cert_name):
                 os.remove(hashed_cert_name)
             await update("push_cert", "success")
 
             await update("set_proxy", "start")
-            # --- DYNAMIC PORT INJECTED HERE ---
-            subprocess.run(["adb", "shell", "settings", "put", "global", "http_proxy", f"10.0.2.2:{self.proxy_port}"], check=True)
+            subprocess.run([adb_cmd, "shell", "settings", "put", "global", "http_proxy", f"10.0.2.2:{self.proxy_port}"], check=True, capture_output=True, text=True)
             await asyncio.sleep(0.5)
             await update("set_proxy", "success")
 
             await update("done", "success")
 
+        except subprocess.CalledProcessError as e:
+            # This catches ANY subprocess that fails and grabs the actual terminal error message
+            error_msg = e.stderr.strip() if e.stderr else str(e)
+            await update("current_active_step", "error", f"Command failed: {error_msg}")
         except Exception as e:
             await update("current_active_step", "error", str(e))
 
