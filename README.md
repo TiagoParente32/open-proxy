@@ -117,8 +117,32 @@ Once PyInstaller finishes, it will create a `dist/` folder in your project direc
 
 ---
 
-## 📱 Android Certificate Notes
+## 🤖 Android Certificate Notes
 
 Modern Android (API 24+) ignores user-installed certificates by default. To intercept traffic from your own apps:
 1. **The Easy Way (Root)**: Create a "Google APIs" emulator (NOT "Google Play"). Run it from the terminal with `emulator -avd <name> -writable-system`. Click OpenProxy's "Emulator" button to automatically inject the system cert.
 2. **The App Config Way (Non-Root)**: Add a `network_security_config.xml` to your Android Studio project to explicitly trust user certificates during debug mode.
+
+##  iOS Certificate Notes
+
+The iOS Simulator on macOS shares your Mac's network stack, so you configure the Mac's proxy settings — the simulator inherits them automatically. Step-by-step:
+  1. Start OpenProxy — note the proxy port (starts at 9090) and your local IP shown in the UI.
+  2. Set your Mac's HTTP/HTTPS proxy:
+    - System Settings → Network → Wi-Fi → Details → Proxies
+    - Enable Web Proxy (HTTP) and Secure Web Proxy (HTTPS)
+    - Server: your local IP (e.g. 192.168.1.x) or 127.0.0.1
+    - Port: the port shown in OpenProxy (e.g. 9090)
+  3. Boot the iOS Simulator, open Safari, and go to: ```http://mitm.it```
+  4. Download the mitmproxy certificate profile from that page.
+  5. Install the profile:
+    - Settings → General → VPN & Device Management → Install the downloaded profile
+  6. Enable certificate trust (critical for HTTPS):
+    - Settings → General → About → Certificate Trust Settings → Toggle ON the mitmproxy cert
+
+Important notes:
+
+  - The simulator uses your Mac's network, so the Mac system proxy is what matters — you don't configure proxy settings on the simulator itself.
+  - You must enable certificate trust in step 6, or HTTPS traffic won't be intercepted.
+  - When you're done, remember to disable the Mac's proxy settings, otherwise your Mac's regular traffic will also route through OpenProxy.
+
+The setup instructions are also available directly in the app — click the device setup button in the toolbar and select the iOS Simulator tab.
