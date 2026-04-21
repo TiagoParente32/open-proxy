@@ -465,7 +465,7 @@ class ProxyUIBridge:
             openssl_cmd = get_executable_path("openssl")
 
             await update("check_adb", "start")
-            subprocess.run([adb_cmd, "version"], check=True, capture_output=True)
+            subprocess.run([adb_cmd, "version"], check=True, capture_output=True, text=True)
             await asyncio.sleep(0.5)
             await update("check_adb", "success")
 
@@ -475,16 +475,20 @@ class ProxyUIBridge:
                 await update("cert_prepare", "error", "Certificate not found. Start proxy first!")
                 return
 
+            # 1. Get the hash
             hash_proc = subprocess.run([openssl_cmd, "x509", "-inform", "PEM", "-subject_hash_old", "-in", cert_path], capture_output=True, text=True, check=True)
             cert_hash = hash_proc.stdout.splitlines()[0].strip()
             hashed_cert_name = f"{cert_hash}.0"
 
-            subprocess.run([openssl_cmd, "x509", "-in", cert_path, "-inform", "PEM", "-outform", "DER", "-out", hashed_cert_name], check=True)
+            # 2. THE FIX: Safely copy the PEM file to the OS Temp directory instead of using OpenSSL to convert/save to the current directory
+            import tempfile
+            import shutil
+            safe_hashed_cert_path = os.path.join(tempfile.gettempdir(), hashed_cert_name)
+            shutil.copy(cert_path, safe_hashed_cert_path)
+            
             await update("cert_prepare", "success")
 
             await update("root_emu", "start")
-            
-            # Catch stdout/stderr specifically for the root command
             root_proc = subprocess.run([adb_cmd, "root"], capture_output=True, text=True)
             if root_proc.returncode != 0:
                 error_msg = root_proc.stderr.strip() or root_proc.stdout.strip()
@@ -494,10 +498,14 @@ class ProxyUIBridge:
             await update("root_emu", "success")
 
             await update("push_cert", "start")
-            subprocess.run([adb_cmd, "push", hashed_cert_name, f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True, capture_output=True, text=True)
+            # 3. Push from the safe temp path
+            subprocess.run([adb_cmd, "push", safe_hashed_cert_path, f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True, capture_output=True, text=True)
             subprocess.run([adb_cmd, "shell", "su", "0", "chmod", "644", f"/data/misc/user/0/cacerts-added/{hashed_cert_name}"], check=True, capture_output=True, text=True)
-            if os.path.exists(hashed_cert_name):
-                os.remove(hashed_cert_name)
+            
+            # 4. Cleanup the temp file safely
+            if os.path.exists(safe_hashed_cert_path):
+                os.remove(safe_hashed_cert_path)
+                
             await update("push_cert", "success")
 
             await update("set_proxy", "start")
@@ -508,7 +516,6 @@ class ProxyUIBridge:
             await update("done", "success")
 
         except subprocess.CalledProcessError as e:
-            # This catches ANY subprocess that fails and grabs the actual terminal error message
             error_msg = e.stderr.strip() if e.stderr else str(e)
             await update("current_active_step", "error", f"Command failed: {error_msg}")
         except Exception as e:
