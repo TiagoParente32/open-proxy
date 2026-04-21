@@ -791,4 +791,4 @@ if __name__ == "__main__":
         
     window.events.closed += on_closed
     
-    webview.start(private_mode=False, debug=True, icon=icon_path)
+    webview.start(private_mode=False, debug=False, icon=icon_path)
