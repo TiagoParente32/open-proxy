@@ -591,7 +591,10 @@ export const initWebSocket = () => {
             }
         } else if (payload.type === 'WS_MESSAGE') {
             const reqId = String(payload.id);
-            if (!wsMessages.value[reqId]) wsMessages.value[reqId] = [];
+            
+            if (!wsMessages.value[reqId]) {
+                wsMessages.value[reqId] = [];
+            }
 
             wsMessages.value[reqId].push({
                 is_client: payload.is_client,
@@ -599,7 +602,36 @@ export const initWebSocket = () => {
                 size: payload.size,
                 time: payload.timestamp
             });
-            wsMessages.value = { ...wsMessages.value };
+
+            let parentReq = requests.value.find(r => String(r.id) === reqId);
+            
+            // --- THE FIX: GHOST ROW RECONSTRUCTION ---
+            if (!parentReq) {
+                parentReq = {
+                    id: reqId,
+                    method: payload.method || 'GET',
+                    url: payload.url || 'wss://[Missed Handshake]',
+                    status: 101, 
+                    time: payload.timestamp,
+                    duration: 0,
+                    req_bytes: 0,
+                    res_bytes: 0,
+                    req_headers: {},
+                    res_headers: {},
+                    req_body: '// Handshake intercepted mid-stream',
+                    res_body: '// Handshake intercepted mid-stream',
+                    req_is_image: false,
+                    res_is_image: false,
+                    has_ws: true,
+                    ws_count: 0
+                };
+                // Force it into the top of the traffic table!
+                requests.value.unshift(parentReq);
+            }
+
+            parentReq.has_ws = true;
+            parentReq.ws_count = wsMessages.value[reqId].length;
+            requests.value = [...requests.value]; 
         }
     }
 

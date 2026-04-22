@@ -26,12 +26,12 @@ onMounted(() => window.addEventListener('keydown', blockGlobalSearch))
 onUnmounted(() => window.removeEventListener('keydown', blockGlobalSearch))
 
 const isWebSocket = computed(() => {
-  if (!selectedRequest.value) return false;
-  return selectedRequest.value.status === 101 || 
-         selectedRequest.value.url.startsWith('ws://') || 
-         selectedRequest.value.url.startsWith('wss://');
-})
-
+      if (!selectedRequest.value) return false;
+      return selectedRequest.value.has_ws ||
+             selectedRequest.value.status === 101 || 
+             selectedRequest.value.url.startsWith('ws://') || 
+             selectedRequest.value.url.startsWith('wss://');
+    })
 const extensions = [
   json(), 
   oneDark, 

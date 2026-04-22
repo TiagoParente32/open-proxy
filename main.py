@@ -266,7 +266,7 @@ class ProxyUIBridge:
                     req_body = text        
         request_data = {
             "id": flow.id,
-            "client_ip": flow.client_conn.peername[0],
+            "client_ip": flow.client_conn.peername[0] if flow.client_conn.peername else "Unknown",            
             "method": flow.request.method,
             "url": flow.request.pretty_url,
             "status": "...", 
@@ -434,6 +434,7 @@ class ProxyUIBridge:
                                 "id": flow.id,
                                 "phase": "response",
                                 "url": flow.request.pretty_url,
+                                "method": flow.request.method,
                                 "status": flow.response.status_code,
                                 "headers": dict(flow.response.headers),
                                 "body": flow.response.get_text(strict=False) or ""
@@ -457,36 +458,33 @@ class ProxyUIBridge:
         if not self.is_recording:
             return
 
-        if not hasattr(flow, 'messages') or not flow.messages:
+        if not hasattr(flow, 'websocket') or not flow.websocket or not flow.websocket.messages:
             return
             
-        latest_msg = flow.messages[-1]
-        
+        latest_msg = flow.websocket.messages[-1]
+
         try:
             content_str = latest_msg.content.decode('utf-8')
         except UnicodeDecodeError:
             content_str = f"<Binary Data: {len(latest_msg.content)} bytes>"
 
-        if hasattr(flow, 'handshake_flow') and flow.handshake_flow:
-            target_id = str(flow.handshake_flow.id)
-        else:
-            target_id = str(flow.id)
-
         payload = {
             "type": "WS_MESSAGE",
-            "id": target_id, 
+            "id": str(flow.id), 
             "is_client": latest_msg.from_client,
             "content": content_str,
             "size": len(latest_msg.content),
             "timestamp": time.time()
         }
 
-        if hasattr(self, 'connected_clients') and self.connected_clients:
-            for ws in self.connected_clients:
-                try:
-                    await ws.send(json.dumps(payload))
-                except Exception:
-                    pass
+        for ws in list(self.connected_clients): # Convert to list safely
+            try:
+                await ws.send(json.dumps(payload))
+                # Safely print a snippet of what we sent
+                snippet = content_str[:40].replace('\n', ' ')
+            except Exception as e:
+                print(f"[DEBUG WS ERROR] Failed to send to UI: {e}")
+
 
     async def setup_android_emulator(self, ws):
         async def update(step_id, status, msg=""):
@@ -826,10 +824,9 @@ if __name__ == "__main__":
         os._exit(0)
         
     window.events.closed += on_closed
-    sys.setrecursionlimit(100)
     
     webview.start(
         private_mode=False, 
-        debug=False, 
+        debug=True, 
         icon=icon_path,
     )
