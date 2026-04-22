@@ -817,7 +817,10 @@ if __name__ == "__main__":
     )
     
     # --- 3. GIVE THE API ACCESS TO THE WINDOW ---
-    webview_api.window = window
+    def on_loaded():
+        webview_api.window = window
+
+    window.events.loaded += on_loaded
     
     def on_closed():
         print("[INFO] UI window closed. Terminating OpenProxy...")
