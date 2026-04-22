@@ -315,15 +315,28 @@ export const setupAndroidEmulator = () => {
 // ============================================================================
 // 5. COMPUTED PROPERTIES (Filtering)
 // ============================================================================
-export const unpinnedDomains = computed(() => {
-    const domains = new Set()
+export const deviceTrafficTree = computed(() => {
+    const tree = {}
+    
     requests.value.forEach(req => {
-        const host = formatUrl(req.url).host
-        if (host && !pinnedSources.value.some(p => host.toLowerCase().includes(p.toLowerCase()))) {
-            domains.add(host)
+        const ip = req.client_ip || 'Unknown Device'
+        const domain = formatUrl(req.url).host
+
+        if (!tree[ip]) {
+            tree[ip] = new Set()
+        }
+        // Only add valid domains (skips empty or malformed ones)
+        if (domain) {
+            tree[ip].add(domain)
         }
     })
-    return Array.from(domains).sort()
+
+    // Convert the object into a sorted array for Vue to render
+    return Object.keys(tree).sort().map(ip => ({
+        ip: ip,
+        label: ip === '127.0.0.1' ? 'Local System' : ip,
+        domains: Array.from(tree[ip]).sort()
+    }))
 })
 
 export const filteredRequests = computed(() => {
@@ -339,11 +352,27 @@ export const filteredRequests = computed(() => {
     }
 
     // Sidebar Filter
-    if (activeFilter.value.type !== 'all' && ['pinned', 'unpinned'].includes(activeFilter.value.type)) {
-        const pattern = activeFilter.value.value.toLowerCase();
+    if (activeFilter.value.type === 'device') {
+        // Show all traffic for a specific device IP
+        const targetIp = activeFilter.value.ip;
+        baseList = baseList.filter(req => (req.client_ip || '127.0.0.1') === targetIp);
+    } 
+    else if (activeFilter.value.type === 'device_domain') {
+        // Show specific domain for a specific device
+        const targetIp = activeFilter.value.ip;
+        const targetDomain = activeFilter.value.domain;
+        baseList = baseList.filter(req => {
+            const reqIp = req.client_ip || '127.0.0.1';
+            const reqDomain = formatUrl(req.url).host;
+            return reqIp === targetIp && reqDomain === targetDomain;
+        });
+    }
+    else if (activeFilter.value.type === 'pinned') {
+        // Show specific pinned domain globally (across all devices)
+        const pattern = activeFilter.value.domain.toLowerCase();
         baseList = baseList.filter(req => req.url.toLowerCase().includes(pattern));
     }
-
+    
     // Search Bar
     if (searchQuery.value.trim() !== '') {
         const query = searchQuery.value.toLowerCase();
@@ -413,7 +442,6 @@ export const filteredRequests = computed(() => {
 
     return baseList;
 })
-
 
 // ============================================================================
 // 6. WATCHERS (Auto-Saving & Python Syncing)
@@ -594,3 +622,4 @@ export const initWebSocket = () => {
         reconnectDelay = Math.min(reconnectDelay * 2, 10000)
     }
 }
+

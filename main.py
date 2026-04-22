@@ -234,6 +234,7 @@ class ProxyUIBridge:
                     req_body = text        
         request_data = {
             "id": flow.id,
+            "client_ip": flow.client_conn.peername[0],
             "method": flow.request.method,
             "url": flow.request.pretty_url,
             "status": "...", 
@@ -767,7 +768,10 @@ if __name__ == "__main__":
     t.start()
 
     html_path = get_resource_path('ui/dist/index.html')
-    icon_path = get_resource_path('icon.png')
+    if os.name == 'nt':
+        icon_path = get_resource_path('icon.ico')
+    else:
+        icon_path = get_resource_path('icon.png')
     
     # --- 1. INSTANTIATE THE API ---
     webview_api = PyWebViewAPI()
@@ -790,5 +794,10 @@ if __name__ == "__main__":
         os._exit(0)
         
     window.events.closed += on_closed
+    sys.setrecursionlimit(100)
     
-    webview.start(private_mode=False, debug=False, icon=icon_path)
+    webview.start(
+        private_mode=False, 
+        debug=False, 
+        icon=icon_path,
+    )
