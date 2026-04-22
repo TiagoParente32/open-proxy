@@ -12,6 +12,7 @@ import ssl
 import urllib.request
 import websockets
 import webview
+import psutil
 from mitmproxy import http, options
 from mitmproxy.tools.dump import DumpMaster
 
@@ -76,16 +77,47 @@ def get_executable_path(base_name):
 
     raise FileNotFoundError(f"Could not find '{base_name}'. Please ensure it is installed and in your PATH.")
 
+
 def get_local_ip():
-    """Hacks a UDP socket to discover the computer's true LAN IP."""
+    """Iterates through network interfaces to find the true physical LAN IP."""
+    try:
+        # Get all network interfaces and their addresses
+        interfaces = psutil.net_if_addrs()
+        
+        # 1. Look specifically for standard home/office subnets first
+        for interface_name, interface_addresses in interfaces.items():
+            for address in interface_addresses:
+                # AF_INET is IPv4
+                if address.family == socket.AF_INET:
+                    ip = address.address
+                    
+                    # Target typical home subnets (192.168.x.x or 10.x.x.x)
+                    if ip.startswith("192.168.") or ip.startswith("10."):
+                        # Skip known virtual/Docker/VPN adapters if they happen to use 10.x.x.x
+                        if not any(v in interface_name.lower() for v in ["vpn", "docker", "veth", "tailscale", "zerotier", "wsl"]):
+                            return ip
+
+        # 2. Fallback: If no standard LAN IP is found, grab the first non-loopback IP
+        for interface_name, interface_addresses in interfaces.items():
+            for address in interface_addresses:
+                if address.family == socket.AF_INET:
+                    ip = address.address
+                    if not ip.startswith("127.") and not ip.startswith("169.254."): # ignore loopback and link-local
+                        return ip
+
+    except Exception as e:
+        print(f"[WARNING] psutil failed: {e}")
+
+    # 3. Absolute Fallback: The old UDP trick (will likely return the VPN IP if we get here)
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.connect(('10.255.255.255', 1))
+        s.connect(('8.8.8.8', 80))
         ip = s.getsockname()[0]
     except Exception:
         ip = '127.0.0.1'
     finally:
         s.close()
+    
     return ip
 
 def get_free_port(starting_port=9090):

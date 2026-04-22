@@ -51,7 +51,7 @@ npm install
 cd ..
 python3 -m venv venv
 source ./venv/bin/activate
-pip install mitmproxy pywebview websockets
+pip install -r requirements.txt
 ```
 
 ### 3. Run the App in Dev Mode
