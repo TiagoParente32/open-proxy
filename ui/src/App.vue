@@ -232,7 +232,6 @@ const openBreakpointModalFromContext = () => {
     <ComposeModal />
     <HighlightModal />
     <DeviceSetupModal />
-    <ProgressOverlay />
   </div>
 </template>
 

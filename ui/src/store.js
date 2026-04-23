@@ -61,9 +61,7 @@ export const formatBytes = (bytes) => {
 export const exportRules = (rules, filename) => {
     const data = rules.value !== undefined ? rules.value : rules;
     const jsonString = JSON.stringify(data, null, 2);
-    
-    // PyWebView takes a fraction of a second to inject the API on boot.
-    // We check if it's ready, and fire the save dialog safely!
+
     if (window.pywebview && window.pywebview.api) {
         window.pywebview.api.save_file(filename + '.json', jsonString)
             .then((success) => {
@@ -74,6 +72,7 @@ export const exportRules = (rules, filename) => {
         alert("System API not ready yet. Please wait a moment and try again.");
     }
 }
+
 export const importRules = (event, rulesRef) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -120,7 +119,6 @@ export const activeReqTab = ref('Header')
 export const activeResTab = ref('Body')
 export const contextMenu = ref({ show: false, x: 0, y: 0, request: null })
 
-// Stores messages keyed by the request ID: { "req-123": [{...msg}, {...msg}] }
 export const wsMessages = ref(loadState('wsMessages', {}))
 
 
@@ -173,18 +171,41 @@ export const composeData = ref(null)
 export const showDeviceSetupModal = ref(false)
 export const deviceSetupType = ref('emulator')
 
+// ---- NEW: ADB device state ----
+// List of { serial, model, type, state } objects returned by the backend
+export const adbDevices = ref([])
+// Whether a LIST_ADB_DEVICES fetch is in-flight
+export const adbDevicesLoading = ref(false)
+// Any error string returned from the backend for device listing
+export const adbDevicesError = ref(null)
 
 export const setupProgress = ref({
     show: false,
     error: null,
+    // 'setup' or 'revert' — controls which title/copy to show
+    mode: 'setup',
+    // Which device serial the current progress applies to
+    targetSerial: null,
     steps: [
-        { id: 'check_adb', label: 'Checking dependencies...', status: 'pending' },
-        { id: 'cert_prepare', label: 'Preparing certificate...', status: 'pending' },
-        { id: 'root_emu', label: 'Rooting emulator...', status: 'pending' },
-        { id: 'push_cert', label: 'Installing certificate...', status: 'pending' },
-        { id: 'set_proxy', label: 'Configuring global proxy...', status: 'pending' }
+        { id: 'check_adb',    label: 'Checking dependencies...',    status: 'pending' },
+        { id: 'cert_prepare', label: 'Preparing certificate...',     status: 'pending' },
+        { id: 'root_emu',     label: 'Rooting emulator...',          status: 'pending' },
+        { id: 'push_cert',    label: 'Installing certificate...',    status: 'pending' },
+        { id: 'set_proxy',    label: 'Configuring global proxy...',  status: 'pending' },
     ]
-});
+})
+
+// Revert progress uses a simpler two-step flow
+export const revertProgress = ref({
+    show: false,
+    error: null,
+    targetSerial: null,
+    steps: [
+        { id: 'clear_proxy',  label: 'Clearing proxy settings...', status: 'pending' },
+        { id: 'remove_cert',  label: 'Removing certificate...',    status: 'pending' },
+    ]
+})
+
 
 // ============================================================================
 // 4. ACTIONS & LOGIC
@@ -210,10 +231,58 @@ const applyHighlightRules = (req) => {
     }
 }
 
+/** Request the backend to scan for connected ADB devices. */
+export const listAdbDevices = () => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    adbDevicesLoading.value = true
+    adbDevicesError.value = null
+    adbDevices.value = []
+    wsConnection.send(JSON.stringify({ type: "LIST_ADB_DEVICES" }))
+}
+
+/**
+ * Kick off the certificate install + proxy setup on a specific device.
+ * @param {string} serial  - ADB device serial, e.g. "emulator-5554" or "R58M31XXXXX"
+ * @param {string} deviceType - "emulator" | "device"
+ */
+export const setupAndroidDevice = (serial, deviceType) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+
+    // Reset & show the progress panel
+    setupProgress.value.mode = 'setup'
+    setupProgress.value.targetSerial = serial
+    setupProgress.value.show = true
+    setupProgress.value.error = null
+    setupProgress.value.steps.forEach(s => s.status = 'pending')
+
+    wsConnection.send(JSON.stringify({
+        type: "SETUP_ANDROID_DEVICE",
+        serial,
+        device_type: deviceType
+    }))
+}
+
+/**
+ * Revert the proxy config and remove the cert from a specific device.
+ * @param {string} serial - ADB device serial
+ */
+export const revertAndroidDevice = (serial) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+
+    revertProgress.value.targetSerial = serial
+    revertProgress.value.show = true
+    revertProgress.value.error = null
+    revertProgress.value.steps.forEach(s => s.status = 'pending')
+
+    wsConnection.send(JSON.stringify({
+        type: "REVERT_ANDROID_DEVICE",
+        serial
+    }))
+}
+
+// Legacy shim — kept so any existing call to injectEmulatorCert() still works
 export const injectEmulatorCert = () => {
-    if (wsConnection?.readyState === WebSocket.OPEN) {
-        wsConnection.send(JSON.stringify({ type: "SETUP_ANDROID" }))
-    }
+    setupAndroidDevice("emulator-5554", "emulator")
 }
 
 export const applyAllHighlightRules = () => {
@@ -317,7 +386,7 @@ export const setupAndroidEmulator = () => {
 // ============================================================================
 export const deviceTrafficTree = computed(() => {
     const tree = {}
-    
+
     requests.value.forEach(req => {
         const ip = req.client_ip || 'Unknown Device'
         const domain = formatUrl(req.url).host
@@ -325,13 +394,11 @@ export const deviceTrafficTree = computed(() => {
         if (!tree[ip]) {
             tree[ip] = new Set()
         }
-        // Only add valid domains (skips empty or malformed ones)
         if (domain) {
             tree[ip].add(domain)
         }
     })
 
-    // Convert the object into a sorted array for Vue to render
     return Object.keys(tree).sort().map(ip => ({
         ip: ip,
         label: ip === '127.0.0.1' ? 'Local System' : ip,
@@ -342,7 +409,6 @@ export const deviceTrafficTree = computed(() => {
 export const filteredRequests = computed(() => {
     let baseList = [...requests.value];
 
-    // Focus Mode
     if (isFocusMode.value) {
         if (pinnedSources.value.length === 0) return [];
         baseList = baseList.filter(req => {
@@ -351,14 +417,11 @@ export const filteredRequests = computed(() => {
         });
     }
 
-    // Sidebar Filter
     if (activeFilter.value.type === 'device') {
-        // Show all traffic for a specific device IP
         const targetIp = activeFilter.value.ip;
         baseList = baseList.filter(req => (req.client_ip || '127.0.0.1') === targetIp);
-    } 
+    }
     else if (activeFilter.value.type === 'device_domain') {
-        // Show specific domain for a specific device
         const targetIp = activeFilter.value.ip;
         const targetDomain = activeFilter.value.domain;
         baseList = baseList.filter(req => {
@@ -368,12 +431,10 @@ export const filteredRequests = computed(() => {
         });
     }
     else if (activeFilter.value.type === 'pinned') {
-        // Show specific pinned domain globally (across all devices)
         const pattern = activeFilter.value.domain.toLowerCase();
         baseList = baseList.filter(req => req.url.toLowerCase().includes(pattern));
     }
-    
-    // Search Bar
+
     if (searchQuery.value.trim() !== '') {
         const query = searchQuery.value.toLowerCase();
         baseList = baseList.filter(req => {
@@ -383,7 +444,6 @@ export const filteredRequests = computed(() => {
         });
     }
 
-    // Chips: Protocol
     if (activeChips.value.protocol !== 'All') {
         const p = activeChips.value.protocol;
         baseList = baseList.filter(req => {
@@ -394,7 +454,6 @@ export const filteredRequests = computed(() => {
         });
     }
 
-    // Chips: Status
     if (activeChips.value.status !== 'All') {
         const prefix = activeChips.value.status.charAt(0);
         baseList = baseList.filter(req => {
@@ -403,7 +462,6 @@ export const filteredRequests = computed(() => {
         });
     }
 
-    // Chips: Content Type
     if (activeChips.value.type !== 'All') {
         const t = activeChips.value.type;
         baseList = baseList.filter(req => {
@@ -425,11 +483,9 @@ export const filteredRequests = computed(() => {
         });
     }
 
-    // Chips: Starred & Color
     if (activeChips.value.starred) baseList = baseList.filter(req => req.starred);
     if (activeChips.value.color !== 'All') baseList = baseList.filter(req => req.color === activeChips.value.color);
 
-    // Sorting
     baseList.sort((a, b) => {
         let valA = a[sortKey.value]
         let valB = b[sortKey.value]
@@ -519,10 +575,9 @@ watch(disableCache, (newVal) => {
 // 7. WEBSOCKET CONNECTION
 // ============================================================================
 let reconnectTimeout = null;
-let reconnectDelay = 1000; // Start with a 1-second delay
+let reconnectDelay = 1000;
 
 export const initWebSocket = () => {
-    // Prevent multiple reconnect loops from stacking
     if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
         reconnectTimeout = null;
@@ -532,8 +587,8 @@ export const initWebSocket = () => {
 
     wsConnection.onopen = () => {
         connectionStatus.value = '🟢 Intercepting Traffic'
-        reconnectDelay = 1000; // Reset the delay on a successful connection
-        
+        reconnectDelay = 1000;
+
         syncMapLocalRules()
         syncBreakpointRules()
         syncMapRemoteRules()
@@ -545,7 +600,6 @@ export const initWebSocket = () => {
     }
 
     wsConnection.onmessage = (event) => {
-        // ... (Keep all your existing onmessage logic exactly as it is) ...
         const payload = JSON.parse(event.data)
 
         if (payload.type === "SYSTEM_INFO") {
@@ -568,6 +622,76 @@ export const initWebSocket = () => {
             newFlow.headersStr = JSON.stringify(newFlow.headers, null, 2)
             trappedFlows.value.push(newFlow)
         }
+
+        // ---- NEW: ADB device list response ----
+        else if (payload.type === "ADB_DEVICES") {
+            adbDevicesLoading.value = false
+            if (payload.error) {
+                adbDevicesError.value = payload.error
+                adbDevices.value = []
+            } else {
+                adbDevicesError.value = null
+                adbDevices.value = payload.devices || []
+            }
+        }
+
+        // ---- NEW: Setup progress (now serial-scoped) ----
+        else if (payload.type === "SETUP_PROGRESS") {
+            if (payload.step === 'check_adb' && payload.status === 'start') {
+                setupProgress.value.show = true
+                setupProgress.value.error = null
+                setupProgress.value.steps.forEach(s => s.status = 'pending')
+            }
+            if (payload.step === 'done') {
+                setTimeout(() => { setupProgress.value.show = false }, 1500)
+                return
+            }
+
+            // Handle skipped steps (e.g. root step for physical devices)
+            if (payload.status === 'skip') {
+                const step = setupProgress.value.steps.find(s => s.id === payload.step)
+                if (step) step.status = 'skip'
+                return
+            }
+
+            const step = setupProgress.value.steps.find(s => s.id === payload.step) ||
+                setupProgress.value.steps.find(s => s.status === 'loading')
+
+            if (step) {
+                if (payload.status === 'start') step.status = 'loading'
+                else if (payload.status === 'success') step.status = 'success'
+                else if (payload.status === 'error') {
+                    step.status = 'error'
+                    setupProgress.value.error = payload.message
+                }
+            }
+        }
+
+        // ---- NEW: Revert progress ----
+        else if (payload.type === "REVERT_PROGRESS") {
+            if (payload.step === 'clear_proxy' && payload.status === 'start') {
+                revertProgress.value.show = true
+                revertProgress.value.error = null
+                revertProgress.value.steps.forEach(s => s.status = 'pending')
+            }
+            if (payload.step === 'done') {
+                setTimeout(() => { revertProgress.value.show = false }, 1500)
+                return
+            }
+
+            const step = revertProgress.value.steps.find(s => s.id === payload.step) ||
+                revertProgress.value.steps.find(s => s.status === 'loading')
+
+            if (step) {
+                if (payload.status === 'start') step.status = 'loading'
+                else if (payload.status === 'success') step.status = 'success'
+                else if (payload.status === 'error') {
+                    step.status = 'error'
+                    revertProgress.value.error = payload.message
+                }
+            }
+        }
+
         else if (payload.type === "SETUP_PROGRESS") {
             if (payload.step === 'check_adb' && payload.status === 'start') {
                 setupProgress.value.show = true;
@@ -589,9 +713,11 @@ export const initWebSocket = () => {
                     setupProgress.value.error = payload.message;
                 }
             }
-        } else if (payload.type === 'WS_MESSAGE') {
+        }
+
+        else if (payload.type === 'WS_MESSAGE') {
             const reqId = String(payload.id);
-            
+
             if (!wsMessages.value[reqId]) {
                 wsMessages.value[reqId] = [];
             }
@@ -604,14 +730,13 @@ export const initWebSocket = () => {
             });
 
             let parentReq = requests.value.find(r => String(r.id) === reqId);
-            
-            // --- THE FIX: GHOST ROW RECONSTRUCTION ---
+
             if (!parentReq) {
                 parentReq = {
                     id: reqId,
                     method: payload.method || 'GET',
                     url: payload.url || 'wss://[Missed Handshake]',
-                    status: 101, 
+                    status: 101,
                     time: payload.timestamp,
                     duration: 0,
                     req_bytes: 0,
@@ -625,33 +750,28 @@ export const initWebSocket = () => {
                     has_ws: true,
                     ws_count: 0
                 };
-                // Force it into the top of the traffic table!
                 requests.value.unshift(parentReq);
             }
 
             parentReq.has_ws = true;
             parentReq.ws_count = wsMessages.value[reqId].length;
-            requests.value = [...requests.value]; 
+            requests.value = [...requests.value];
         }
     }
 
     wsConnection.onerror = () => {
-        // Force the socket closed on error so onclose handles the reconnect logic
         if (wsConnection.readyState === WebSocket.OPEN) {
             wsConnection.close();
         }
     }
 
-    wsConnection.onclose = () => { 
+    wsConnection.onclose = () => {
         connectionStatus.value = `🟡 Reconnecting in ${reconnectDelay / 1000}s...`
-        
-        // Schedule the next connection attempt
+
         reconnectTimeout = setTimeout(() => {
             initWebSocket()
         }, reconnectDelay)
 
-        // Exponential backoff: increase the delay for the next attempt, cap at 10 seconds
         reconnectDelay = Math.min(reconnectDelay * 2, 10000)
     }
 }
-
