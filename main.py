@@ -1635,7 +1635,7 @@ if __name__ == "__main__":
         private_mode=False,
         debug=False,
         icon=icon_path,
-        menu=_build_menu(window),
+        menu = _build_menu(window) if sys.platform in ("darwin", "linux") else None
     )
 
     # When webview.start() returns (app quit normally), stop the tray too
