@@ -55,16 +55,12 @@ pip install -r requirements.txt
 ```
 
 ### 3. Run the App in Dev Mode
-First, build the UI (or run the Vite dev server if you are editing Vue files):
+Use the provided script to build the UI and launch the app in one command:
 ```bash
-cd ui
-npm run build
+./run.sh
 ```
-Then, run the Python application:
-```bash
-cd ..
-python main.py
-```
+
+This will run `npm run build` inside the `ui/` folder and then start `python main.py` automatically. If the build fails, the app will not start.
 
 ---
 

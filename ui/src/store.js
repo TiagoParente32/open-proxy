@@ -206,6 +206,38 @@ export const revertProgress = ref({
     ]
 })
 
+// iOS Simulator state
+export const iosSimulators = ref([])
+export const iosSimulatorsLoading = ref(false)
+export const iosSimulatorsError = ref(null)
+
+export const iosSetupProgress = ref({
+    show: false,
+    error: null,
+    targetUdid: null,
+    steps: [
+        { id: 'check_xcrun',  label: 'Checking Xcode tools...',   status: 'pending' },
+        { id: 'find_cert',    label: 'Locating certificate...',    status: 'pending' },
+        { id: 'install_cert', label: 'Installing certificate...', status: 'pending' },
+    ]
+})
+
+export const iosRevertProgress = ref({
+    show: false,
+    error: null,
+    targetUdid: null,
+    steps: [
+        { id: 'find_store',  label: 'Locating trust store...',  status: 'pending' },
+        { id: 'remove_cert', label: 'Removing certificate...', status: 'pending' },
+    ]
+})
+
+// macOS system proxy state
+export const macosProxyActive = ref(false)
+export const macosProxyLoading = ref(false)
+export const macosProxyError = ref(null)
+export const macosProxyServices = ref([])
+
 
 // ============================================================================
 // 4. ACTIONS & LOGIC
@@ -283,6 +315,35 @@ export const revertAndroidDevice = (serial) => {
 // Legacy shim — kept so any existing call to injectEmulatorCert() still works
 export const injectEmulatorCert = () => {
     setupAndroidDevice("emulator-5554", "emulator")
+}
+
+/** Request the backend to list available iOS Simulators. */
+export const listIosSimulators = () => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    iosSimulatorsLoading.value = true
+    iosSimulatorsError.value = null
+    iosSimulators.value = []
+    wsConnection.send(JSON.stringify({ type: "LIST_IOS_SIMULATORS" }))
+}
+
+/** Install the mitmproxy CA cert into a specific iOS Simulator. */
+export const setupIosSimulator = (udid) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    iosSetupProgress.value.targetUdid = udid
+    iosSetupProgress.value.show = true
+    iosSetupProgress.value.error = null
+    iosSetupProgress.value.steps.forEach(s => s.status = 'pending')
+    wsConnection.send(JSON.stringify({ type: "SETUP_IOS_SIMULATOR", udid }))
+}
+
+/** Remove the mitmproxy CA cert from a specific iOS Simulator's trust store. */
+export const revertIosSimulator = (udid) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    iosRevertProgress.value.targetUdid = udid
+    iosRevertProgress.value.show = true
+    iosRevertProgress.value.error = null
+    iosRevertProgress.value.steps.forEach(s => s.status = 'pending')
+    wsConnection.send(JSON.stringify({ type: "REVERT_IOS_SIMULATOR", udid }))
 }
 
 export const applyAllHighlightRules = () => {
@@ -692,26 +753,72 @@ export const initWebSocket = () => {
             }
         }
 
-        else if (payload.type === "SETUP_PROGRESS") {
-            if (payload.step === 'check_adb' && payload.status === 'start') {
-                setupProgress.value.show = true;
-                setupProgress.value.error = null;
-                setupProgress.value.steps.forEach(s => s.status = 'pending');
+        // ---- iOS Simulator: device list ----
+        else if (payload.type === "IOS_SIMULATORS") {
+            iosSimulatorsLoading.value = false
+            if (payload.error) {
+                iosSimulatorsError.value = payload.error
+                iosSimulators.value = []
+            } else {
+                iosSimulatorsError.value = null
+                iosSimulators.value = payload.simulators || []
+            }
+        }
+
+        // ---- iOS Simulator: install progress ----
+        else if (payload.type === "IOS_SETUP_PROGRESS") {
+            if (payload.step === 'check_xcrun' && payload.status === 'start') {
+                iosSetupProgress.value.show = true
+                iosSetupProgress.value.error = null
+                iosSetupProgress.value.steps.forEach(s => s.status = 'pending')
             }
             if (payload.step === 'done') {
-                setTimeout(() => { setupProgress.value.show = false; }, 1500);
-                return;
+                setTimeout(() => { iosSetupProgress.value.show = false }, 1500)
+                return
             }
-            const step = setupProgress.value.steps.find(s => s.id === payload.step) ||
-                setupProgress.value.steps.find(s => s.status === 'loading');
-
-            if (step) {
-                if (payload.status === 'start') step.status = 'loading';
-                else if (payload.status === 'success') step.status = 'success';
+            const iosSetupStep = iosSetupProgress.value.steps.find(s => s.id === payload.step) ||
+                iosSetupProgress.value.steps.find(s => s.status === 'loading')
+            if (iosSetupStep) {
+                if (payload.status === 'start') iosSetupStep.status = 'loading'
+                else if (payload.status === 'success') iosSetupStep.status = 'success'
                 else if (payload.status === 'error') {
-                    step.status = 'error';
-                    setupProgress.value.error = payload.message;
+                    iosSetupStep.status = 'error'
+                    iosSetupProgress.value.error = payload.message
                 }
+            }
+        }
+
+        // ---- iOS Simulator: revert progress ----
+        else if (payload.type === "IOS_REVERT_PROGRESS") {
+            if (payload.step === 'find_store' && payload.status === 'start') {
+                iosRevertProgress.value.show = true
+                iosRevertProgress.value.error = null
+                iosRevertProgress.value.steps.forEach(s => s.status = 'pending')
+            }
+            if (payload.step === 'done') {
+                setTimeout(() => { iosRevertProgress.value.show = false }, 1500)
+                return
+            }
+            const iosRevertStep = iosRevertProgress.value.steps.find(s => s.id === payload.step) ||
+                iosRevertProgress.value.steps.find(s => s.status === 'loading')
+            if (iosRevertStep) {
+                if (payload.status === 'start') iosRevertStep.status = 'loading'
+                else if (payload.status === 'success') iosRevertStep.status = 'success'
+                else if (payload.status === 'error') {
+                    iosRevertStep.status = 'error'
+                    iosRevertProgress.value.error = payload.message
+                }
+            }
+        }
+
+        else if (payload.type === "MACOS_PROXY_STATUS") {
+            macosProxyLoading.value = false
+            macosProxyActive.value = payload.active ?? false
+            macosProxyServices.value = payload.services ?? []
+            if (payload.error && payload.error !== 'cancelled') {
+                macosProxyError.value = payload.error
+            } else if (!payload.error) {
+                macosProxyError.value = null
             }
         }
 

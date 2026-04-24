@@ -9,6 +9,8 @@ import base64
 import subprocess
 import threading
 import ssl
+import sqlite3
+import hashlib
 import urllib.request
 import websockets
 import webview
@@ -179,6 +181,143 @@ def list_adb_devices(adb_cmd):
         })
 
     return devices
+
+
+# ============================================================================
+# IOS SIMULATOR HELPERS  (macOS only)
+# ============================================================================
+def list_ios_simulators():
+    """Returns available iOS simulators via xcrun simctl."""
+    result = subprocess.run(
+        ["xcrun", "simctl", "list", "devices", "--json"],
+        capture_output=True, text=True, timeout=10
+    )
+    data = json.loads(result.stdout)
+    simulators = []
+    for runtime, devices in data.get("devices", {}).items():
+        if "iOS" not in runtime:
+            continue
+        runtime_label = (runtime
+            .replace("com.apple.CoreSimulator.SimRuntime.", "")
+            .replace("-", " "))
+        for device in devices:
+            if not device.get("isAvailable", True):
+                continue
+            simulators.append({
+                "udid":    device["udid"],
+                "name":    device["name"],
+                "state":   device.get("state", "Shutdown"),
+                "runtime": runtime_label,
+            })
+    # Sort: booted simulators first
+    simulators.sort(key=lambda d: 0 if d["state"] == "Booted" else 1)
+    return simulators
+
+
+# ============================================================================
+# MACOS SYSTEM PROXY HELPERS  (macOS only)
+# ============================================================================
+def get_active_network_services():
+    """Returns list of network service names that are currently active (have an IP)."""
+    if sys.platform != "darwin":
+        return []
+    try:
+        result = subprocess.run(
+            ["networksetup", "-listallnetworkservices"],
+            capture_output=True, text=True, timeout=5
+        )
+        services = []
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if not line or line.startswith("An asterisk") or line.startswith("*"):
+                continue
+            # Check if the service has an active IP
+            info = subprocess.run(
+                ["networksetup", "-getinfo", line],
+                capture_output=True, text=True, timeout=5
+            )
+            for info_line in info.stdout.splitlines():
+                if info_line.startswith("IP address:"):
+                    ip = info_line.split(":", 1)[1].strip()
+                    if ip and ip.lower() != "none":
+                        services.append(line)
+                    break
+        return services
+    except Exception:
+        return []
+
+
+def set_macos_proxy(port: int) -> dict:
+    """
+    Sets HTTP+HTTPS proxy to 127.0.0.1:<port> on all active network services.
+    Uses osascript so macOS shows the native admin password dialog.
+    Returns {'ok': bool, 'services': [...], 'error': str|None}.
+    """
+    services = get_active_network_services()
+    if not services:
+        return {'ok': False, 'services': [], 'error': 'No active network services found.'}
+
+    bypass = "127.0.0.1 localhost ::1 *.local 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12"
+    cmds = []
+    for svc in services:
+        s = svc.replace('"', '\\"')
+        cmds.append(f'networksetup -setwebproxy "{s}" 127.0.0.1 {port}')
+        cmds.append(f'networksetup -setsecurewebproxy "{s}" 127.0.0.1 {port}')
+        cmds.append(f'networksetup -setproxybypassdomains "{s}" {bypass}')
+
+    shell_cmd = " && ".join(cmds)
+    script = f'do shell script "{shell_cmd}" with administrator privileges'
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode == 0:
+            return {'ok': True, 'services': services, 'error': None}
+        err = result.stderr.strip() or result.stdout.strip()
+        # User cancelled the password dialog
+        if "User cancelled" in err or "-128" in err:
+            return {'ok': False, 'services': services, 'error': 'cancelled'}
+        return {'ok': False, 'services': services, 'error': err or 'Unknown error'}
+    except subprocess.TimeoutExpired:
+        return {'ok': False, 'services': services, 'error': 'Operation timed out.'}
+    except Exception as e:
+        return {'ok': False, 'services': services, 'error': str(e)}
+
+
+def unset_macos_proxy() -> dict:
+    """
+    Disables HTTP+HTTPS proxy on all active network services.
+    Returns {'ok': bool, 'services': [...], 'error': str|None}.
+    """
+    services = get_active_network_services()
+    if not services:
+        return {'ok': True, 'services': [], 'error': None}  # Already off
+
+    cmds = []
+    for svc in services:
+        s = svc.replace('"', '\\"')
+        cmds.append(f'networksetup -setwebproxystate "{s}" off')
+        cmds.append(f'networksetup -setsecurewebproxystate "{s}" off')
+
+    shell_cmd = " && ".join(cmds)
+    script = f'do shell script "{shell_cmd}" with administrator privileges'
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode == 0:
+            return {'ok': True, 'services': services, 'error': None}
+        err = result.stderr.strip() or result.stdout.strip()
+        if "User cancelled" in err or "-128" in err:
+            return {'ok': False, 'services': services, 'error': 'cancelled'}
+        return {'ok': False, 'services': services, 'error': err or 'Unknown error'}
+    except subprocess.TimeoutExpired:
+        return {'ok': False, 'services': services, 'error': 'Operation timed out.'}
+    except Exception as e:
+        return {'ok': False, 'services': services, 'error': str(e)}
+
 
 class PyWebViewAPI:
     def __init__(self):
@@ -691,6 +830,153 @@ class ProxyUIBridge:
         except Exception as e:
             await update("current_active_step", "error", str(e))
 
+    # -------------------------------------------------------------------------
+    # iOS SIMULATOR SETUP HELPERS  (macOS only)
+    # -------------------------------------------------------------------------
+
+    async def handle_list_ios_simulators(self, ws):
+        if sys.platform != "darwin":
+            await ws.send(json.dumps({
+                "type": "IOS_SIMULATORS", "simulators": [],
+                "error": "iOS Simulator setup is only available on macOS."
+            }))
+            return
+        try:
+            loop = asyncio.get_running_loop()
+            simulators = await asyncio.wait_for(
+                loop.run_in_executor(None, list_ios_simulators),
+                timeout=10.0
+            )
+            await ws.send(json.dumps({"type": "IOS_SIMULATORS", "simulators": simulators}))
+        except asyncio.TimeoutError:
+            await ws.send(json.dumps({
+                "type": "IOS_SIMULATORS", "simulators": [],
+                "error": "xcrun timed out. Is Xcode installed?"
+            }))
+        except FileNotFoundError:
+            await ws.send(json.dumps({
+                "type": "IOS_SIMULATORS", "simulators": [],
+                "error": "xcrun not found. Please install Xcode."
+            }))
+        except Exception as e:
+            await ws.send(json.dumps({
+                "type": "IOS_SIMULATORS", "simulators": [],
+                "error": f"Unexpected error: {e}"
+            }))
+
+    async def setup_ios_simulator(self, ws, udid: str):
+        """Installs the mitmproxy CA cert into a booted iOS Simulator."""
+        async def update(step_id, status, msg=""):
+            await ws.send(json.dumps({
+                "type": "IOS_SETUP_PROGRESS",
+                "step": step_id, "status": status,
+                "message": msg, "udid": udid
+            }))
+
+        try:
+            await update("check_xcrun", "start")
+            subprocess.run(["xcrun", "--version"], check=True, capture_output=True, text=True)
+            await asyncio.sleep(0.3)
+            await update("check_xcrun", "success")
+
+            await update("find_cert", "start")
+            cert_path = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.pem")
+            if not os.path.exists(cert_path):
+                await update("find_cert", "error", "Certificate not found. Start the proxy first to generate it.")
+                return
+            await asyncio.sleep(0.2)
+            await update("find_cert", "success")
+
+            await update("install_cert", "start")
+            result = subprocess.run(
+                ["xcrun", "simctl", "keychain", udid, "add-root-cert", cert_path],
+                capture_output=True, text=True
+            )
+            if result.returncode != 0:
+                error_msg = result.stderr.strip() or result.stdout.strip()
+                await update("install_cert", "error", f"simctl failed: {error_msg}")
+                return
+            await asyncio.sleep(0.5)
+            await update("install_cert", "success")
+
+            await update("done", "success")
+
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr.strip() if e.stderr else str(e)
+            await update("current_active_step", "error", f"Command failed: {error_msg}")
+        except Exception as e:
+            await update("current_active_step", "error", str(e))
+
+    async def revert_ios_simulator(self, ws, udid: str):
+        """Removes the mitmproxy CA cert from an iOS Simulator's TrustStore."""
+        async def update(step_id, status, msg=""):
+            await ws.send(json.dumps({
+                "type": "IOS_REVERT_PROGRESS",
+                "step": step_id, "status": status,
+                "message": msg, "udid": udid
+            }))
+
+        try:
+            await update("find_store", "start")
+            sim_base = os.path.expanduser(
+                f"~/Library/Developer/CoreSimulator/Devices/{udid}"
+            )
+            candidates = [
+                os.path.join(sim_base, "data/private/var/protected/trustd/private/TrustStore.sqlite3"),
+                os.path.join(sim_base, "data/Library/Keychains/TrustStore.sqlite3"),
+            ]
+            trust_store_path = next((p for p in candidates if os.path.isfile(p)), None)
+            if not trust_store_path:
+                await update("find_store", "error",
+                    "TrustStore not found. Boot the simulator at least once first.")
+                return
+            await asyncio.sleep(0.2)
+            await update("find_store", "success")
+
+            await update("remove_cert", "start")
+            cert_path = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.pem")
+            if not os.path.exists(cert_path):
+                await update("remove_cert", "error", "Proxy certificate not found.")
+                return
+
+            with open(cert_path, "r") as f:
+                pem_data = f.read()
+            der_data = ssl.PEM_cert_to_DER_cert(pem_data)
+
+            # Determine hash column (sha1 or sha256) from schema
+            conn = sqlite3.connect(trust_store_path)
+            try:
+                c = conn.cursor()
+                row = c.execute(
+                    "SELECT sql FROM sqlite_master WHERE name='tsettings'"
+                ).fetchone()
+                hash_col = "sha256" if row and "sha256" in row[0] else "sha1"
+
+                sha_digest = (hashlib.sha256(der_data).digest()
+                              if hash_col == "sha256"
+                              else hashlib.sha1(der_data).digest())
+
+                c.execute(
+                    f"DELETE FROM tsettings WHERE {hash_col}=?",
+                    [sqlite3.Binary(sha_digest)]
+                )
+                removed = c.rowcount
+                conn.commit()
+            finally:
+                conn.close()
+
+            if removed == 0:
+                await update("remove_cert", "error",
+                    "Certificate was not found in the trust store (may already be removed).")
+                return
+
+            await asyncio.sleep(0.3)
+            await update("remove_cert", "success")
+            await update("done", "success")
+
+        except Exception as e:
+            await update("current_active_step", "error", str(e))
+
     async def broadcast_to_ui(self, msg_type, data):
         if not self.connected_clients: return
         message = json.dumps({"type": msg_type, "data": data})
@@ -743,6 +1029,20 @@ class ProxyUIBridge:
                     if serial:
                         asyncio.create_task(self.revert_android_device(websocket, serial))
 
+                # ---- iOS Simulator setup ----
+                elif payload.get("type") == "LIST_IOS_SIMULATORS":
+                    asyncio.create_task(self.handle_list_ios_simulators(websocket))
+
+                elif payload.get("type") == "SETUP_IOS_SIMULATOR":
+                    udid = payload.get("udid")
+                    if udid:
+                        asyncio.create_task(self.setup_ios_simulator(websocket, udid))
+
+                elif payload.get("type") == "REVERT_IOS_SIMULATOR":
+                    udid = payload.get("udid")
+                    if udid:
+                        asyncio.create_task(self.revert_ios_simulator(websocket, udid))
+                        
                 elif payload.get("type") == "REPEAT_REQUEST":
                     req_data = payload.get("request", {})
 
@@ -858,8 +1158,149 @@ class ProxyUIBridge:
                         flow_dict["event"].set()
         finally:
             self.connected_clients.remove(websocket)
+# ============================================================================
+# 3. ios setup
+# ============================================================================
+import os, sqlite3, ssl, hashlib, struct, glob, plistlib
 
+SIMULATOR_DIR = os.path.expanduser("~/Library/Developer/CoreSimulator/Devices/")
+TRUSTSTORE_PATHS = [
+    "/data/private/var/protected/trustd/private/TrustStore.sqlite3",
+    "/data/Library/Keychains/TrustStore.sqlite3",
+]
 
+def get_cert_der(pem_path):
+    with open(pem_path) as f:
+        return ssl.PEM_cert_to_DER_cert(f.read())
+
+def get_cert_sha256(der: bytes) -> bytes:
+    return hashlib.sha256(der).digest()
+
+def get_cert_subject_asn1(der: bytes) -> bytes:
+    """
+    Walks the DER-encoded cert to extract the raw Subject field bytes.
+    Structure: SEQUENCE { SEQUENCE { [0] version, serial, algo, issuer, validity, SUBJECT, ... } }
+    """
+    def read_tlv(data, pos):
+        tag = data[pos]; pos += 1
+        b = data[pos]; pos += 1
+        if b & 0x80:
+            n = b & 0x7f
+            length = int.from_bytes(data[pos:pos+n], 'big'); pos += n
+        else:
+            length = b
+        return tag, data[pos:pos+length], pos+length
+
+    # Unwrap outer SEQUENCE
+    _, cert_seq, _ = read_tlv(der, 0)
+    # Unwrap tbsCertificate SEQUENCE
+    _, tbs, _ = read_tlv(cert_seq, 0)
+
+    pos = 0
+    # Skip: [0] version (optional context tag 0xa0), serialNumber, signature, issuer, validity
+    for _ in range(5):
+        tag, val, pos = read_tlv(tbs, pos)
+        if tag == 0xa0:  # version is optional explicit context [0]
+            tag, val, pos = read_tlv(tbs, pos)  # serialNumber
+            tag, val, pos = read_tlv(tbs, pos)  # signature
+            tag, val, pos = read_tlv(tbs, pos)  # issuer
+            tag, val, pos = read_tlv(tbs, pos)  # validity
+            break
+
+    # Next TLV is subject — we want the raw bytes INCLUDING the tag+length
+    subj_start = pos
+    tag, val, pos = read_tlv(tbs, pos)
+    return tbs[subj_start:pos]
+
+TSET_PLIST = (
+    b'<?xml version="1.0" encoding="UTF-8"?>\n'
+    b'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
+    b'"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+    b'<plist version="1.0">\n<array/>\n</plist>\n'
+)
+
+def inject_cert_into_truststore(db_path: str, der: bytes):
+    sha   = get_cert_sha256(der)
+    subj  = get_cert_subject_asn1(der)
+
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+
+    # Detect whether this TrustStore uses sha1 or sha256 column
+    row = c.execute("SELECT sql FROM sqlite_master WHERE name='tsettings'").fetchone()
+    if not row:
+        conn.close()
+        raise RuntimeError(f"No tsettings table in {db_path}")
+    hash_col = "sha256" if "sha256" in row[0] else "sha1"
+
+    existing = c.execute("SELECT COUNT(*) FROM tsettings WHERE subj=?",
+                         [sqlite3.Binary(subj)]).fetchone()[0]
+    if existing:
+        c.execute(f"UPDATE tsettings SET {hash_col}=?, tset=?, data=? WHERE subj=?",
+                  [sqlite3.Binary(sha), sqlite3.Binary(TSET_PLIST),
+                   sqlite3.Binary(der), sqlite3.Binary(subj)])
+    else:
+        c.execute(f"INSERT INTO tsettings ({hash_col}, subj, tset, data) VALUES (?,?,?,?)",
+                  [sqlite3.Binary(sha), sqlite3.Binary(subj),
+                   sqlite3.Binary(TSET_PLIST), sqlite3.Binary(der)])
+    conn.commit()
+    conn.close()
+
+def list_ios_simulators():
+    """Returns list of {udid, name, version, truststore_path} for booted simulators with a TrustStore."""
+    results = []
+    if not os.path.isdir(SIMULATOR_DIR):
+        return results
+    for udid in os.listdir(SIMULATOR_DIR):
+        device_dir = os.path.join(SIMULATOR_DIR, udid)
+        plist_path = os.path.join(device_dir, "device.plist")
+        if not os.path.isfile(plist_path):
+            continue
+        with open(plist_path, "rb") as f:
+            info = plistlib.load(f)
+        name    = info.get("name", udid)
+        runtime = info.get("runtime", "")
+        version = runtime.replace("com.apple.CoreSimulator.SimRuntime.", "").replace("-", ".")
+        for rel_path in TRUSTSTORE_PATHS:
+            ts = os.path.join(device_dir, rel_path.lstrip("/"))
+            if os.path.isfile(ts):
+                results.append({"udid": udid, "name": name, "version": version, "truststore": ts})
+                break
+    return results
+
+async def handle_list_ios_simulators(self, ws):
+    try:
+        sims = list_ios_simulators()
+        await ws.send(json.dumps({"type": "IOS_SIMULATORS", "simulators": sims}))
+    except Exception as e:
+        await ws.send(json.dumps({"type": "IOS_SIMULATORS", "simulators": [], "error": str(e)}))
+
+async def setup_ios_simulator(self, ws, udid: str, truststore_path: str):
+    async def update(step_id, status, msg=""):
+        await ws.send(json.dumps({
+            "type": "IOS_SIM_PROGRESS", "step": step_id,
+            "status": status, "message": msg, "udid": udid
+        }))
+
+    try:
+        await update("find_cert", "start")
+        cert_path = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.pem")
+        if not os.path.exists(cert_path):
+            await update("find_cert", "error", "Certificate not found. Start proxy first.")
+            return
+        der = get_cert_der(cert_path)
+        await update("find_cert", "success")
+
+        await update("inject_cert", "start")
+        await asyncio.get_running_loop().run_in_executor(
+            None, inject_cert_into_truststore, truststore_path, der
+        )
+        await update("inject_cert", "success")
+        await update("done", "success")
+
+    except Exception as e:
+        await update("inject_cert", "error", str(e))
+        
 # ============================================================================
 # 3. ASYNC RUNNERS (Background Threads)
 # ============================================================================
@@ -928,7 +1369,7 @@ if __name__ == "__main__":
     t = threading.Thread(target=run_async_loop, args=(bridge, ACTIVE_PROXY_PORT), daemon=True)
     t.start()
 
-    html_path = get_resource_path('ui/dist/index.html')
+    html_path = f"{get_resource_path('ui/dist/index.html')}?v={int(time.time())}"
     if os.name == 'nt':
         icon_path = get_resource_path('icon.ico')
     else:
@@ -959,6 +1400,6 @@ if __name__ == "__main__":
 
     webview.start(
         private_mode=False,
-        debug=True,
+        debug=False,
         icon=icon_path,
     )
