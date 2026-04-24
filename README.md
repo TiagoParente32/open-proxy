@@ -57,6 +57,7 @@ pip install -r requirements.txt
 ### 3. Run the App in Dev Mode
 Use the provided script to build the UI and launch the app in one command:
 ```bash
+chmod + ./run.sh
 ./run.sh
 ```
 
