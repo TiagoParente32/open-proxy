@@ -20,14 +20,79 @@ import {
     listIosSimulators,
     setupIosSimulator,
     revertIosSimulator,
+    wgEnabled,
+    wgPort,
+    wgStatus,
+    wgClientConf,
+    wgError,
+    toggleWgMode,
+    requestWgConf,
 } from '../store.js'
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, nextTick } from 'vue'
+import QRCode from 'qrcode'
 
 const selectedSerial = ref(null)
 const selectedUdid   = ref(null)
-const activeTab  = ref('devices')   // 'devices' | 'config'
-const activePane = ref('pick')      // 'pick' | 'progress' | 'revert'
+const activeTab  = ref('devices')
+const activePane = ref('pick')
 const copiedKey  = ref(null)
+
+// ── VPN / WireGuard local state ───────────────────────────────────────────────
+const qrCanvas   = ref(null)
+const localPort  = ref(51820)
+const wgCopied   = ref(false)
+
+const wgStatusLabel = computed(() => ({
+  disabled: { text: 'Off',       cls: 'pill-off'      },
+  starting: { text: 'Starting…', cls: 'pill-starting' },
+  ready:    { text: 'Active',    cls: 'pill-ready'    },
+  error:    { text: 'Error',     cls: 'pill-error'    },
+}[wgStatus.value] || { text: wgStatus.value, cls: '' }))
+
+// True whenever the VPN Mode content panel is visible to the user
+const isVpnVisible = computed(() =>
+  showDeviceSetupModal.value && (
+    deviceSetupType.value === 'vpn_mode' ||
+    ((deviceSetupType.value === 'android_device' || deviceSetupType.value === 'ios_device') && activeTab.value === 'vpn')
+  )
+)
+
+const onWgToggle = () => toggleWgMode(!wgEnabled.value, localPort.value)
+
+const copyWgConf = async () => {
+  if (!wgClientConf.value) return
+  try {
+    await navigator.clipboard.writeText(wgClientConf.value)
+    wgCopied.value = true
+    setTimeout(() => { wgCopied.value = false }, 2000)
+  } catch {}
+}
+
+// Render QR only when VPN panel is visible, WG is ready, and we have a config
+watch([isVpnVisible, wgClientConf, () => wgStatus.value], async () => {
+  if (!isVpnVisible.value || wgStatus.value !== 'ready' || !wgClientConf.value) return
+  await nextTick()
+  if (qrCanvas.value) {
+    try {
+      await QRCode.toCanvas(qrCanvas.value, wgClientConf.value, {
+        width: 200,
+        color: { dark: '#000000', light: '#ffffff' },
+        errorCorrectionLevel: 'M',
+      })
+    } catch (e) { console.error('[WG] QR failed:', e) }
+  }
+})
+
+// Request fresh config whenever VPN panel becomes visible and WG is enabled
+watch(isVpnVisible, (visible) => {
+  if (visible && wgEnabled.value) requestWgConf()
+})
+
+// Keep port input in sync if backend reports a different port while panel is open
+watch([isVpnVisible, wgPort], ([visible]) => {
+  if (visible) localPort.value = wgPort.value
+})
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ── Raw code strings ──────────────────────────────────────────────────────────
 const networkSecurityConfig = `<?xml version="1.0" encoding="utf-8"?>
@@ -102,15 +167,24 @@ const copyToClipboard = (text, key) => {
 }
 
 // ── Modal lifecycle ───────────────────────────────────────────────────────────
-watch(showDeviceSetupModal, (open) => {
+// Re-initialise modal state whenever it opens or the device type changes while open
+const initModal = ([open]) => {
     if (!open) return
     selectedSerial.value = null
     selectedUdid.value   = null
     activePane.value = 'pick'
-    activeTab.value  = 'devices'
-    if (deviceSetupType.value === 'android_emulator') listAdbDevices()
-    if (deviceSetupType.value === 'ios_simulator')    listIosSimulators()
-})
+    localPort.value  = wgPort.value
+    if (deviceSetupType.value === 'vpn_mode') {
+        activeTab.value = 'vpn'
+    } else if (deviceSetupType.value === 'android_device' || deviceSetupType.value === 'ios_device') {
+        activeTab.value = 'manual'
+    } else {
+        activeTab.value = 'devices'
+        if (deviceSetupType.value === 'android_emulator') listAdbDevices()
+        if (deviceSetupType.value === 'ios_simulator')    listIosSimulators()
+    }
+}
+watch([showDeviceSetupModal, deviceSetupType], initModal)
 
 // ── Android device actions ────────────────────────────────────────────────────
 const selectAndSetup = (device) => {
@@ -184,6 +258,7 @@ const modalTitle = () => {
     if (deviceSetupType.value === 'android_device')   return 'Android Device Setup'
     if (deviceSetupType.value === 'ios_simulator')    return 'iOS Simulator Setup'
     if (deviceSetupType.value === 'ios_device')       return 'iOS Physical Device Setup'
+    if (deviceSetupType.value === 'vpn_mode')         return 'VPN Mode'
     return 'Device Setup'
 }
 </script>
@@ -195,14 +270,19 @@ const modalTitle = () => {
       <!-- ── Header ──────────────────────────────────── -->
       <div class="modal-header">
         <div class="header-left">
-          <!-- Android robot icon -->
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.8">
+          <!-- VPN icon for vpn_mode, Android robot icon otherwise -->
+          <svg v-if="deviceSetupType === 'vpn_mode'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.8">
+            <rect x="3" y="11" width="18" height="11" rx="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.8">
             <rect x="5" y="11" width="14" height="10" rx="2"/>
             <path d="M9 11V7a3 3 0 0 1 6 0v4"/>
             <line x1="9" y1="15" x2="9" y2="17"/>
             <line x1="15" y1="15" x2="15" y2="17"/>
           </svg>
           <strong>{{ modalTitle() }}</strong>
+          <span v-if="deviceSetupType === 'vpn_mode'" class="wg-status-pill" :class="wgStatusLabel.cls">{{ wgStatusLabel.text }}</span>
         </div>
         <button class="close-btn" @click="showDeviceSetupModal = false">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -215,7 +295,6 @@ const modalTitle = () => {
       <div v-if="deviceSetupType === 'android_emulator' || deviceSetupType === 'ios_simulator'" class="tab-bar">
         <button class="tab-btn" :class="{ active: activeTab === 'devices' }"
                 @click="activeTab = 'devices'">
-          <!-- Phone icon -->
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="5" y="2" width="14" height="20" rx="2"/>
             <circle cx="12" cy="17" r="1" fill="currentColor"/>
@@ -224,7 +303,6 @@ const modalTitle = () => {
         </button>
         <button v-if="deviceSetupType === 'android_emulator'" class="tab-btn" :class="{ active: activeTab === 'config' }"
                 @click="activeTab = 'config'">
-          <!-- Code icon -->
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="16 18 22 12 16 6"/>
             <polyline points="8 6 2 12 8 18"/>
@@ -233,7 +311,6 @@ const modalTitle = () => {
         </button>
         <button class="tab-btn" :class="{ active: activeTab === 'manual' }"
                 @click="activeTab = 'manual'">
-          <!-- Book/list icon -->
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
             <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
@@ -242,10 +319,31 @@ const modalTitle = () => {
         </button>
       </div>
 
+      <!-- ── Tabs (android_device + ios_device): Manual Proxy | VPN Mode ──── -->
+      <div v-if="deviceSetupType === 'android_device' || deviceSetupType === 'ios_device'" class="tab-bar">
+        <button class="tab-btn" :class="{ active: activeTab === 'manual' }"
+                @click="activeTab = 'manual'">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          Manual Proxy
+        </button>
+        <button class="tab-btn" :class="{ active: activeTab === 'vpn' }"
+                @click="activeTab = 'vpn'">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          VPN Mode
+          <span v-if="wgEnabled && wgStatus === 'ready'" class="tab-vpn-dot" />
+        </button>
+      </div>
+
       <!-- ══════════════════════════════════════════════
-           DEVICES TAB
+           DEVICES TAB  (emulator / simulator)
       ══════════════════════════════════════════════ -->
-      <div v-if="(deviceSetupType !== 'android_emulator' && deviceSetupType !== 'ios_simulator') || activeTab === 'devices'"
+      <div v-if="(deviceSetupType === 'android_emulator' || deviceSetupType === 'ios_simulator') && activeTab === 'devices'"
            class="modal-body">
 
         <!-- Pick pane -->
@@ -514,47 +612,134 @@ const modalTitle = () => {
           </div>
         </template>
 
-        <!-- Manual instructions (physical Android / iOS device) -->
-        <template v-if="deviceSetupType === 'android_device' || deviceSetupType === 'ios_device'">
+      </div>
 
-          <div v-if="deviceSetupType === 'android_device'">
-            <ol class="instruction-list">
-              <li>Ensure your phone and computer are on the <strong>same Wi-Fi network</strong>.</li>
-              <li>Go to <strong>Settings › Wi-Fi</strong>, tap the gear next to your network, set <strong>Proxy</strong> to <strong>Manual</strong>.</li>
-              <li>
-                Enter your proxy details:
-                <div class="info-box">
-                  <div class="info-row"><span class="info-label">Hostname</span><code class="info-val">{{ proxyIP }}</code></div>
-                  <div class="info-row"><span class="info-label">Port</span><code class="info-val">{{ proxyPort }}</code></div>
-                </div>
-              </li>
-              <li>Open your browser and go to <code class="ic">http://mitm.it</code> to download the certificate.</li>
-              <li>Go to <strong>Settings › Security › Encryption &amp; Credentials › Install a certificate</strong>.</li>
-            </ol>
+      <!-- ══════════════════════════════════════════════
+           MANUAL PROXY TAB  (android_device / ios_device)
+      ══════════════════════════════════════════════ -->
+      <div v-if="(deviceSetupType === 'android_device' || deviceSetupType === 'ios_device') && activeTab === 'manual'"
+           class="modal-body">
+
+        <div v-if="deviceSetupType === 'android_device'">
+          <ol class="instruction-list">
+            <li>Ensure your phone and computer are on the <strong>same Wi-Fi network</strong>.</li>
+            <li>Go to <strong>Settings › Wi-Fi</strong>, tap the gear next to your network, set <strong>Proxy</strong> to <strong>Manual</strong>.</li>
+            <li>
+              Enter your proxy details:
+              <div class="info-box">
+                <div class="info-row"><span class="info-label">Hostname</span><code class="info-val">{{ proxyIP }}</code></div>
+                <div class="info-row"><span class="info-label">Port</span><code class="info-val">{{ proxyPort }}</code></div>
+              </div>
+            </li>
+            <li>Open your browser and go to <code class="ic">http://mitm.it</code> to download the certificate.</li>
+            <li>Go to <strong>Settings › Security › Encryption &amp; Credentials › Install a certificate</strong>.</li>
+          </ol>
+        </div>
+
+        <div v-if="deviceSetupType === 'ios_device'">
+          <ol class="instruction-list">
+            <li>Ensure your iPhone and computer are on the <strong>same Wi-Fi network</strong>.</li>
+            <li>Go to <strong>Settings › Wi-Fi › (i) › Configure Proxy › Manual</strong>.</li>
+            <li>
+              Enter your proxy details:
+              <div class="info-box">
+                <div class="info-row"><span class="info-label">Server</span><code class="info-val">{{ proxyIP }}</code></div>
+                <div class="info-row"><span class="info-label">Port</span><code class="info-val">{{ proxyPort }}</code></div>
+              </div>
+            </li>
+            <li>Open Safari and go to <code class="ic">http://mitm.it</code>.</li>
+            <li>Go to <strong>Settings › General › VPN &amp; Device Management</strong> and install the profile.</li>
+            <li><strong>Crucial:</strong> <strong>Settings › General › About › Certificate Trust Settings</strong> — toggle mitmproxy <strong>ON</strong>.</li>
+          </ol>
+          <div class="alert warning" style="margin-top:14px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Skipping Step 6 causes SSL errors on all HTTPS traffic.
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ══════════════════════════════════════════════
+           VPN MODE TAB  (physical devices + toolbar shortcut)
+      ══════════════════════════════════════════════ -->
+      <div v-if="isVpnVisible" class="modal-body wg-body">
+
+        <!-- Toggle row -->
+        <div class="wg-toggle-row">
+          <div class="wg-toggle-info">
+            <span class="wg-toggle-title">WireGuard VPN Mode</span>
+            <span class="wg-toggle-sub">Intercept traffic without manual proxy setup</span>
+          </div>
+          <button class="wg-toggle-btn" :class="{ active: wgEnabled, loading: wgStatus === 'starting' }"
+          :disabled="wgStatus === 'starting'" @click="onWgToggle">
+            <span class="wg-toggle-track">
+              <span class="wg-toggle-thumb" />
+            </span>
+            <span class="wg-toggle-label">{{ wgEnabled ? 'On' : 'Off' }}</span>
+          </button>
+        </div>
+
+        <!-- Port input (only when disabled) -->
+        <div v-if="!wgEnabled" class="wg-port-row">
+          <label class="wg-port-label">WireGuard Port</label>
+          <input class="wg-port-input" type="number" v-model.number="localPort"
+                 min="1024" max="65535" placeholder="51820"
+                 @change="wgPort.value = localPort" />
+        </div>
+
+        <!-- Error -->
+        <div v-if="wgError" class="alert error">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          {{ wgError }}
+        </div>
+
+        <!-- Starting spinner -->
+        <div v-if="wgStatus === 'starting'" class="wg-starting">
+          <svg class="spinning" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+          </svg>
+          <span>Starting WireGuard…</span>
+        </div>
+
+        <!-- QR + config (ready state) -->
+        <template v-if="wgEnabled && wgStatus === 'ready' && wgClientConf">
+          <div class="wg-qr-section">
+            <canvas ref="qrCanvas" class="wg-qr-canvas" />
+            <div class="wg-qr-hint">Scan with the WireGuard app to connect</div>
           </div>
 
-          <div v-if="deviceSetupType === 'ios_device'">
-            <ol class="instruction-list">
-              <li>Ensure your iPhone and computer are on the <strong>same Wi-Fi network</strong>.</li>
-              <li>Go to <strong>Settings › Wi-Fi › (i) › Configure Proxy › Manual</strong>.</li>
-              <li>
-                Enter your proxy details:
-                <div class="info-box">
-                  <div class="info-row"><span class="info-label">Server</span><code class="info-val">{{ proxyIP }}</code></div>
-                  <div class="info-row"><span class="info-label">Port</span><code class="info-val">{{ proxyPort }}</code></div>
-                </div>
-              </li>
-              <li>Open Safari and go to <code class="ic">http://mitm.it</code>.</li>
-              <li>Go to <strong>Settings › General › VPN &amp; Device Management</strong> and install the profile.</li>
-              <li><strong>Crucial:</strong> <strong>Settings › General › About › Certificate Trust Settings</strong> — toggle mitmproxy <strong>ON</strong>.</li>
-            </ol>
-            <div class="alert warning" style="margin-top:14px">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-              Skipping Step 6 causes SSL errors on all HTTPS traffic.
-            </div>
+          <div class="wg-conf-header">
+            <span>wireguard.conf</span>
+            <button class="copy-btn" :class="{ copied: wgCopied }" @click="copyWgConf">
+              <svg v-if="!wgCopied" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <rect x="9" y="9" width="13" height="13" rx="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              {{ wgCopied ? 'Copied!' : 'Copy' }}
+            </button>
           </div>
+          <pre class="wg-conf-pre">{{ wgClientConf }}</pre>
 
+          <ol class="instruction-list" style="margin-top:16px">
+            <li>Install the <strong>WireGuard</strong> app on your device.</li>
+            <li>Tap <strong>+</strong> → <strong>Create from QR code</strong> and scan above, <em>or</em> import the config file.</li>
+            <li>Activate the tunnel — all traffic will route through this proxy.</li>
+          </ol>
         </template>
+
+        <!-- Info box -->
+        <div class="alert info" style="margin-top:16px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <span>VPN Mode intercepts <strong>all</strong> device traffic — no manual proxy configuration needed per app.</span>
+        </div>
+
       </div>
 
       <!-- ══════════════════════════════════════════════
@@ -1030,4 +1215,96 @@ const modalTitle = () => {
 /* ── Spinner ──────────────────────────────────────── */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinning { animation: spin 0.8s linear infinite; }
+
+/* ── VPN Mode / WireGuard ─────────────────────────── */
+.wg-body { gap: 12px; }
+
+.wg-status-pill {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 2px 7px; border-radius: 10px; margin-left: 8px;
+}
+.wg-status-pill.pill-ready   { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.25); }
+.wg-status-pill.pill-starting { background: rgba(96,165,250,0.12); color: #60a5fa; border: 1px solid rgba(96,165,250,0.25); }
+.wg-status-pill.pill-off     { background: rgba(100,110,115,0.12); color: #6b7280; border: 1px solid #2a2d30; }
+.wg-status-pill.pill-error   { background: rgba(248,113,113,0.12); color: #f87171; border: 1px solid rgba(248,113,113,0.25); }
+
+.tab-vpn-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: #34d399; margin-left: 5px; flex-shrink: 0;
+}
+
+.wg-toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(255,255,255,0.025); border: 1px solid #1e2124;
+  border-radius: 7px; padding: 10px 13px;
+}
+.wg-toggle-info { display: flex; flex-direction: column; gap: 2px; }
+.wg-toggle-title { font-size: 13px; font-weight: 600; color: #d0d4d8; }
+.wg-toggle-sub   { font-size: 11px; color: #5a6068; }
+
+.wg-toggle-btn {
+  display: flex; align-items: center; gap: 7px;
+  background: none; border: none; cursor: pointer; padding: 0;
+}
+.wg-toggle-btn:disabled { opacity: 0.5; cursor: default; }
+.wg-toggle-track {
+  width: 34px; height: 18px; border-radius: 9px;
+  background: #2a2d30; border: 1px solid #333638;
+  position: relative; transition: background 0.2s;
+  display: flex; align-items: center; padding: 2px;
+}
+.wg-toggle-btn.active .wg-toggle-track  { background: #2a5c44; border-color: #34d399; }
+.wg-toggle-btn.loading .wg-toggle-track { background: #1e3357; border-color: #60a5fa; }
+.wg-toggle-thumb {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #555; transition: transform 0.2s, background 0.2s;
+}
+.wg-toggle-btn.active  .wg-toggle-thumb { transform: translateX(16px); background: #34d399; }
+.wg-toggle-btn.loading .wg-toggle-thumb { transform: translateX(8px);  background: #60a5fa; }
+.wg-toggle-label { font-size: 12px; color: #777; min-width: 22px; }
+.wg-toggle-btn.active .wg-toggle-label { color: #34d399; }
+
+.wg-port-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 13px; background: rgba(255,255,255,0.02);
+  border: 1px solid #1e2124; border-radius: 7px;
+}
+.wg-port-label { font-size: 12px; color: #6b7280; flex: 1; }
+.wg-port-input {
+  width: 80px; background: #1a1c1e; border: 1px solid #2e3133;
+  color: #ccc; font-size: 12px; padding: 4px 8px; border-radius: 5px;
+  text-align: center;
+}
+.wg-port-input:focus { outline: none; border-color: #3d4147; }
+
+.wg-starting {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 13px; color: #60a5fa; padding: 8px 0;
+}
+
+.wg-qr-section {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 16px; background: rgba(255,255,255,0.025); border: 1px solid #1e2124; border-radius: 8px;
+}
+.wg-qr-canvas { width: 180px; height: 180px; image-rendering: pixelated; }
+.wg-qr-hint   { font-size: 11px; color: #5a6068; }
+
+.wg-conf-header {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; color: #6b7280; font-family: monospace;
+  padding: 0 2px;
+}
+.wg-conf-pre {
+  background: #0f1011; border: 1px solid #1e2124; border-radius: 6px;
+  padding: 10px 12px; font-size: 11px; color: #a0c4a8; font-family: monospace;
+  white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow-y: auto;
+  margin: 0;
+}
+
+/* ── Alert variants ───────────────────────────────── */
+.alert.info {
+  background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.2); color: #93c5fd;
+}
+
 </style>

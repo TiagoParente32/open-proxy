@@ -16,6 +16,9 @@ import {
   showDeviceSetupModal,
   deviceSetupType,
   openComposeNew,
+  openVpnMode,
+  wgEnabled,
+  wgStatus,
 } from '../store.js'
 
 // Add the state for the new dropdown
@@ -95,6 +98,14 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 
     <div class="toolbar-group right">
       
+      <button
+        class="secondary-pill"
+        :class="{ 'wg-active': wgEnabled && wgStatus === 'ready', 'wg-loading': wgStatus === 'starting' }"
+        @click="openVpnMode()"
+        title="VPN Mode — connect without proxy setup"
+      >
+        🔒 VPN Mode
+      </button>
       <button class="secondary-pill" @click="showBreakpointModal = true" title="Manage Breakpoints">
         Breakpoints
       </button>
@@ -260,6 +271,21 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 }
 .secondary-pill:active {
   background: #1a1c1d;
+}
+
+.secondary-pill.wg-active {
+  border-color: rgba(16,185,129,.5);
+  color: #34d399;
+  background: rgba(16,185,129,.08);
+}
+.secondary-pill.wg-loading {
+  border-color: rgba(251,191,36,.4);
+  color: #fbbf24;
+  animation: wg-pulse 1s ease-in-out infinite;
+}
+@keyframes wg-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
 }
 
 /* --- Center: Sleek App Badge --- */

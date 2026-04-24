@@ -14,10 +14,12 @@ const toggleFolder = (ip) => {
 }
 
 const selectDevice = (ip) => {
+  isFocusMode.value = false
   activeFilter.value = { type: 'device', ip: ip }
 }
 
 const selectDomain = (ip, domain) => {
+  isFocusMode.value = false
   activeFilter.value = { type: 'device_domain', ip: ip, domain: domain }
 }
 
@@ -44,7 +46,7 @@ const removePinnedSource = (source, event) => {
 
 <template>
   <div class="sidebar">
-    <div class="focus-mode-wrapper" @click="isFocusMode = !isFocusMode" :class="{ 'focus-on': isFocusMode }">
+    <div class="focus-mode-wrapper" @click="isFocusMode = !isFocusMode; if (isFocusMode) activeFilter = { type: 'all' }" :class="{ 'focus-on': isFocusMode }">
       <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle>
       </svg>
@@ -75,7 +77,7 @@ const removePinnedSource = (source, event) => {
       <div v-for="source in pinnedSources" :key="source" 
            class="tree-item pin-item" 
            :class="{ 'active': activeFilter.type === 'pinned' && activeFilter.domain === source }" 
-           @click="activeFilter = { type: 'pinned', domain: source }">
+           @click="isFocusMode = false; activeFilter = { type: 'pinned', domain: source }">
         <svg class="ui-icon outline-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle>
         </svg>

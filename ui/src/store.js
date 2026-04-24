@@ -171,6 +171,19 @@ export const composeData = ref(null)
 export const showDeviceSetupModal = ref(false)
 export const deviceSetupType = ref('emulator')
 
+// WireGuard / VPN mode
+export const wgEnabled = ref(false)
+export const wgPort = ref(51820)
+export const wgStatus = ref('disabled')   // 'disabled' | 'starting' | 'ready' | 'error'
+export const wgClientConf = ref('')
+export const wgError = ref('')
+
+// Opens DeviceSetupModal directly on the VPN Mode view
+export const openVpnMode = () => {
+    deviceSetupType.value = 'vpn_mode'
+    showDeviceSetupModal.value = true
+}
+
 // ---- NEW: ADB device state ----
 // List of { serial, model, type, state } objects returned by the backend
 export const adbDevices = ref([])
@@ -638,6 +651,18 @@ watch(disableCache, (newVal) => {
 let reconnectTimeout = null;
 let reconnectDelay = 1000;
 
+export const toggleWgMode = (enabled, port) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    wgEnabled.value = enabled
+    wgStatus.value = 'starting'
+    wsConnection.send(JSON.stringify({ type: "TOGGLE_WG_MODE", enabled, port: port || wgPort.value }))
+}
+
+export const requestWgConf = () => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    wsConnection.send(JSON.stringify({ type: "GET_WG_CLIENT_CONF" }))
+}
+
 export const initWebSocket = () => {
     if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
@@ -658,6 +683,7 @@ export const initWebSocket = () => {
         wsConnection.send(JSON.stringify({ type: "TOGGLE_MAP_REMOTE", enabled: enableMapRemote.value }))
         wsConnection.send(JSON.stringify({ type: "TOGGLE_BREAKPOINTS", enabled: breakpointsEnabled.value }))
         wsConnection.send(JSON.stringify({ type: "TOGGLE_CACHE", disable_cache: disableCache.value }))
+        if (wgEnabled.value) requestWgConf()
     }
 
     wsConnection.onmessage = (event) => {
@@ -863,6 +889,15 @@ export const initWebSocket = () => {
             parentReq.has_ws = true;
             parentReq.ws_count = wsMessages.value[reqId].length;
             requests.value = [...requests.value];
+        }
+        else if (payload.type === 'WG_STATUS') {
+            const d = payload.data
+            wgStatus.value = d.status
+            wgEnabled.value = d.enabled ?? wgEnabled.value
+            if (d.config) wgClientConf.value = d.config
+            else if (d.status === 'disabled' || d.status === 'error') wgClientConf.value = ''
+            if (d.port) wgPort.value = d.port
+            wgError.value = d.error || ''
         }
     }
 

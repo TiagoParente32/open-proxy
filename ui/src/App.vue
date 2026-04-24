@@ -35,12 +35,37 @@ import {
   openComposeModal,
   showMapRemoteModal,
   mapRemoteRules,
-  selectedMapRemoteId
+  selectedMapRemoteId,
+  toggleRecording,
+  requests,
+  wsMessages,
+  openComposeNew,
+  openVpnMode,
+  showHighlightModal,
+  deviceSetupType,
+  showDeviceSetupModal,
+  throttleProfile,
+  disableCache,
 } from './store.js'
 
 onMounted(() => {
   initWebSocket()
   document.addEventListener('click', closeContextMenu)
+
+  // Native app menu bridge — Python calls window.__op.xxx() via evaluate_js
+  window.__op = {
+    toggleRecording:  () => toggleRecording(),
+    clearTraffic:     () => { requests.value.length = 0; wsMessages.value = {} },
+    openComposeNew:   () => openComposeNew(),
+    openVpnMode:      () => openVpnMode(),
+    openBreakpoints:  () => { showBreakpointModal.value = true },
+    openMapLocal:     () => { showMapModal.value = true },
+    openMapRemote:    () => { showMapRemoteModal.value = true },
+    openHighlight:    () => { showHighlightModal.value = true },
+    openCertSetup:    (type) => { deviceSetupType.value = type; showDeviceSetupModal.value = true },
+    setThrottle:      (profile) => { throttleProfile.value = profile },
+    bustCache:        () => { disableCache.value = !disableCache.value },
+  }
 })
 
 onUnmounted(() => {

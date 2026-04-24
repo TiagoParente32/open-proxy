@@ -14,9 +14,14 @@ import hashlib
 import urllib.request
 import websockets
 import webview
+from webview.menu import Menu, MenuAction, MenuSeparator
 import psutil
+import pystray
+import mitmproxy_rs
+from PIL import Image
 from mitmproxy import http, options
 from mitmproxy.tools.dump import DumpMaster
+from mitmproxy.proxy.mode_servers import WireGuardServerInstance
 
 # ============================================================================
 # 1. NETWORK & SYSTEM HELPERS
@@ -394,6 +399,53 @@ class ProxyUIBridge:
         self.breakpoints_enabled = True
         self.breakpoint_rules = []
         self.paused_flows = {}
+
+        # WireGuard mode
+        self.wg_enabled = False
+        self.wg_port = 51820
+        self._master = None     # set by run_proxy_forever; used for WG restart + inject
+        self._last_startup_error = ""   # captured from mitmproxy's log on startup failure
+
+    def add_log(self, entry) -> None:
+        """Capture mitmproxy ERROR log entries so we can surface them in the UI."""
+        if getattr(entry, 'level', None) == "error":
+            self._last_startup_error = getattr(entry, 'msg', str(entry))
+
+    def _get_wg_client_conf(self) -> str | None:
+        """Get the WireGuard client config from the live running server instance."""
+        if not self._master:
+            return None
+        try:
+            ps = self._master.addons.get("proxyserver")
+            if not ps:
+                return None
+            for server in ps.servers:
+                if isinstance(server, WireGuardServerInstance):
+                    return server.client_conf()
+        except Exception as e:
+            print(f"[WG] Failed to get client conf: {e}")
+        return None
+
+    async def running(self):
+        """Called by mitmproxy after it has fully started. Broadcast WG status to UI."""
+        if not self.wg_enabled:
+            return
+        # Small delay to let WireGuard server finish binding
+        await asyncio.sleep(0.3)
+        conf = self._get_wg_client_conf()
+        if conf:
+            await self.broadcast_to_ui("WG_STATUS", {
+                "status": "ready",
+                "enabled": True,
+                "port": self.wg_port,
+                "config": conf,
+            })
+        else:
+            await self.broadcast_to_ui("WG_STATUS", {
+                "status": "error",
+                "enabled": True,
+                "error": "WireGuard started but could not retrieve client config.",
+            })
 
     async def request(self, flow: http.HTTPFlow):
         if not self.is_recording:
@@ -1156,6 +1208,78 @@ class ProxyUIBridge:
                                 flow.response.text = mod_data.get("body", "")
 
                         flow_dict["event"].set()
+
+                elif payload.get("type") == "TOGGLE_WG_MODE":
+                    self.wg_enabled = payload.get("enabled", False)
+                    port = payload.get("port")
+                    if port:
+                        self.wg_port = int(port)
+
+                    if not self._master:
+                        self.wg_enabled = False
+                        await websocket.send(json.dumps({
+                            "type": "WG_STATUS",
+                            "data": {"status": "error", "enabled": False,
+                                     "error": "Proxy is not running."},
+                        }))
+                    elif self.wg_enabled:
+                        # Dynamically add WireGuard - no restart, port 9090 stays bound
+                        await websocket.send(json.dumps({
+                            "type": "WG_STATUS",
+                            "data": {"status": "starting", "enabled": True},
+                        }))
+                        self._master.options.update(
+                            mode=["regular", f"wireguard@{self.wg_port}"]
+                        )
+                        # Poll until the WireGuard server is live (up to 5s)
+                        conf = None
+                        for _ in range(20):
+                            await asyncio.sleep(0.25)
+                            conf = self._get_wg_client_conf()
+                            if conf or not self._master:
+                                break
+                        if conf:
+                            await self.broadcast_to_ui("WG_STATUS", {
+                                "status": "ready", "enabled": True,
+                                "port": self.wg_port, "config": conf,
+                            })
+                        elif self._master:
+                            # Still running but WG didn't come up in time
+                            self.wg_enabled = False
+                            await self.broadcast_to_ui("WG_STATUS", {
+                                "status": "error", "enabled": False,
+                                "error": self._last_startup_error or "WireGuard timed out.",
+                            })
+                        # else: master crashed - SystemExit handler broadcasts the error
+                    else:
+                        # Dynamically remove WireGuard - no restart needed
+                        self._master.options.update(mode=["regular"])
+                        await self.broadcast_to_ui("WG_STATUS", {
+                            "status": "disabled", "enabled": False,
+                        })
+
+                elif payload.get("type") == "GET_WG_CLIENT_CONF":
+                    conf = self._get_wg_client_conf()
+                    if conf:
+                        await websocket.send(json.dumps({
+                            "type": "WG_STATUS",
+                            "data": {
+                                "status": "ready",
+                                "enabled": self.wg_enabled,
+                                "port": self.wg_port,
+                                "config": conf,
+                            },
+                        }))
+                    else:
+                        await websocket.send(json.dumps({
+                            "type": "WG_STATUS",
+                            "data": {
+                                "status": "error" if self.wg_enabled else "disabled",
+                                "enabled": self.wg_enabled,
+                                "error": "WireGuard server is not running." if self.wg_enabled else "",
+                            },
+                        }))
+
         finally:
             self.connected_clients.remove(websocket)
 # ============================================================================
@@ -1246,27 +1370,14 @@ def inject_cert_into_truststore(db_path: str, der: bytes):
     conn.commit()
     conn.close()
 
-def list_ios_simulators():
-    """Returns list of {udid, name, version, truststore_path} for booted simulators with a TrustStore."""
-    results = []
-    if not os.path.isdir(SIMULATOR_DIR):
-        return results
-    for udid in os.listdir(SIMULATOR_DIR):
-        device_dir = os.path.join(SIMULATOR_DIR, udid)
-        plist_path = os.path.join(device_dir, "device.plist")
-        if not os.path.isfile(plist_path):
-            continue
-        with open(plist_path, "rb") as f:
-            info = plistlib.load(f)
-        name    = info.get("name", udid)
-        runtime = info.get("runtime", "")
-        version = runtime.replace("com.apple.CoreSimulator.SimRuntime.", "").replace("-", ".")
-        for rel_path in TRUSTSTORE_PATHS:
-            ts = os.path.join(device_dir, rel_path.lstrip("/"))
-            if os.path.isfile(ts):
-                results.append({"udid": udid, "name": name, "version": version, "truststore": ts})
-                break
-    return results
+def _find_truststore_path(udid: str):
+    """Returns the TrustStore.sqlite3 path for the given simulator UDID, or None if not found."""
+    device_dir = os.path.join(SIMULATOR_DIR, udid)
+    for rel_path in TRUSTSTORE_PATHS:
+        ts = os.path.join(device_dir, rel_path.lstrip("/"))
+        if os.path.isfile(ts):
+            return ts
+    return None
 
 async def handle_list_ios_simulators(self, ws):
     try:
@@ -1275,7 +1386,7 @@ async def handle_list_ios_simulators(self, ws):
     except Exception as e:
         await ws.send(json.dumps({"type": "IOS_SIMULATORS", "simulators": [], "error": str(e)}))
 
-async def setup_ios_simulator(self, ws, udid: str, truststore_path: str):
+async def setup_ios_simulator(self, ws, udid: str):
     async def update(step_id, status, msg=""):
         await ws.send(json.dumps({
             "type": "IOS_SIM_PROGRESS", "step": step_id,
@@ -1292,6 +1403,11 @@ async def setup_ios_simulator(self, ws, udid: str, truststore_path: str):
         await update("find_cert", "success")
 
         await update("inject_cert", "start")
+        truststore_path = _find_truststore_path(udid)
+        if not truststore_path:
+            await update("inject_cert", "error",
+                "TrustStore not found. Ensure the simulator is booted and has been used at least once.")
+            return
         await asyncio.get_running_loop().run_in_executor(
             None, inject_cert_into_truststore, truststore_path, der
         )
@@ -1307,23 +1423,53 @@ async def setup_ios_simulator(self, ws, udid: str, truststore_path: str):
 async def run_proxy_forever(bridge, proxy_port):
     """Keeps Mitmproxy alive. If it crashes due to a network drop, it re-initializes."""
     while True:
+        bridge._last_startup_error = ""
         try:
-            print(f"[INFO] Starting Mitmproxy on port {proxy_port}...")
-            opts = options.Options(listen_host='0.0.0.0', listen_port=proxy_port)
+            modes = ["regular"]
+            if bridge.wg_enabled:
+                modes.append(f"wireguard@{bridge.wg_port}")
+            print(f"[INFO] Starting Mitmproxy on port {proxy_port}, modes={modes}...")
+            opts = options.Options(listen_host='', listen_port=proxy_port)
+            opts.update(mode=modes)
             master = DumpMaster(opts, with_termlog=False, with_dumper=False)
             master.addons.add(bridge)
+            bridge._master = master
             await master.run()
         except asyncio.CancelledError:
             break
+        except SystemExit:
+            # mitmproxy's errorcheck addon calls sys.exit(1) when a startup error is logged.
+            # Catch it so the while loop can restart the proxy cleanly.
+            detail = bridge._last_startup_error or "Unknown startup error."
+            print(f"[ERROR] Mitmproxy startup failed: {detail}")
+            if bridge.wg_enabled:
+                bridge.wg_enabled = False
+                try:
+                    await bridge.broadcast_to_ui("WG_STATUS", {
+                        "status": "error", "enabled": False,
+                        "error": f"WireGuard failed to start: {detail}",
+                    })
+                except Exception:
+                    pass
+            await asyncio.sleep(3)
         except Exception as e:
-            print(f"[ERROR] Mitmproxy crashed: {e}. Restarting in 3 seconds...")
+            err = str(e)
+            print(f"[ERROR] Mitmproxy crashed: {err}. Restarting in 3 seconds...")
+            if bridge.wg_enabled:
+                bridge.wg_enabled = False
+                await bridge.broadcast_to_ui("WG_STATUS", {
+                    "status": "error", "enabled": False,
+                    "error": f"WireGuard crashed: {err}",
+                })
             await asyncio.sleep(3)
         finally:
+            bridge._master = None
             if 'master' in locals():
                 try:
                     master.shutdown()
                 except Exception:
                     pass
+            await asyncio.sleep(1.5)
 
 async def run_ws_forever(bridge):
     """Keeps the WebSocket server alive with Ping/Pong to detect dead sockets."""
@@ -1360,6 +1506,47 @@ def run_async_loop(bridge, proxy_port):
         print(f"[FATAL] Supervisor died: {e}")
 
 
+def _build_menu(window):
+    """Build the native app menu. Callbacks call into the Vue store via evaluate_js."""
+    def js(code):
+        try:
+            window.evaluate_js(f'window.__op && window.__op.{code}')
+        except Exception as e:
+            print(f'[MENU] JS error: {e}')
+
+    return [
+        Menu('Proxy', [
+            MenuAction('Record / Pause',     lambda: js('toggleRecording()')),
+            MenuAction('Compose Request',    lambda: js('openComposeNew()')),
+            MenuAction('Clear Traffic',      lambda: js('clearTraffic()')),
+            MenuSeparator(),
+            MenuAction('Bust Cache',         lambda: js('bustCache()')),
+        ]),
+        Menu('Tools', [
+            MenuAction('VPN Mode',           lambda: js('openVpnMode()')),
+            MenuAction('Breakpoints',        lambda: js('openBreakpoints()')),
+            MenuSeparator(),
+            MenuAction('Map Local',          lambda: js('openMapLocal()')),
+            MenuAction('Map Remote',         lambda: js('openMapRemote()')),
+            MenuAction('Highlight',          lambda: js('openHighlight()')),
+            MenuSeparator(),
+            Menu('Certificate Setup', [
+                MenuAction('Android Emulator', lambda: js("openCertSetup('android_emulator')")),
+                MenuAction('Android Device',   lambda: js("openCertSetup('android_device')")),
+                MenuSeparator(),
+                MenuAction('iOS Simulator',    lambda: js("openCertSetup('ios_simulator')")),
+                MenuAction('iOS Device',       lambda: js("openCertSetup('ios_device')")),
+            ]),
+            MenuSeparator(),
+            Menu('Throttle', [
+                MenuAction('No Throttling',  lambda: js("setThrottle('None')")),
+                MenuAction('Fast 3G',        lambda: js("setThrottle('Fast 3G')")),
+                MenuAction('Slow 3G',        lambda: js("setThrottle('Slow 3G')")),
+            ]),
+        ]),
+    ]
+
+
 if __name__ == "__main__":
     ACTIVE_PROXY_PORT = get_free_port(9090)
     print(f"Starting OpenProxy on port {ACTIVE_PROXY_PORT}")
@@ -1392,14 +1579,65 @@ if __name__ == "__main__":
 
     window.events.loaded += on_loaded
 
-    def on_closed():
-        print("[INFO] UI window closed. Terminating OpenProxy...")
+    def on_closing():
+        """Hide to tray instead of quitting when the close button is pressed."""
+        window.hide()
+        return False  # cancel the default close
+
+    window.events.closing += on_closing
+
+    # ── System tray icon ──────────────────────────────────────────────────────
+    try:
+        tray_img = Image.open(icon_path).resize((64, 64), Image.LANCZOS)
+    except Exception:
+        tray_img = Image.new("RGBA", (64, 64), (59, 130, 246, 255))
+
+    def tray_show(icon, item):
+        window.show()
+
+    def tray_quit(icon, item):
+        icon.stop()
         os._exit(0)
 
-    window.events.closed += on_closed
+    tray_menu = pystray.Menu(
+        pystray.MenuItem("Open OpenProxy", tray_show, default=True),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem(f"Proxy  :{ACTIVE_PROXY_PORT}", None, enabled=False),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("Quit", tray_quit),
+    )
+    tray = pystray.Icon("OpenProxy", tray_img, "OpenProxy", tray_menu)
+    tray.run_detached()
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # macOS: clicking the dock icon while the window is hidden should reopen it.
+    # pywebview's AppDelegate doesn't implement applicationShouldHandleReopen,
+    # so we inject it before webview.start() launches the Cocoa run loop.
+    if sys.platform == "darwin":
+        try:
+            import objc
+            from webview.platforms.cocoa import BrowserView
+
+            def _reopen(self, sender, has_visible_windows):
+                if not has_visible_windows:
+                    window.show()
+                return True
+
+            objc.classAddMethod(
+                BrowserView.AppDelegate,
+                b"applicationShouldHandleReopen:hasVisibleWindows:",
+                _reopen,
+            )
+        except Exception as e:
+            print(f"[WARN] Could not install dock-reopen handler: {e}")
 
     webview.start(
         private_mode=False,
         debug=False,
         icon=icon_path,
+        menu=_build_menu(window),
     )
+
+    # When webview.start() returns (app quit normally), stop the tray too
+    tray.stop()
+    os._exit(0)
