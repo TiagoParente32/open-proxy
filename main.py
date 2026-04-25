@@ -78,11 +78,36 @@ def get_executable_path(base_name):
 
 
 def get_local_ip():
-    """Iterates through network interfaces to find the true physical LAN IP."""
+    """Return the best LAN IP for the host.
+
+    First try a UDP 'connect' to a public IP to discover the outbound interface IP
+    (works even without network I/O). If that fails, fall back to scanning
+    interfaces but ignore common virtual/host-only adapters.
+    """
+    # Fast, reliable method: inspect the local address used when connecting to a public host
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        if ip and not ip.startswith('127.') and not ip.startswith('169.254.'):
+            return ip
+    except Exception:
+        pass
+    finally:
+        try:
+            s.close()
+        except Exception:
+            pass
+
+    # Fallback: examine interfaces but prefer non-virtual adapters
     try:
         interfaces = psutil.net_if_addrs()
 
         for interface_name, interface_addresses in interfaces.items():
+            lname = interface_name.lower()
+            # Skip obvious virtual/host-only interfaces
+            if any(v in lname for v in ['vbox', 'virtual', 'vmnet', 'host-only', 'virtualbox', 'hyper-v']):
+                continue
             for address in interface_addresses:
                 if address.family == socket.AF_INET:
                     ip = address.address
@@ -100,16 +125,7 @@ def get_local_ip():
     except Exception as e:
         print(f"[WARNING] psutil failed: {e}")
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(('8.8.8.8', 80))
-        ip = s.getsockname()[0]
-    except Exception:
-        ip = '127.0.0.1'
-    finally:
-        s.close()
-
-    return ip
+    return '127.0.0.1'
 
 def get_free_port(preferred_port=9090):
     """
