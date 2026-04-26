@@ -140,6 +140,10 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
           
           <div class="dropdown-item" @click="openDeviceSetup('ios_simulator')">iOS Simulator</div>
           <div class="dropdown-item" @click="openDeviceSetup('ios_device')">iOS Device</div>
+          
+          <div style="height: 1px; background: #333; margin: 4px 0;"></div>
+          
+          <div class="dropdown-item" @click="openDeviceSetup('browser')">Browser / Desktop</div>
         </div>
       </div>
 

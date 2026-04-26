@@ -1552,6 +1552,8 @@ def _build_menu(window):
                 MenuSeparator(),
                 MenuAction('iOS Simulator',    lambda: js("openCertSetup('ios_simulator')")),
                 MenuAction('iOS Device',       lambda: js("openCertSetup('ios_device')")),
+                MenuSeparator(),
+                MenuAction('Browser / Desktop', lambda: js("openCertSetup('browser')")),
             ]),
             MenuSeparator(),
             Menu('Throttle', [

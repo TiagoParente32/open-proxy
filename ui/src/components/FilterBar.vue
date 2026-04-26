@@ -4,7 +4,7 @@ import { activeChips } from '../store.js'
 const protocols = ['All', 'HTTP', 'HTTPS', 'WS']
 const types = ['All', 'JSON', 'Form', 'XML', 'JS', 'CSS', 'GraphQL', 'Document', 'Media']
 const statuses = ['All', '1xx', '2xx', '3xx', '4xx', '5xx']
-const colors = ['All', 'red', 'yellow', 'green', 'blue'] // <-- NEW: Color array
+const colors = ['All', 'red', 'orange', 'yellow', 'green', 'blue', 'purple']
 
 const setChip = (category, value) => {
   activeChips.value[category] = value;
@@ -67,9 +67,10 @@ const setChip = (category, value) => {
         v-for="c in colors" :key="c" 
         class="chip" :class="{ active: activeChips.color === c }"
         @click="setChip('color', c)"
+        :title="c === 'All' ? 'All Colors' : c.charAt(0).toUpperCase() + c.slice(1)"
       >
-        <span v-if="c !== 'All'" class="color-indicator" :class="c"></span>
-        {{ c === 'All' ? 'All Colors' : c.charAt(0).toUpperCase() + c.slice(1) }}
+        <span v-if="c === 'All'">All Colors</span>
+        <span v-else class="color-indicator" :class="c"></span>
       </button>
     </div>
   </div>
@@ -135,13 +136,16 @@ const setChip = (category, value) => {
 /* --- Tiny Color Indicators inside the buttons --- */
 .color-indicator {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  margin-right: 6px;
 }
-.color-indicator.red { background: #ef4444; }
+/* Color-only chips are icon-only, so reduce padding */
+.chip:has(.color-indicator) { padding: 2px 6px; }
+.color-indicator.red    { background: #ef4444; }
+.color-indicator.orange { background: #f97316; }
 .color-indicator.yellow { background: #f59e0b; }
-.color-indicator.green { background: #10b981; }
-.color-indicator.blue { background: #3b82f6; }
+.color-indicator.green  { background: #10b981; }
+.color-indicator.blue   { background: #3b82f6; }
+.color-indicator.purple { background: #8b5cf6; }
 </style>

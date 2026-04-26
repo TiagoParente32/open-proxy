@@ -96,13 +96,19 @@ const toggleStar = () => {
 
 const setRowColor = (colorClass) => {
   if (contextMenu.value.request) {
-    // Assign a color string (e.g., 'red', 'blue', or null to clear)
     contextMenu.value.request.color = colorClass;
+    contextMenu.value.request.manualColor = colorClass !== null;
   }
-  closeContextMenu();
+  closeContextMenu()
 }
 
-// --- Context Menu Actions ---
+const copyUrl = () => {
+  if (contextMenu.value.request?.url) {
+    navigator.clipboard.writeText(contextMenu.value.request.url)
+  }
+  closeContextMenu()
+}
+
 const pinFromContextMenu = () => {
   if (contextMenu.value.request) {
     const host = formatUrl(contextMenu.value.request.url).host;
@@ -225,29 +231,38 @@ const openBreakpointModalFromContext = () => {
     </splitpanes>
 
    <div v-if="contextMenu.show" class="context-menu" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
-      <div class="context-menu-item" @click="handleRepeatFromContext">🔄 Repeat Request</div>
-      <div class="context-menu-item" @click="handleEditAndRepeatFromContext">✏️ Edit & Repeat</div>
       
+      <!-- Group: Request actions -->
+      <div class="ctx-group-label">Request</div>
+      <div class="context-menu-item" @click="handleRepeatFromContext">Repeat</div>
+      <div class="context-menu-item" @click="handleEditAndRepeatFromContext">Edit &amp; Repeat</div>
+      <div class="context-menu-item" @click="copyUrl">Copy URL</div>
+
       <div class="context-menu-divider"></div>
-      
+
+      <!-- Group: Mark -->
+      <div class="ctx-group-label">Mark</div>
       <div class="context-menu-item" @click="toggleStar">
-        {{ contextMenu.request?.starred ? '⭐ Unstar Request' : '⭐ Star Request' }}
+        {{ contextMenu.request?.starred ? '⭐ Unstar' : '⭐ Star' }}
       </div>
-      
       <div class="context-menu-colors">
-        <div class="color-dot red" @click="setRowColor('red')" title="Red"></div>
+        <div class="color-dot red"    @click="setRowColor('red')"    title="Red"></div>
+        <div class="color-dot orange" @click="setRowColor('orange')" title="Orange"></div>
         <div class="color-dot yellow" @click="setRowColor('yellow')" title="Yellow"></div>
-        <div class="color-dot green" @click="setRowColor('green')" title="Green"></div>
-        <div class="color-dot blue" @click="setRowColor('blue')" title="Blue"></div>
-        <div class="color-dot clear" @click="setRowColor(null)" title="Clear Color">🚫</div>
+        <div class="color-dot green"  @click="setRowColor('green')"  title="Green"></div>
+        <div class="color-dot blue"   @click="setRowColor('blue')"   title="Blue"></div>
+        <div class="color-dot purple" @click="setRowColor('purple')" title="Purple"></div>
+        <div class="color-dot clear"  @click="setRowColor(null)"     title="Clear"></div>
       </div>
-      
+
       <div class="context-menu-divider"></div>
-      
-      <div class="context-menu-item" @click="pinFromContextMenu">📌 Pin Domain</div>
-      <div class="context-menu-item" @click="openMapLocalModalFromContext">⚡️ Map Local</div>
-      <div class="context-menu-item" @click="openMapRemoteModalFromContext">🔀 Map Remote</div>
-      <div class="context-menu-item" @click="openBreakpointModalFromContext">🛑 Add Breakpoint</div>
+
+      <!-- Group: Tools -->
+      <div class="ctx-group-label">Tools</div>
+      <div class="context-menu-item" @click="pinFromContextMenu">Pin Domain</div>
+      <div class="context-menu-item" @click="openMapLocalModalFromContext">Map Local</div>
+      <div class="context-menu-item" @click="openMapRemoteModalFromContext">Map Remote</div>
+      <div class="context-menu-item" @click="openBreakpointModalFromContext">Add Breakpoint</div>
     </div>
 
     <MapLocalModal />
@@ -285,9 +300,57 @@ body { margin: 0; padding: 0; }
 .text-icon { font-size: 12px; color: #888; }
 
 /* --- GLOBAL CONTEXT MENU --- */
-.context-menu { position: fixed; background: #252526; border: 1px solid #444; box-shadow: 0 4px 12px rgba(0,0,0,0.5); border-radius: 6px; padding: 4px; z-index: 9999; min-width: 150px; }
-.context-menu-item { padding: 6px 12px; font-size: 12px; color: #ccc; cursor: pointer; border-radius: 4px; display: flex; align-items: center; }
+.context-menu {
+  position: fixed;
+  background: #1e2023;
+  border: 1px solid #2e3133;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 9999;
+  min-width: 170px;
+}
+.ctx-group-label {
+  padding: 4px 10px 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #484d52;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  user-select: none;
+}
+.context-menu-item {
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: #c0c8d0;
+  cursor: pointer;
+  border-radius: 5px;
+  text-align: left;
+}
 .context-menu-item:hover { background: #3b82f6; color: white; }
+.context-menu-divider { height: 1px; background: #2a2d30; margin: 3px 4px; }
+
+.context-menu-colors {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 5px 10px 6px;
+  gap: 7px;
+}
+.color-dot {
+  width: 15px; height: 15px; border-radius: 50%; cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+  flex-shrink: 0;
+}
+.color-dot:hover { transform: scale(1.25); box-shadow: 0 0 0 2px rgba(255,255,255,0.25); }
+.color-dot.red    { background: #ef4444; }
+.color-dot.orange { background: #f97316; }
+.color-dot.yellow { background: #f59e0b; }
+.color-dot.green  { background: #10b981; }
+.color-dot.blue   { background: #3b82f6; }
+.color-dot.purple { background: #8b5cf6; }
+.color-dot.clear  { background: transparent; border: 1.5px dashed #555; position: relative; }
+.color-dot.clear::after { content: ''; position: absolute; top: 50%; left: 50%; width: 130%; height: 1.5px; background: #666; transform: translate(-50%,-50%) rotate(45deg); }
 
 /* --- CODEMIRROR GLOBAL FIXES --- */
 .cm-editor { height: 100% !important; outline: none !important; text-align: left !important; }
@@ -298,24 +361,5 @@ body { margin: 0; padding: 0; }
 .traffic-table, .inspector-content, .modal-editor, .cm-editor, .cm-content { -webkit-user-select: text !important; user-select: text !important; cursor: text; }
 .toolbar, .sidebar, .action-btn, .panel-tabs, .sidebar-header, .splitpanes__splitter { -webkit-user-select: none !important; user-select: none !important; }
 
-.context-menu-divider { height: 1px; background: #333; margin: 4px 0; }
 
-.context-menu-colors {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 12px;
-  gap: 8px;
-}
-
-.color-dot {
-  width: 16px; height: 16px; border-radius: 50%; cursor: pointer;
-  transition: transform 0.1s; border: 1px solid #444;
-  display: flex; align-items: center; justify-content: center; font-size: 10px;
-}
-.color-dot:hover { transform: scale(1.2); }
-.color-dot.red { background: #ef4444; }
-.color-dot.yellow { background: #f59e0b; }
-.color-dot.green { background: #10b981; }
-.color-dot.blue { background: #3b82f6; }
-.color-dot.clear { background: transparent; border: none; font-size: 12px; }
 </style>

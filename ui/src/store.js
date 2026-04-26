@@ -129,6 +129,8 @@ export const isFocusMode = ref(loadState('isFocusMode', false))
 export const pinnedSources = ref(loadState('pinnedSources', []))
 export const activeFilter = ref({ type: 'all', value: null })
 export const searchQuery = ref('')
+export const searchScope = ref('All')
+export const searchMatchType = ref('Contains')
 export const sortKey = ref('time')
 export const sortOrder = ref('desc')
 
@@ -264,9 +266,30 @@ const applyHighlightRules = (req) => {
         if (!rule.active) continue;
         let isMatch = false;
         try {
-            if (rule.type === 'url' && req.url.includes(rule.pattern)) isMatch = true;
-            if (rule.type === 'status' && String(req.status) === String(rule.pattern)) isMatch = true;
-            if (rule.type === 'method' && req.method.toUpperCase() === rule.pattern.toUpperCase()) isMatch = true;
+            const url = req.url || ''
+            const status = String(req.status ?? '')
+            const method = (req.method || '').toUpperCase()
+            const resBody = String(req.res_body ?? '')
+            const reqBody = String(req.req_body ?? '')
+            const resHeaders = req.res_headers && typeof req.res_headers === 'object'
+                ? Object.entries(req.res_headers).map(([k,v]) => `${k}: ${v}`).join('\n') : ''
+            const reqHeaders = req.req_headers && typeof req.req_headers === 'object'
+                ? Object.entries(req.req_headers).map(([k,v]) => `${k}: ${v}`).join('\n') : ''
+            const pat = rule.pattern || ''
+
+            switch (rule.type) {
+                case 'url':          isMatch = url.toLowerCase().includes(pat.toLowerCase()); break
+                case 'url_regex':    isMatch = new RegExp(pat, 'i').test(url); break
+                case 'status':       isMatch = status === String(pat); break
+                case 'status_range': isMatch = pat.length === 3 && pat[1] === 'x' && pat[2] === 'x'
+                                         ? status.startsWith(pat[0])
+                                         : status.includes(pat); break
+                case 'method':       isMatch = method === pat.toUpperCase(); break
+                case 'res_body':     isMatch = resBody.toLowerCase().includes(pat.toLowerCase()); break
+                case 'req_body':     isMatch = reqBody.toLowerCase().includes(pat.toLowerCase()); break
+                case 'res_header':   isMatch = resHeaders.toLowerCase().includes(pat.toLowerCase()); break
+                case 'req_header':   isMatch = reqHeaders.toLowerCase().includes(pat.toLowerCase()); break
+            }
         } catch (e) { continue; }
 
         if (isMatch) {
@@ -510,12 +533,90 @@ export const filteredRequests = computed(() => {
     }
 
     if (searchQuery.value.trim() !== '') {
-        const query = searchQuery.value.toLowerCase();
+        const rawQuery = searchQuery.value.trim()
+        const query = rawQuery.toLowerCase()
+        const scope = searchScope.value
+        const matchType = searchMatchType.value
+
+        const matchValue = (raw) => {
+            const val = String(raw ?? '').toLowerCase()
+            switch (matchType) {
+                case 'Contains':      return val.includes(query)
+                case 'Not Contains':  return !val.includes(query)
+                case 'Starts With':   return val.startsWith(query)
+                case 'Ends With':     return val.endsWith(query)
+                case 'Equals':        return val === query
+                case 'Not Equals':    return val !== query
+                case 'Match Regex': {
+                    try { return new RegExp(rawQuery, 'i').test(String(raw ?? '')) } catch { return false }
+                }
+                case 'Not Match Regex': {
+                    try { return !new RegExp(rawQuery, 'i').test(String(raw ?? '')) } catch { return true }
+                }
+                default: return val.includes(query)
+            }
+        }
+
+        const urlBase = (url) => {
+            const i = url.indexOf('?')
+            return i === -1 ? url : url.slice(0, i)
+        }
+        const queryStr = (url) => {
+            const i = url.indexOf('?')
+            return i === -1 ? '' : url.slice(i + 1)
+        }
+        const searchHeaders = (headers) => {
+            if (!headers || typeof headers !== 'object') return false
+            return Object.entries(headers).some(([k, v]) => matchValue(k) || matchValue(v))
+        }
+
         baseList = baseList.filter(req => {
-            return req.url.toLowerCase().includes(query) ||
-                req.method.toLowerCase().includes(query) ||
-                String(req.status).includes(query);
-        });
+            switch (scope) {
+                case 'URL':
+                    return matchValue(urlBase(req.url))
+                case 'Query String':
+                    return matchValue(queryStr(req.url))
+                case 'Request Header':
+                    return searchHeaders(req.req_headers)
+                case 'Response Header':
+                    return searchHeaders(req.res_headers)
+                case 'Request Body':
+                    return matchValue(req.req_body)
+                case 'Response Body':
+                    return matchValue(req.res_body)
+                case 'Method':
+                    return matchValue(req.method)
+                case 'Status Code':
+                    return matchValue(req.status)
+                default: { // 'All' — searches everything including bodies
+                    const isNegative = matchType === 'Not Contains' || matchType === 'Not Equals' || matchType === 'Not Match Regex'
+                    if (isNegative) {
+                        return matchValue(urlBase(req.url)) &&
+                            matchValue(queryStr(req.url)) &&
+                            matchValue(req.method) &&
+                            matchValue(req.status) &&
+                            matchValue(req.req_body) &&
+                            matchValue(req.res_body) &&
+                            ((() => {
+                                if (!req.req_headers || typeof req.req_headers !== 'object') return true
+                                return Object.entries(req.req_headers).every(([k, v]) => matchValue(k) && matchValue(v))
+                            })()) &&
+                            ((() => {
+                                if (!req.res_headers || typeof req.res_headers !== 'object') return true
+                                return Object.entries(req.res_headers).every(([k, v]) => matchValue(k) && matchValue(v))
+                            })())
+                    }
+                    return matchValue(urlBase(req.url)) ||
+                        matchValue(queryStr(req.url)) ||
+                        matchValue(req.method) ||
+                        matchValue(req.status) ||
+                        matchValue(req.req_body) ||
+                        matchValue(req.res_body) ||
+                        searchHeaders(req.req_headers) ||
+                        searchHeaders(req.res_headers)
+                }
+            }
+        })
     }
 
     if (activeChips.value.protocol !== 'All') {
@@ -580,8 +681,8 @@ watch(requests, (newVals) => saveState('requests', newVals.slice(0, MAX_SAVED_RE
 watch(pinnedSources, (newVals) => saveState('pinnedSources', newVals), { deep: true })
 watch(isFocusMode, (newVal) => saveState('isFocusMode', newVal))
 watch(activeChips, (newVals) => saveState('activeChips', newVals), { deep: true })
-watch(highlightRules, (val) => saveState('highlightRules', val), { deep: true })
-watch(highlightsEnabled, (val) => saveState('highlightsEnabled', val))
+watch(highlightRules, (val) => { saveState('highlightRules', val); applyAllHighlightRules() }, { deep: true })
+watch(highlightsEnabled, (val) => { saveState('highlightsEnabled', val); applyAllHighlightRules() })
 
 watch(wsMessages, (newVal) => {
     if (wsSaveTimeout) clearTimeout(wsSaveTimeout);

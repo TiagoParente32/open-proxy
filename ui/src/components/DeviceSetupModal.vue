@@ -166,6 +166,14 @@ const copyToClipboard = (text, key) => {
     })
 }
 
+const copiedInfo = ref(null)
+const copyInfo = (value, key) => {
+    navigator.clipboard.writeText(String(value)).then(() => {
+        copiedInfo.value = key
+        setTimeout(() => { copiedInfo.value = null }, 1500)
+    })
+}
+
 // ── Modal lifecycle ───────────────────────────────────────────────────────────
 // Re-initialise modal state whenever it opens or the device type changes while open
 const initModal = ([open]) => {
@@ -178,6 +186,8 @@ const initModal = ([open]) => {
         activeTab.value = 'vpn'
     } else if (deviceSetupType.value === 'android_device' || deviceSetupType.value === 'ios_device') {
         activeTab.value = 'manual'
+    } else if (deviceSetupType.value === 'browser') {
+        activeTab.value = 'chrome'
     } else {
         activeTab.value = 'devices'
         if (deviceSetupType.value === 'android_emulator') listAdbDevices()
@@ -259,6 +269,7 @@ const modalTitle = () => {
     if (deviceSetupType.value === 'ios_simulator')    return 'iOS Simulator Setup'
     if (deviceSetupType.value === 'ios_device')       return 'iOS Physical Device Setup'
     if (deviceSetupType.value === 'vpn_mode')         return 'VPN Mode'
+    if (deviceSetupType.value === 'browser')          return 'Browser Setup'
     return 'Device Setup'
 }
 </script>
@@ -627,12 +638,10 @@ const modalTitle = () => {
             <li>
               Enter your proxy details:
               <div class="info-box">
-                <div class="info-row"><span class="info-label">Hostname</span><code class="info-val">{{ proxyIP }}</code></div>
-                <div class="info-row"><span class="info-label">Port</span><code class="info-val">{{ proxyPort }}</code></div>
+                <div class="info-row"><span class="info-label">Hostname</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'and_dev_ip' }" @click="copyInfo(proxyIP, 'and_dev_ip')">{{ proxyIP }}</code></div>
+                <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'and_dev_port' }" @click="copyInfo(proxyPort, 'and_dev_port')">{{ proxyPort }}</code></div>
               </div>
             </li>
-            <li>Open your browser and go to <code class="ic">http://mitm.it</code> to download the certificate.</li>
-            <li>Go to <strong>Settings › Security › Encryption &amp; Credentials › Install a certificate</strong>.</li>
           </ol>
         </div>
 
@@ -643,11 +652,10 @@ const modalTitle = () => {
             <li>
               Enter your proxy details:
               <div class="info-box">
-                <div class="info-row"><span class="info-label">Server</span><code class="info-val">{{ proxyIP }}</code></div>
-                <div class="info-row"><span class="info-label">Port</span><code class="info-val">{{ proxyPort }}</code></div>
+                <div class="info-row"><span class="info-label">Server</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'ios_dev_ip' }" @click="copyInfo(proxyIP, 'ios_dev_ip')">{{ proxyIP }}</code></div>
+                <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'ios_dev_port' }" @click="copyInfo(proxyPort, 'ios_dev_port')">{{ proxyPort }}</code></div>
               </div>
             </li>
-            <li>Open Safari and go to <code class="ic">http://mitm.it</code>.</li>
             <li>Go to <strong>Settings › General › VPN &amp; Device Management</strong> and install the profile.</li>
             <li><strong>Crucial:</strong> <strong>Settings › General › About › Certificate Trust Settings</strong> — toggle mitmproxy <strong>ON</strong>.</li>
           </ol>
@@ -830,12 +838,10 @@ const modalTitle = () => {
             <li>
               Go to <strong>System Settings → Network → (your interface) → Details → Proxies</strong> and enable <strong>Web Proxy (HTTP)</strong> and <strong>Secure Web Proxy (HTTPS)</strong>:
               <div class="info-box">
-                <div class="info-row"><span class="info-label">Server</span><code class="info-val">{{ proxyIP }}</code></div>
-                <div class="info-row"><span class="info-label">Port</span><code class="info-val">{{ proxyPort }}</code></div>
+                <div class="info-row"><span class="info-label">Server</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'sim_ip' }" @click="copyInfo(proxyIP, 'sim_ip')">{{ proxyIP }}</code></div>
+                <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'sim_port' }" @click="copyInfo(proxyPort, 'sim_port')">{{ proxyPort }}</code></div>
               </div>
             </li>
-            <li>Boot the Simulator and open <strong>Safari</strong>.</li>
-            <li>Navigate to <code class="ic">http://mitm.it</code> and tap the iOS download link to get the certificate profile.</li>
             <li>Go to <strong>Settings → General → VPN &amp; Device Management</strong> and install the downloaded profile.</li>
             <li>
               <strong>Crucial:</strong> Go to <strong>Settings → General → About → Certificate Trust Settings</strong> and toggle the mitmproxy certificate <strong>ON</strong>.
@@ -856,8 +862,8 @@ const modalTitle = () => {
             <li>
               In the emulator, go to <strong>Settings → Network &amp; Internet → Internet</strong>, long-press your Wi-Fi network and choose <strong>Modify network → Advanced options</strong>. Set <strong>Proxy</strong> to <strong>Manual</strong>:
               <div class="info-box">
-                <div class="info-row"><span class="info-label">Hostname</span><code class="info-val">10.0.2.2</code></div>
-                <div class="info-row"><span class="info-label">Port</span><code class="info-val">{{ proxyPort }}</code></div>
+                <div class="info-row"><span class="info-label">Hostname</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'emu_ip' }" @click="copyInfo('10.0.2.2', 'emu_ip')">10.0.2.2</code></div>
+                <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'emu_port' }" @click="copyInfo(proxyPort, 'emu_port')">{{ proxyPort }}</code></div>
               </div>
               <em style="font-size:11px;color:#555;">The special address <code class="ic">10.0.2.2</code> routes from the emulator to your Mac's localhost.</em>
             </li>
@@ -869,6 +875,125 @@ const modalTitle = () => {
           <div class="alert warning" style="margin-top:14px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             Manual certificate install only covers <strong>user-installed CA trust</strong>. Most apps built for API 24+ ignore user CAs — you still need the App Config changes.
+          </div>
+        </template>
+
+      </div>
+
+      <!-- ══════════════════════════════════════════════
+           BROWSER TABS
+      ══════════════════════════════════════════════ -->
+      <div v-if="deviceSetupType === 'browser'" class="tab-bar">
+        <button class="tab-btn" :class="{ active: activeTab === 'chrome' }" @click="activeTab = 'chrome'">Chrome</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'firefox' }" @click="activeTab = 'firefox'">Firefox</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'safari' }" @click="activeTab = 'safari'">Safari</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'curl' }" @click="activeTab = 'curl'">curl / CLI</button>
+      </div>
+
+      <div v-if="deviceSetupType === 'browser'" class="modal-body">
+
+        <!-- Chrome -->
+        <template v-if="activeTab === 'chrome'">
+          <p class="hint" style="margin-bottom:14px">Chrome uses the system proxy settings. Configure your OS proxy to point to OpenProxy, then Chrome will use it automatically.</p>
+          <ol class="instruction-list">
+            <li>
+              Set your <strong>system proxy</strong> (macOS: System Settings → Network → Details → Proxies; Windows: Settings → Network → Proxy) to:
+              <div class="info-box">
+                <div class="info-row"><span class="info-label">Server</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'br_ip' }" @click="copyInfo(proxyIP, 'br_ip')">{{ proxyIP }}</code></div>
+                <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'br_port' }" @click="copyInfo(proxyPort, 'br_port')">{{ proxyPort }}</code></div>
+              </div>
+            </li>
+            <li>Open Chrome and navigate to <code class="ic">http://mitm.it</code>.</li>
+            <li>Download and install the certificate for your OS.</li>
+            <li>On <strong>macOS</strong>: open Keychain Access, find <strong>mitmproxy</strong>, double-click it and set trust to <strong>Always Trust</strong>.</li>
+            <li>On <strong>Windows</strong>: double-click the downloaded <code class="ic">.p12</code> file and add it to <strong>Trusted Root Certification Authorities</strong>.</li>
+          </ol>
+          <div class="alert info" style="margin-top:14px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span>To bypass the proxy for specific addresses, add them to the <strong>Bypass Proxy</strong> list in your OS network settings.</span>
+          </div>
+        </template>
+
+        <!-- Firefox -->
+        <template v-if="activeTab === 'firefox'">
+          <p class="hint" style="margin-bottom:14px">Firefox has its own independent proxy settings and certificate store — OS settings don't apply.</p>
+          <ol class="instruction-list">
+            <li>Open <strong>Settings → General → Network Settings → Settings…</strong> (or type <code class="ic">about:preferences#general</code> in the address bar).</li>
+            <li>Select <strong>Manual proxy configuration</strong> and enter:
+              <div class="info-box">
+                <div class="info-row"><span class="info-label">HTTP Proxy</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'ff_ip' }" @click="copyInfo(proxyIP, 'ff_ip')">{{ proxyIP }}</code></div>
+                <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'ff_port' }" @click="copyInfo(proxyPort, 'ff_port')">{{ proxyPort }}</code></div>
+              </div>
+              Check <strong>Also use this proxy for HTTPS</strong>.
+            </li>
+            <li>Navigate to <code class="ic">http://mitm.it</code> and download the Firefox/generic certificate.</li>
+            <li>Go to <strong>Settings → Privacy &amp; Security → Certificates → View Certificates → Authorities → Import</strong> and import the downloaded <code class="ic">.pem</code> file.</li>
+            <li>Check <strong>Trust this CA to identify websites</strong> and confirm.</li>
+          </ol>
+          <div class="alert warning" style="margin-top:14px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Firefox requires its own separate certificate import — installing it in the OS keychain is not enough.
+          </div>
+        </template>
+
+        <!-- Safari -->
+        <template v-if="activeTab === 'safari'">
+          <p class="hint" style="margin-bottom:14px">Safari uses macOS system proxy and certificate settings.</p>
+          <ol class="instruction-list">
+            <li>Open <strong>System Settings → Network → (your interface) → Details → Proxies</strong>. Enable <strong>Web Proxy (HTTP)</strong> and <strong>Secure Web Proxy (HTTPS)</strong>:
+              <div class="info-box">
+                <div class="info-row"><span class="info-label">Server</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'saf_ip' }" @click="copyInfo(proxyIP, 'saf_ip')">{{ proxyIP }}</code></div>
+                <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'saf_port' }" @click="copyInfo(proxyPort, 'saf_port')">{{ proxyPort }}</code></div>
+              </div>
+            </li>
+            <li>Open Safari and navigate to <code class="ic">http://mitm.it</code>.</li>
+            <li>Download the macOS certificate and open it — Keychain Access will open automatically.</li>
+            <li>Find <strong>mitmproxy</strong> in Keychain Access, double-click it, expand <strong>Trust</strong>, and set <strong>Always Trust</strong>.</li>
+          </ol>
+        </template>
+
+        <!-- curl / CLI -->
+        <template v-if="activeTab === 'curl'">
+          <p class="hint" style="margin-bottom:14px">Use environment variables or flags to route CLI tools through OpenProxy.</p>
+          <div class="code-card" style="margin-bottom:14px">
+            <div class="code-card-header">
+              <div class="code-card-meta">
+                <div class="code-card-title">Environment variables (shell / CI)</div>
+                <div class="code-card-sub">Works for curl, wget, pip, npm, and most HTTP clients.</div>
+              </div>
+              <button class="copy-btn" :class="{ copied: copiedKey === 'env' }"
+                      @click="copyToClipboard(`export http_proxy=http://${proxyIP}:${proxyPort}\nexport https_proxy=http://${proxyIP}:${proxyPort}`, 'env')">
+                <svg v-if="copiedKey !== 'env'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                {{ copiedKey === 'env' ? 'Copied!' : 'Copy' }}
+              </button>
+            </div>
+            <div class="code-scroll">
+              <pre class="code-pre">export http_proxy=http://{{ proxyIP }}:{{ proxyPort }}
+export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
+            </div>
+          </div>
+          <div class="code-card" style="margin-bottom:14px">
+            <div class="code-card-header">
+              <div class="code-card-meta">
+                <div class="code-card-title">curl — single request</div>
+              </div>
+              <button class="copy-btn" :class="{ copied: copiedKey === 'curl' }"
+                      @click="copyToClipboard(`curl -x http://${proxyIP}:${proxyPort} --cacert ~/.mitmproxy/mitmproxy-ca-cert.pem https://example.com`, 'curl')">
+                <svg v-if="copiedKey !== 'curl'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                {{ copiedKey === 'curl' ? 'Copied!' : 'Copy' }}
+              </button>
+            </div>
+            <div class="code-scroll">
+              <pre class="code-pre">curl -x http://{{ proxyIP }}:{{ proxyPort }} \
+     --cacert ~/.mitmproxy/mitmproxy-ca-cert.pem \
+     https://example.com</pre>
+            </div>
+          </div>
+          <div class="alert info" style="margin-top:4px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span>The mitmproxy CA certificate is located at <code class="ic">~/.mitmproxy/mitmproxy-ca-cert.pem</code> (macOS/Linux) or <code class="ic">%USERPROFILE%\.mitmproxy\mitmproxy-ca-cert.pem</code> (Windows).</span>
           </div>
         </template>
 
@@ -926,21 +1051,20 @@ const modalTitle = () => {
 
 /* ── Tab bar ──────────────────────────────────────── */
 .tab-bar {
-  display: flex; padding: 0 14px;
+  display: flex; padding: 6px 10px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-sidebar); flex-shrink: 0; gap: 2px;
 }
 .tab-btn {
   display: flex; align-items: center; gap: 6px;
-  padding: 9px 12px 8px; font-size: 12px; font-weight: 500;
-  color: #555; background: none; border: none;
-  border-bottom: 2px solid transparent; cursor: pointer;
-  transition: all 0.15s; margin-bottom: -1px; white-space: nowrap;
+  padding: 5px 10px; font-size: 12px; font-weight: 500;
+  color: #555; background: none; border: none; border-radius: 6px;
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
 }
 .tab-btn svg { opacity: 0.6; transition: opacity 0.15s; }
-.tab-btn:hover { color: #999; }
+.tab-btn:hover { color: #999; background: rgba(255,255,255,0.04); }
 .tab-btn:hover svg { opacity: 0.9; }
-.tab-btn.active { color: #60a5fa; border-bottom-color: #3b82f6; }
+.tab-btn.active { color: #e5e7eb; background: rgba(255,255,255,0.09); }
 .tab-btn.active svg { opacity: 1; }
 
 /* ── Scrollable body ──────────────────────────────── */
@@ -1104,6 +1228,9 @@ const modalTitle = () => {
   padding: 2px 8px; border-radius: 4px; font-size: 13px;
   font-weight: 700; font-family: monospace;
 }
+.info-val.copyable { cursor: pointer; user-select: all; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+.info-val.copyable:hover { background: rgba(59,130,246,0.2); }
+.info-val.copied { background: rgba(52,211,153,0.12) !important; color: #34d399 !important; border-color: rgba(52,211,153,0.3) !important; }
 .ic {
   background: #1a1c1e; color: #7a8088; padding: 1px 5px;
   border-radius: 3px; font-family: monospace; font-size: 11.5px;
