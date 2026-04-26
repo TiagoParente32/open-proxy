@@ -170,6 +170,13 @@ onUnmounted(() => {
           @keydown.escape="clearSearch"
         />
 
+        <!-- Clear button -->
+        <button v-if="searchQuery" class="clear-btn" @click="clearSearch" title="Clear (Esc)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2.5" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+
         <!-- Scope dropdown -->
         <Teleport to="body">
           <div v-if="showScopeMenu" class="scope-dropdown-portal" :style="scopeDropdownStyle">
@@ -329,6 +336,15 @@ onUnmounted(() => {
   min-width: 0;
 }
 .search-input::placeholder { color: #3e4347; }
+
+.clear-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; margin-right: 4px; padding: 0;
+  background: rgba(255,255,255,0.06); border: none; border-radius: 4px;
+  color: #aaa; cursor: pointer; flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.clear-btn:hover { background: rgba(255,255,255,0.12); color: #eee; border-color: transparent; }
 
 /* ── Scope dropdown (teleported to body) ──────────── */
 /* dropdown styles moved to non-scoped block below */
