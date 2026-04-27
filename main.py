@@ -78,44 +78,33 @@ def get_executable_path(base_name):
 
 
 def get_local_ip():
-    """Return the best LAN IP for the host.
+    """Return the best LAN IP for the host, ignoring VPN and virtual interfaces."""
+    # Virtual/tunnel interface name fragments to skip
+    SKIP_IFACE = [
+        'vbox', 'virtual', 'vmnet', 'host-only', 'virtualbox', 'hyper-v',
+        'vpn', 'docker', 'veth', 'tailscale', 'zerotier', 'wsl',
+        'tun', 'tap', 'ppp', 'utun', 'wg',
+    ]
 
-    First try a UDP 'connect' to a public IP to discover the outbound interface IP
-    (works even without network I/O). If that fails, fall back to scanning
-    interfaces but ignore common virtual/host-only adapters.
-    """
-    # Fast, reliable method: inspect the local address used when connecting to a public host
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(('8.8.8.8', 80))
-        ip = s.getsockname()[0]
-        if ip and not ip.startswith('127.') and not ip.startswith('169.254.'):
-            return ip
-    except Exception:
-        pass
-    finally:
-        try:
-            s.close()
-        except Exception:
-            pass
-
-    # Fallback: examine interfaces but prefer non-virtual adapters
     try:
         interfaces = psutil.net_if_addrs()
 
+        # Pass 1: prefer private LAN addresses (192.168.x / 10.x) on physical interfaces
         for interface_name, interface_addresses in interfaces.items():
             lname = interface_name.lower()
-            # Skip obvious virtual/host-only interfaces
-            if any(v in lname for v in ['vbox', 'virtual', 'vmnet', 'host-only', 'virtualbox', 'hyper-v']):
+            if any(v in lname for v in SKIP_IFACE):
                 continue
             for address in interface_addresses:
                 if address.family == socket.AF_INET:
                     ip = address.address
                     if ip.startswith("192.168.") or ip.startswith("10."):
-                        if not any(v in interface_name.lower() for v in ["vpn", "docker", "veth", "tailscale", "zerotier", "wsl"]):
-                            return ip
+                        return ip
 
+        # Pass 2: accept any non-loopback/non-APIPA address on non-virtual interfaces
         for interface_name, interface_addresses in interfaces.items():
+            lname = interface_name.lower()
+            if any(v in lname for v in SKIP_IFACE):
+                continue
             for address in interface_addresses:
                 if address.family == socket.AF_INET:
                     ip = address.address
@@ -124,6 +113,21 @@ def get_local_ip():
 
     except Exception as e:
         print(f"[WARNING] psutil failed: {e}")
+
+    # Last resort: UDP connect trick (may return VPN IP if active, but better than nothing)
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        if ip and not ip.startswith('127.'):
+            return ip
+    except Exception:
+        pass
+    finally:
+        try:
+            s.close()
+        except Exception:
+            pass
 
     return '127.0.0.1'
 
