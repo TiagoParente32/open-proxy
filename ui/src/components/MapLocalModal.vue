@@ -4,6 +4,7 @@ import { Codemirror } from 'vue-codemirror'
 import { json } from '@codemirror/lang-json'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView } from '@codemirror/view'
+import CodeMirrorEditor from './CodeMirrorEditor.vue'
 
 import {
   showMapModal,
@@ -251,7 +252,7 @@ const saveAndApplyRules = () => {
             <div class="pm-editor-area">
               <div v-if="activeTab === 'Body'" class="pm-editor-wrapper">
                 <div class="pm-helper-text">Response Payload (Returned to client)</div>
-                <codemirror v-model="activeRule.body" :extensions="extensions" class="pm-codemirror" />
+                <CodeMirrorEditor v-model="activeRule.body" :extensions="extensions" class="pm-codemirror" />
               </div>
               <div v-if="activeTab === 'Params'" class="pm-editor-wrapper">
                 <div class="pm-helper-text">Query Parameters</div>
@@ -280,7 +281,7 @@ const saveAndApplyRules = () => {
               </div>
               <div v-if="activeTab === 'Headers'" class="pm-editor-wrapper">
                 <div class="pm-helper-text">Response Headers (Format as JSON)</div>
-                <codemirror v-model="activeRule.headers" :extensions="extensions" class="pm-codemirror" />
+              <CodeMirrorEditor v-model="activeRule.headers" :extensions="extensions" class="pm-codemirror" />
               </div>
             </div>
 

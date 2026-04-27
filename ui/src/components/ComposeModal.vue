@@ -5,6 +5,7 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView } from '@codemirror/view'
 import { showComposeModal, composeData, sendComposedRequest, isComposeEditMode } from '../store.js'
 import { ref, watch } from 'vue'
+import CodeMirrorEditor from './CodeMirrorEditor.vue'
 
 const extensions = [json(), oneDark, EditorView.lineWrapping]
 
@@ -133,7 +134,7 @@ const removeParamRow = (index) => {
 
           <div v-if="activeTab === 'Body'" class="pm-editor-wrapper">
             <div class="pm-helper-text">Raw request payload</div>
-            <codemirror v-model="composeData.req_body" :extensions="extensions" class="pm-codemirror" />
+            <CodeMirrorEditor v-model="composeData.req_body" :extensions="extensions" class="pm-codemirror" />
           </div>
 
           <div v-if="activeTab === 'Params'" class="pm-editor-wrapper">
@@ -156,7 +157,7 @@ const removeParamRow = (index) => {
 
           <div v-if="activeTab === 'Headers'" class="pm-editor-wrapper">
             <div class="pm-helper-text">Format as JSON (e.g., { "Content-Type": "application/json" })</div>
-            <codemirror v-model="composeData.req_headers" :extensions="extensions" class="pm-codemirror" />
+            <CodeMirrorEditor v-model="composeData.req_headers" :extensions="extensions" class="pm-codemirror" />
           </div>
 
 

@@ -4,6 +4,7 @@ import { Codemirror } from 'vue-codemirror'
 import { json } from '@codemirror/lang-json'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView } from '@codemirror/view'
+import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import { trappedFlows, resolveTrappedFlow } from '../store.js'
 
 const extensions = [json(), oneDark, EditorView.lineWrapping]
@@ -176,12 +177,12 @@ const drop = () => {
 
           <div v-if="activeTab === 'Headers'" class="pm-editor-wrapper">
             <div class="pm-helper-text">Format as JSON (e.g., { "Content-Type": "application/json" })</div>
-            <codemirror v-model="currentFlow.headersStr" :extensions="extensions" class="pm-codemirror" />
+            <CodeMirrorEditor v-model="currentFlow.headersStr" :extensions="extensions" class="pm-codemirror" />
           </div>
 
           <div v-if="activeTab === 'Body'" class="pm-editor-wrapper">
             <div class="pm-helper-text">Intercepted Payload</div>
-            <codemirror v-model="currentFlow.body" :extensions="extensions" class="pm-codemirror" />
+            <CodeMirrorEditor v-model="currentFlow.body" :extensions="extensions" class="pm-codemirror" />
           </div>
 
         </div>

@@ -8,22 +8,12 @@ import { go } from '@codemirror/lang-go'
 import { rust } from '@codemirror/lang-rust'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView, keymap } from '@codemirror/view'
-import { search, searchKeymap } from '@codemirror/search'
-import { EditorState } from '@codemirror/state' // <-- NEW: Imported EditorState
+import { EditorState } from '@codemirror/state'
 
+import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import { selectedRequest, activeReqTab, activeResTab } from '../store.js'
-import { computed, ref, onMounted, onUnmounted } from 'vue' // <-- NEW: Added hooks
+import { computed, ref } from 'vue'
 import WebSocketInspector from './WebSocketInspector.vue'
-
-const blockGlobalSearch = (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-    if (!e.defaultPrevented) {
-      e.preventDefault(); 
-    }
-  }
-}
-onMounted(() => window.addEventListener('keydown', blockGlobalSearch))
-onUnmounted(() => window.removeEventListener('keydown', blockGlobalSearch))
 
 const isWebSocket = computed(() => {
       if (!selectedRequest.value) return false;
@@ -36,9 +26,7 @@ const extensions = [
   json(), 
   oneDark, 
   EditorView.lineWrapping, 
-  search({ top: true }),
-  keymap.of(searchKeymap),
-  EditorState.readOnly.of(true) // <-- NEW: Makes it read-only but still focusable!
+  EditorState.readOnly.of(true)
 ]
 
 const formatJson = (str) => {
@@ -60,9 +48,7 @@ const dynamicCodeExtensions = computed(() => {
   const base = [
     oneDark, 
     EditorView.lineWrapping, 
-    search({ top: true }),
-    keymap.of(searchKeymap),
-    EditorState.readOnly.of(true) // <-- NEW: Makes it read-only but still focusable!
+    EditorState.readOnly.of(true)
   ]
   if (activeCodeLang.value === 'Python') return [...base, python()]
   if (activeCodeLang.value === 'Node.js') return [...base, javascript()]
@@ -236,7 +222,7 @@ const getHexRows = (req, type) => {
                 
                 <div v-if="activeReqTab === 'Body'" style="height: 100%; display: flex; justify-content: center; align-items: center; background: #111;">
                   <img v-if="selectedRequest.req_is_image" :src="selectedRequest.req_body" style="max-width: 100%; max-height: 100%; object-fit: contain; padding: 16px; box-sizing: border-box;" />
-                  <codemirror v-else :model-value="formatJson(selectedRequest.req_body)" :style="{ height: '100%', width: '100%' }" :extensions="extensions" />
+                  <CodeMirrorEditor v-else :model-value="formatJson(selectedRequest.req_body)" :extensions="extensions" :readonly="true" style="height: 100%; width: 100%;" />
                 </div>
 
                 <div v-if="activeReqTab === 'Code'" class="code-tab-container">
@@ -253,7 +239,7 @@ const getHexRows = (req, type) => {
                     <button class="copy-btn" @click="copyCode">{{ copyLabel }}</button>
                   </div>
                   <div style="flex: 1; overflow: hidden; background: #111;">
-                     <codemirror :model-value="generatedCode" :style="{ height: '100%', width: '100%' }" :extensions="dynamicCodeExtensions" />
+                     <CodeMirrorEditor :model-value="generatedCode" :extensions="dynamicCodeExtensions" :readonly="true" style="height: 100%; width: 100%;" />
                   </div>
                 </div>
                 
@@ -295,7 +281,7 @@ const getHexRows = (req, type) => {
                 
                 <div v-if="activeResTab === 'Body'" style="height: 100%; display: flex; justify-content: center; align-items: center; background: #111;">
                   <img v-if="selectedRequest.res_is_image" :src="selectedRequest.res_body" style="max-width: 100%; max-height: 100%; object-fit: contain; padding: 16px; box-sizing: border-box;" />
-                  <codemirror v-else :model-value="formatJson(selectedRequest.res_body)" :style="{ height: '100%', width: '100%' }" :extensions="extensions" />
+                  <CodeMirrorEditor v-else :model-value="formatJson(selectedRequest.res_body)" :extensions="extensions" :readonly="true" style="height: 100%; width: 100%;" />
                 </div>
 
                 <div v-if="activeResTab === 'Hex'" class="hex-viewer">
