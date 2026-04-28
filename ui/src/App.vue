@@ -46,7 +46,33 @@ import {
   showDeviceSetupModal,
   throttleProfile,
   disableCache,
+  updateInfo,
+  updateProgress,
+  updateError,
 } from './store.js'
+
+const checkForUpdates = async () => {
+  if (!window.pywebview?.api) return
+  updateError.value = null
+  const info = await window.pywebview.api.check_for_updates_api()
+  if (info) {
+    updateInfo.value = info
+  } else {
+    alert("You're on the latest version!")
+  }
+}
+
+const startUpdate = async () => {
+  if (!window.pywebview?.api || !updateInfo.value?.download_url) return
+  updateProgress.value = 0
+  await window.pywebview.api.apply_update_api(updateInfo.value.download_url)
+}
+
+const dismissUpdate = () => {
+  updateInfo.value = null
+  updateError.value = null
+  updateProgress.value = null
+}
 
 onMounted(() => {
   initWebSocket()
@@ -65,6 +91,7 @@ onMounted(() => {
     openCertSetup:    (type) => { deviceSetupType.value = type; showDeviceSetupModal.value = true },
     setThrottle:      (profile) => { throttleProfile.value = profile },
     bustCache:        () => { disableCache.value = !disableCache.value },
+    checkForUpdates:  () => checkForUpdates(),
   }
 })
 
@@ -208,6 +235,31 @@ const openBreakpointModalFromContext = () => {
   <div class="app-wrapper">
     <AppToolbar />
     <FilterBar />
+
+    <!-- Update Banner -->
+    <Transition name="update-banner">
+      <div v-if="updateInfo && updateProgress === null" class="update-banner">
+        <span class="update-icon">🚀</span>
+        <span class="update-text">
+          <strong>{{ updateInfo.version }}</strong> is available
+          <a v-if="updateInfo.release_url" class="update-release-link" :href="updateInfo.release_url" target="_blank">See what's new</a>
+        </span>
+        <button class="update-btn-primary" :disabled="!updateInfo.download_url" @click="startUpdate">
+          {{ updateInfo.download_url ? 'Update Now' : 'No download for this platform' }}
+        </button>
+        <button class="update-btn-dismiss" @click="dismissUpdate">✕</button>
+      </div>
+      <div v-else-if="updateProgress !== null" class="update-banner update-banner--progress">
+        <span class="update-icon">⬇️</span>
+        <span class="update-text">Downloading update… {{ updateProgress }}%</span>
+        <div class="update-progress-bar"><div class="update-progress-fill" :style="{ width: updateProgress + '%' }"></div></div>
+      </div>
+      <div v-else-if="updateError" class="update-banner update-banner--error">
+        <span class="update-icon">⚠️</span>
+        <span class="update-text">Update failed: {{ updateError }}</span>
+        <button class="update-btn-dismiss" @click="dismissUpdate">✕</button>
+      </div>
+    </Transition>
     <splitpanes class="default-theme custom-theme" style="flex: 1; overflow: hidden;">
       
       <pane min-size="15" size="20">
@@ -360,6 +412,64 @@ body { margin: 0; padding: 0; }
 /* --- TEXT SELECTION FIXES --- */
 .traffic-table, .inspector-content, .modal-editor, .cm-editor, .cm-content { -webkit-user-select: text !important; user-select: text !important; cursor: text; }
 .toolbar, .sidebar, .action-btn, .panel-tabs, .sidebar-header, .splitpanes__splitter { -webkit-user-select: none !important; user-select: none !important; }
+
+/* --- UPDATE BANNER --- */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: linear-gradient(90deg, rgba(59,130,246,0.15), rgba(99,102,241,0.15));
+  border-bottom: 1px solid rgba(99,102,241,0.35);
+  font-size: 13px;
+  color: #e2e8f0;
+  flex-shrink: 0;
+}
+.update-banner--progress { background: linear-gradient(90deg, rgba(16,185,129,0.12), rgba(59,130,246,0.12)); }
+.update-banner--error    { background: rgba(239,68,68,0.12); border-bottom-color: rgba(239,68,68,0.3); }
+.update-icon { font-size: 15px; }
+.update-text { flex: 1; }
+.update-release-link { margin-left: 8px; opacity: 0.7; color: #93c5fd; text-decoration: none; font-size: 12px; }
+.update-release-link:hover { opacity: 1; text-decoration: underline; }
+.update-btn-primary {
+  padding: 4px 14px;
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.update-btn-primary:hover:not(:disabled) { background: #2563eb; }
+.update-btn-primary:disabled { opacity: 0.45; cursor: default; }
+.update-btn-dismiss {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.update-btn-dismiss:hover { color: #e2e8f0; background: rgba(255,255,255,0.07); }
+.update-progress-bar {
+  width: 120px;
+  height: 6px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.update-progress-fill {
+  height: 100%;
+  background: #3b82f6;
+  border-radius: 3px;
+  transition: width 0.2s;
+}
+.update-banner-enter-active, .update-banner-leave-active { transition: max-height 0.25s ease, opacity 0.2s; overflow: hidden; }
+.update-banner-enter-from, .update-banner-leave-to { max-height: 0; opacity: 0; }
+.update-banner-enter-to, .update-banner-leave-from { max-height: 60px; opacity: 1; }
 
 
 </style>

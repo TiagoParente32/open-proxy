@@ -134,6 +134,11 @@ export const searchMatchType = ref('Contains')
 export const sortKey = ref('time')
 export const sortOrder = ref('desc')
 
+// Auto-update
+export const updateInfo     = ref(null)   // { version, current, download_url, notes } when available
+export const updateProgress = ref(null)   // 0-100 during download, null otherwise
+export const updateError    = ref(null)
+
 export const activeChips = ref(loadState('activeChips', {
     protocol: 'All', type: 'All', status: 'All', color: 'All', starred: false
 }))
@@ -999,6 +1004,21 @@ export const initWebSocket = () => {
             else if (d.status === 'disabled' || d.status === 'error') wgClientConf.value = ''
             if (d.port) wgPort.value = d.port
             wgError.value = d.error || ''
+        }
+
+        else if (payload.type === 'UPDATE_AVAILABLE') {
+            updateInfo.value = payload.data
+            updateError.value = null
+        }
+        else if (payload.type === 'UPDATE_PROGRESS') {
+            updateProgress.value = payload.data.pct
+        }
+        else if (payload.type === 'UPDATE_READY') {
+            updateProgress.value = null
+        }
+        else if (payload.type === 'UPDATE_ERROR') {
+            updateProgress.value = null
+            updateError.value = payload.data.error
         }
     }
 
