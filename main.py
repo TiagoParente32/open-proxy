@@ -23,7 +23,7 @@ from mitmproxy import http, options
 from mitmproxy.tools.dump import DumpMaster
 from mitmproxy.proxy.mode_servers import WireGuardServerInstance
 
-APP_VERSION  = "1.0.3"
+APP_VERSION  = "1.0.2"
 GITHUB_REPO  = "TiagoParente32/open-proxy"
 
 # ============================================================================
@@ -225,7 +225,7 @@ def apply_update(download_url, progress_cb=None):
     progress_cb(pct) is called with 0-100 during download.
     Raises on any error so the caller can surface it to the UI.
     """
-    import tempfile, zipfile, shutil, stat
+    import tempfile, zipfile, shutil, stat, time
 
     install_path = _get_app_install_path()
     tmp_dir = tempfile.mkdtemp(prefix='openproxy_update_')
@@ -303,23 +303,40 @@ nohup "{install_path}/Contents/MacOS/$bin" &
 
     elif sys.platform == 'win32':
         # install_path is the exe directory (e.g. C:\path\to\OpenProxy)
-        # Expect a folder named 'OpenProxy' in the zip, or just files
-        new_dir = next(
-            (os.path.join(extract_dir, f) for f in os.listdir(extract_dir)
-             if os.path.isdir(os.path.join(extract_dir, f))),
-            extract_dir
-        )
+        # Expect a folder named 'OpenProxy' in the zip, or just files.
+        # Prefer a folder that contains the executable or the _internal folder.
         exe_name = os.path.basename(sys.executable)
+        candidate = None
+        for root, dirs, files in os.walk(extract_dir):
+            if exe_name in files or '_internal' in dirs:
+                candidate = root
+                break
+        if candidate:
+            new_dir = candidate
+        else:
+            new_dir = next(
+                (os.path.join(extract_dir, f) for f in os.listdir(extract_dir)
+                 if os.path.isdir(os.path.join(extract_dir, f))),
+                extract_dir
+            )
         log = os.path.join(tmp_dir, 'update.log')
         script = os.path.join(tmp_dir, 'do_update.bat')
         with open(script, 'w') as f:
             f.write(f"""@echo off
 timeout /t 2 /nobreak >nul
-robocopy "{new_dir}" "{install_path}" /E /IS /IT /IM >"{log}" 2>&1
-start "" "{os.path.join(install_path, exe_name)}"
+robocopy "{new_dir}" "{install_path}" /E /IS /IT /IM /R:3 /W:1 /NFL /NDL /NJH /NJS >"{log}" 2>&1
+start "" /B "{os.path.join(install_path, exe_name)}"
 """)
-        subprocess.Popen(['cmd', '/c', script], close_fds=True,
-                         creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+        
+        # Create a VBScript wrapper to launch the bat silently
+        vbs_script = os.path.join(tmp_dir, 'run_update.vbs')
+        with open(vbs_script, 'w') as f:
+            f.write(f"""Set objShell = CreateObject("WScript.Shell")
+objShell.Run "{script}", 0, False
+""")
+        
+        subprocess.Popen(['wscript.exe', vbs_script], close_fds=True)
+
 
     else:
         # Linux: install_path is the exe dir
@@ -610,10 +627,9 @@ class PyWebViewAPI:
                         bridge.broadcast_to_ui("UPDATE_READY", {}), _global_loop
                     )
 
-                # Give the helper script a moment to start before we exit
+                # Give the helper script a moment to start, then exit immediately so the updater can replace the exe
                 time.sleep(0.5)
-                if self.window:
-                    self.window.destroy()
+                os._exit(0)
 
             except Exception as e:
                 print(f"[Update] apply_update failed: {e}")
