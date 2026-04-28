@@ -1,27 +1,27 @@
 <script setup>
-import { platform } from '../store.js'
+const isMac  = () => window.electronAPI?.platform === 'darwin'
+const eAPI   = () => window.electronAPI
 
-const isMac = () => platform.value === 'darwin'
-const api   = () => window.pywebview?.api
+// Win/Linux only — macOS uses fully native window controls
+const isZoomed = { value: false }
 
-const minimize   = () => api()?.minimize_window()
-const fullscreen = () => api()?.toggle_maximize_window()   // green = fullscreen
-const close      = () => api()?.close_window()
-const zoom       = () => api()?.zoom_window()              // dblclick = zoom/maximize
+const minimize   = () => eAPI()?.minimize()
+const fullscreen = () => eAPI()?.toggleFullscreen()
+const close      = () => eAPI()?.close()
+
+const zoom = () => {
+  eAPI()?.zoom()
+  isZoomed.value = !isZoomed.value
+}
 </script>
 
 <template>
-  <div class="titlebar pywebview-drag-region" @dblclick="zoom">
+  <!-- macOS: drag strip only — native traffic lights (hiddenInset) sit on top -->
+  <div v-if="isMac()" class="titlebar-mac" />
 
-    <!-- macOS traffic lights -->
-    <div v-if="isMac()" class="macos-controls" @dblclick.stop>
-      <span class="tb-btn tb-close"    @click="close"       title="Close">✕</span>
-      <span class="tb-btn tb-minimize" @click="minimize"    title="Minimise">−</span>
-      <span class="tb-btn tb-zoom"     @click="fullscreen"  title="Full Screen">⤢</span>
-    </div>
-
-    <!-- Windows / Linux controls -->
-    <div v-if="!isMac()" class="win-controls" @dblclick.stop>
+  <!-- Windows / Linux: full custom bar with window controls -->
+  <div v-else class="titlebar-win" @dblclick="zoom">
+    <div class="win-controls" @dblclick.stop>
       <button class="win-btn"           @click="minimize"    title="Minimise">
         <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
       </button>
@@ -35,49 +35,32 @@ const zoom       = () => api()?.zoom_window()              // dblclick = zoom/ma
         </svg>
       </button>
     </div>
-
   </div>
 </template>
 
 <style scoped>
-.titlebar {
-  display: flex;
-  align-items: center;
-  height: 28px;
+/* macOS: drag strip — Electron hiddenInset puts traffic lights over this */
+.titlebar-mac {
+  height: 38px;
   background: var(--bg-sidebar);
-  border-bottom: none;  /* seamless with toolbar below */
   flex-shrink: 0;
   user-select: none;
   cursor: default;
+  -webkit-app-region: drag;
 }
 
-/* ── macOS traffic lights ── */
-.macos-controls {
+/* Windows / Linux: full custom bar */
+.titlebar-win {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 8px 0 14px;
-  height: 100%;
-}
-.tb-btn {
-  width: 14px; height: 14px;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 0;           /* icons hidden until hover */
-  font-weight: 900;
-  line-height: 1;
+  height: 38px;
+  background: var(--bg-sidebar);
   flex-shrink: 0;
-  transition: filter 0.1s;
+  user-select: none;
+  cursor: default;
+  -webkit-app-region: drag;
 }
-/* reveal icons when hovering the whole control group */
-.macos-controls:hover .tb-btn { font-size: 9px; }
-.tb-btn:hover { filter: brightness(0.82); }
-.tb-close    { background: #ff5f57; color: #7a0002; }
-.tb-minimize { background: #febc2e; color: #7a4800; }
-.tb-zoom     { background: #28c840; color: #006200; }
 
-/* ── Windows / Linux controls ── */
 .win-controls {
   margin-left: auto;
   display: flex;
@@ -95,3 +78,4 @@ const zoom       = () => api()?.zoom_window()              // dblclick = zoom/ma
 .win-btn:hover  { background: rgba(255,255,255,0.08); color: #fff; }
 .win-close:hover { background: #e81123; color: #fff; }
 </style>
+

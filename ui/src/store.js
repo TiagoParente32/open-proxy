@@ -62,11 +62,8 @@ export const exportRules = (rules, filename) => {
     const data = rules.value !== undefined ? rules.value : rules;
     const jsonString = JSON.stringify(data, null, 2);
 
-    if (window.pywebview && window.pywebview.api) {
-        window.pywebview.api.save_file(filename + '.json', jsonString)
-            .then((success) => {
-                if (!success) console.log("Export canceled by user.");
-            })
+    if (window.electronAPI) {
+        window.electronAPI.saveFile(filename + '.json', jsonString)
             .catch(err => console.error("Export failed:", err));
     } else {
         alert("System API not ready yet. Please wait a moment and try again.");

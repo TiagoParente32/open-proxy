@@ -13,10 +13,7 @@ import sqlite3
 import hashlib
 import urllib.request
 import websockets
-import webview
-from webview.menu import Menu, MenuAction, MenuSeparator
 import psutil
-import pystray
 import mitmproxy_rs
 from PIL import Image
 from mitmproxy import http, options
@@ -344,77 +341,6 @@ def unset_macos_proxy() -> dict:
         return {'ok': False, 'services': services, 'error': str(e)}
 
 
-class PyWebViewAPI:
-    def __init__(self):
-        self.window = None
-
-    # ── Window controls (used by custom frameless title bar) ──────────────────
-    def minimize_window(self):
-        if self.window:
-            self.window.minimize()
-
-    def toggle_maximize_window(self):
-        """Green button / fullscreen toggle."""
-        if self.window:
-            self.window.toggle_fullscreen()
-
-    def zoom_window(self):
-        """Double-click title bar — macOS zoom (fill available space, not fullscreen)."""
-        if self.window:
-            self.window.maximize()
-
-    def close_window(self):
-        """Hide to tray (same behaviour as clicking the native close button)."""
-        if self.window:
-            self.window.hide()
-
-    def save_file(self, filename, content):
-        import webview
-        import os
-
-        try:
-            dialog_type = webview.FileDialog.SAVE if hasattr(webview, 'FileDialog') else webview.SAVE_DIALOG
-            safe_dir = os.path.expanduser('~/Desktop')
-
-            result = self.window.create_file_dialog(
-                dialog_type,
-                directory=safe_dir,
-                save_filename=filename
-            )
-
-            print(f"[DEBUG] Dialog result: {result}")
-
-            if not result or len(result) == 0:
-                print("[INFO] User cancelled save dialog")
-                return False
-
-            save_path = result[0]
-
-            if isinstance(save_path, tuple):
-                save_path = save_path[0]
-
-            if not save_path or save_path == "/" or os.path.isdir(save_path):
-                print(f"[WARNING] Invalid path from dialog: {save_path}")
-                fallback_path = os.path.join(safe_dir, filename)
-                if not fallback_path.endswith(".json"):
-                    fallback_path += ".json"
-                with open(fallback_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
-                print(f"[INFO] Saved via fallback to {fallback_path}")
-                return True
-
-            if not save_path.endswith(".json"):
-                save_path += ".json"
-
-            with open(save_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-
-            print(f"[INFO] Export saved to {save_path}")
-            return True
-
-        except Exception as e:
-            print(f"[ERROR] API Save File failed: {e}")
-            return False
 
 
 # ============================================================================
@@ -1195,34 +1121,6 @@ class ProxyUIBridge:
                 elif payload.get("type") == "TOGGLE_MAP_REMOTE":
                     self.map_remote_enabled = payload.get("enabled", True)
 
-                elif payload.get("type") == "EXPORT_FILE":
-                    filename = payload.get("filename", "export.json")
-                    file_data = payload.get("data", "")
-
-                    def _save_dialog():
-                        try:
-                            window = webview.windows[0]
-                            dialog_type = webview.FileDialog.SAVE if hasattr(webview, 'FileDialog') else webview.SAVE_DIALOG
-                            safe_dir = os.path.expanduser('~/Desktop')
-
-                            result = window.create_file_dialog(
-                                dialog_type,
-                                directory=safe_dir,
-                                save_filename=filename
-                            )
-
-                            if result and len(result) > 0:
-                                save_path = result[0]
-                                if isinstance(save_path, tuple):
-                                    save_path = save_path[0]
-                                with open(save_path, 'w', encoding='utf-8') as f:
-                                    f.write(file_data)
-                                print(f"[INFO] Export saved to {save_path}")
-                        except Exception as e:
-                            print(f"[ERROR] Failed to open save dialog: {e}")
-
-                    threading.Thread(target=_save_dialog, daemon=True).start()
-
                 elif payload.get("type") == "RESOLVE_BREAKPOINT":
                     flow_id = payload.get("id")
                     action = payload.get("action")
@@ -1546,141 +1444,16 @@ def run_async_loop(bridge, proxy_port):
         print(f"[FATAL] Supervisor died: {e}")
 
 
-def _build_menu(window):
-    """Build the native app menu. Callbacks call into the Vue store via evaluate_js."""
-    def js(code):
-        try:
-            window.evaluate_js(f'window.__op && window.__op.{code}')
-        except Exception as e:
-            print(f'[MENU] JS error: {e}')
-
-    return [
-        Menu('Proxy', [
-            MenuAction('Record / Pause',     lambda: js('toggleRecording()')),
-            MenuAction('Compose Request',    lambda: js('openComposeNew()')),
-            MenuAction('Clear Traffic',      lambda: js('clearTraffic()')),
-            MenuSeparator(),
-            MenuAction('Bust Cache',         lambda: js('bustCache()')),
-        ]),
-        Menu('Tools', [
-            MenuAction('VPN Mode',           lambda: js('openVpnMode()')),
-            MenuAction('Breakpoints',        lambda: js('openBreakpoints()')),
-            MenuSeparator(),
-            MenuAction('Map Local',          lambda: js('openMapLocal()')),
-            MenuAction('Map Remote',         lambda: js('openMapRemote()')),
-            MenuAction('Highlight',          lambda: js('openHighlight()')),
-            MenuSeparator(),
-            Menu('Certificate Setup', [
-                MenuAction('Android Emulator', lambda: js("openCertSetup('android_emulator')")),
-                MenuAction('Android Device',   lambda: js("openCertSetup('android_device')")),
-                MenuSeparator(),
-                MenuAction('iOS Simulator',    lambda: js("openCertSetup('ios_simulator')")),
-                MenuAction('iOS Device',       lambda: js("openCertSetup('ios_device')")),
-                MenuSeparator(),
-                MenuAction('Browser / Desktop', lambda: js("openCertSetup('browser')")),
-            ]),
-            MenuSeparator(),
-            Menu('Throttle', [
-                MenuAction('No Throttling',  lambda: js("setThrottle('None')")),
-                MenuAction('Fast 3G',        lambda: js("setThrottle('Fast 3G')")),
-                MenuAction('Slow 3G',        lambda: js("setThrottle('Slow 3G')")),
-            ]),
-        ]),
-    ]
-
-
 if __name__ == "__main__":
     ACTIVE_PROXY_PORT = get_free_port(9090)
-    print(f"Starting OpenProxy on port {ACTIVE_PROXY_PORT}")
+    print(f"Starting OpenProxy on port {ACTIVE_PROXY_PORT}", flush=True)
 
     bridge = ProxyUIBridge(proxy_port=ACTIVE_PROXY_PORT)
 
     t = threading.Thread(target=run_async_loop, args=(bridge, ACTIVE_PROXY_PORT), daemon=True)
     t.start()
 
-    html_path = f"{get_resource_path('ui/dist/index.html')}?v={int(time.time())}"
-    if os.name == 'nt':
-        icon_path = get_resource_path('icon.ico')
-    else:
-        icon_path = get_resource_path('icon.png')
-
-    webview_api = PyWebViewAPI()
-
-    window = webview.create_window(
-        title='OpenProxy',
-        url=html_path,
-        width=1024,
-        height=720,
-        min_size=(1024, 720),
-        background_color='#1a1a1b',
-        frameless=True,
-        js_api=webview_api
-    )
-
-    def on_loaded():
-        webview_api.window = window
-
-    window.events.loaded += on_loaded
-
-    def on_closing():
-        """Hide to tray instead of quitting when the close button is pressed."""
-        window.hide()
-        return False  # cancel the default close
-
-    window.events.closing += on_closing
-
-    # ── System tray icon ──────────────────────────────────────────────────────
     try:
-        tray_img = Image.open(icon_path).resize((64, 64), Image.LANCZOS)
-    except Exception:
-        tray_img = Image.new("RGBA", (64, 64), (59, 130, 246, 255))
-
-    def tray_show(icon, item):
-        window.show()
-
-    def tray_quit(icon, item):
-        icon.stop()
-        os._exit(0)
-
-    tray_menu = pystray.Menu(
-        pystray.MenuItem("Open OpenProxy", tray_show, default=True),
-        pystray.Menu.SEPARATOR,
-        pystray.MenuItem(f"Proxy  :{ACTIVE_PROXY_PORT}", None, enabled=False),
-        pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Quit", tray_quit),
-    )
-    tray = pystray.Icon("OpenProxy", tray_img, "OpenProxy", tray_menu)
-    tray.run_detached()
-    # ─────────────────────────────────────────────────────────────────────────
-
-    # macOS: clicking the dock icon while the window is hidden should reopen it.
-    # pywebview's AppDelegate doesn't implement applicationShouldHandleReopen,
-    # so we inject it before webview.start() launches the Cocoa run loop.
-    if sys.platform == "darwin":
-        try:
-            import objc
-            from webview.platforms.cocoa import BrowserView
-
-            def _reopen(self, sender, has_visible_windows):
-                if not has_visible_windows:
-                    window.show()
-                return True
-
-            objc.classAddMethod(
-                BrowserView.AppDelegate,
-                b"applicationShouldHandleReopen:hasVisibleWindows:",
-                _reopen,
-            )
-        except Exception as e:
-            print(f"[WARN] Could not install dock-reopen handler: {e}")
-
-    webview.start(
-        private_mode=False,
-        debug=False,
-        icon=icon_path,
-        menu = _build_menu(window) if sys.platform in ("darwin", "linux") else None
-    )
-
-    # When webview.start() returns (app quit normally), stop the tray too
-    tray.stop()
-    os._exit(0)
+        t.join()
+    except KeyboardInterrupt:
+        pass
