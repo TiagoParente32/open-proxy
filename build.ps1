@@ -16,6 +16,7 @@ $PyInstallerArgs = @(
     "--windowed",
     "--icon=icon.ico",
     "--add-data", "ui/dist;ui/dist",
+    "--add-data", "icon.ico;.",
     "--add-data", "icon.png;.",
     "main.py"
 )
@@ -51,7 +52,7 @@ Write-Host "OK App built -> dist\$APP_NAME\"
 
 # ── ZIP ───────────────────────────────────────
 if ($Mode -eq "zip") {
-    $version = python -c "import re; print(re.search(r'APP_VERSION\s*=\s*[\"\'](.*?)[\"\']', open('main.py').read()).group(1))"
+    $version = python -c 'import re; print(re.search(r"APP_VERSION\s*=\s*[\"'"'"'](.*?)[\"'"'"']", open("main.py").read()).group(1))'
     $zipName = "${APP_NAME}-${version}-windows.zip"
 
     Write-Host ">> Creating ZIP: $zipName..."
