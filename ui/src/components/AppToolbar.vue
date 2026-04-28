@@ -59,7 +59,7 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 
 <template>
   <header class="toolbar">
-    
+
     <div class="toolbar-group left">
       <button
         class="action-btn"
@@ -202,7 +202,7 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 /* --- Ultra-Compact Layout --- */
 .toolbar { 
   display: flex; justify-content: space-between; align-items: center; 
-  padding: 6px 16px; 
+  padding: 6px 12px;
   background-color: var(--bg-sidebar); 
   border-bottom: 1px solid var(--border); 
   font-size: 11px; 

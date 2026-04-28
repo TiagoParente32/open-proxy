@@ -348,6 +348,26 @@ class PyWebViewAPI:
     def __init__(self):
         self.window = None
 
+    # ── Window controls (used by custom frameless title bar) ──────────────────
+    def minimize_window(self):
+        if self.window:
+            self.window.minimize()
+
+    def toggle_maximize_window(self):
+        """Green button / fullscreen toggle."""
+        if self.window:
+            self.window.toggle_fullscreen()
+
+    def zoom_window(self):
+        """Double-click title bar — macOS zoom (fill available space, not fullscreen)."""
+        if self.window:
+            self.window.maximize()
+
+    def close_window(self):
+        """Hide to tray (same behaviour as clicking the native close button)."""
+        if self.window:
+            self.window.hide()
+
     def save_file(self, filename, content):
         import webview
         import os
@@ -1059,7 +1079,7 @@ class ProxyUIBridge:
         try:
             await websocket.send(json.dumps({
                 "type": "SYSTEM_INFO",
-                "data": {"ip": LOCAL_IP, "port": self.proxy_port}
+                "data": {"ip": LOCAL_IP, "port": self.proxy_port, "platform": sys.platform}
             }))
 
             async for message in websocket:
@@ -1593,6 +1613,7 @@ if __name__ == "__main__":
         height=720,
         min_size=(1024, 720),
         background_color='#1a1a1b',
+        frameless=True,
         js_api=webview_api
     )
 

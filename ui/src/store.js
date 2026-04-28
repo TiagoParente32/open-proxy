@@ -103,6 +103,7 @@ export const importRules = (event, rulesRef) => {
 // ============================================================================
 export const requests = ref(loadState('requests', []))
 export const connectionStatus = ref('Connecting...')
+export const platform = ref('')  // 'darwin' | 'win32' | 'linux'
 export const isRecording = ref(true)
 export const proxyHost = ref('Detecting...')
 
@@ -792,6 +793,7 @@ export const initWebSocket = () => {
 
         if (payload.type === "SYSTEM_INFO") {
             proxyHost.value = `${payload.data.ip}:${payload.data.port}`
+            if (payload.data.platform) platform.value = payload.data.platform
         }
         else if (payload.type === "ALERT") {
             alert(payload.message)

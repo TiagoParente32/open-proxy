@@ -4,6 +4,7 @@ import { Splitpanes, Pane } from 'splitpanes'
 import 'splitpanes/dist/splitpanes.css'
 
 // Import our new components!
+import TitleBar from './components/TitleBar.vue'
 import AppToolbar from './components/AppToolbar.vue'
 import AppSidebar from './components/AppSidebar.vue'
 import TrafficTable from './components/TrafficTable.vue'
@@ -206,6 +207,7 @@ const openBreakpointModalFromContext = () => {
 
 <template>
   <div class="app-wrapper">
+    <TitleBar />
     <AppToolbar />
     <FilterBar />
     <splitpanes class="default-theme custom-theme" style="flex: 1; overflow: hidden;">
