@@ -257,10 +257,14 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   z-index: 9999;
 }
 
+.win-item--sub {
+  position: relative;
+}
+
 .win-subdropdown {
-  top: -4px;
+  top: -4px;   /* account for dropdown's top padding so row aligns flush */
   left: 100%;
-  margin: 0 0 0 2px;
+  margin: 0;   /* no gap — mouse can slide directly across */
 }
 
 .win-item {
