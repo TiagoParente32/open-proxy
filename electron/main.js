@@ -8,6 +8,24 @@ const { spawn } = require('child_process')
 
 let win, tray, pythonProcess, isQuitting = false
 
+// ── UI build (dev only) ───────────────────────────────────────────────────────
+function buildUI () {
+  if (app.isPackaged) return Promise.resolve()
+  return new Promise((resolve) => {
+    console.log('[UI] Building...')
+    const npm  = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+    const proc = spawn(npm, ['run', 'build'], {
+      cwd:   path.join(__dirname, '..', 'ui'),
+      stdio: 'inherit',
+    })
+    proc.on('close', code => {
+      if (code !== 0) console.warn('[UI] Build exited with code', code)
+      else console.log('[UI] Build complete')
+      resolve()   // resolve regardless so startup isn't blocked by a build error
+    })
+  })
+}
+
 // ── Python backend ────────────────────────────────────────────────────────────
 function startPython () {
   return new Promise((resolve) => {
@@ -211,7 +229,11 @@ app.whenReady().then(async () => {
   setupMenu()
   createWindow()          // creates window instantly (shows background colour)
 
-  await startPython()     // waits for "Starting OpenProxy" on stdout
+  // Build UI and start Python in parallel — both must finish before loading
+  await Promise.all([
+    new Promise(resolve => { buildUI(); resolve() }),
+    startPython(),
+  ])
 
   // Load the UI only after Python's WebSocket server is bound
   const index = app.isPackaged
