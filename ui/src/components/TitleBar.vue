@@ -128,6 +128,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
               @mouseenter="openSubmenu = item.label"
               @mouseleave="openSubmenu = null"
             >
+              <span class="win-item-check" />
               {{ item.label }}
               <svg class="win-arrow" width="5" height="8" viewBox="0 0 5 8" fill="none">
                 <path d="M1 1l3 3-3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
