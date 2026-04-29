@@ -104,7 +104,7 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         @click="openVpnMode()"
         title="VPN Mode — connect without proxy setup"
       >
-        🔒 VPN Mode
+        VPN Mode
       </button>
       <button class="secondary-pill" @click="showBreakpointModal = true" title="Manage Breakpoints">
         Breakpoints
