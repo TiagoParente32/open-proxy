@@ -55,8 +55,15 @@ function createWindow () {
     height:   720,
     minWidth: 1024,
     minHeight: 720,
-    frame: process.platform === 'win32' ? false : true,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    // Windows: keep native OS controls (real min/max/close) as an overlay
+    ...(process.platform === 'win32' && {
+      titleBarOverlay: {
+        color:       '#222223',
+        symbolColor: '#8b949e',
+        height:      38,
+      },
+    }),
     backgroundColor: '#222223',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

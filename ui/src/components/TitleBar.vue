@@ -1,8 +1,9 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 
-const isMac = () => window.electronAPI?.platform === 'darwin'
-const eAPI  = () => window.electronAPI
+const isMac     = () => window.electronAPI?.platform === 'darwin'
+const isWindows = () => window.electronAPI?.platform === 'win32'
+const eAPI      = () => window.electronAPI
 
 const minimize = () => eAPI()?.minimize()
 const close    = () => eAPI()?.close()
@@ -145,10 +146,10 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
     </nav>
 
     <!-- Drag region fills remaining space -->
-    <div class="win-drag" @dblclick="zoom" />
+    <div class="win-drag" />
 
-    <!-- Window controls -->
-    <div class="win-controls" @dblclick.stop>
+    <!-- Window controls — Linux only; Windows uses native OS overlay buttons -->
+    <div v-if="!isWindows()" class="win-controls" @dblclick.stop>
       <button class="win-btn" @click="minimize" title="Minimise">
         <svg viewBox="0 0 10 10">
           <line x1="1" y1="5" x2="9" y2="5"
