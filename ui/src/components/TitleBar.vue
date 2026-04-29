@@ -149,16 +149,34 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 
     <!-- Window controls -->
     <div class="win-controls" @dblclick.stop>
-      <button class="win-btn"           @click="minimize" title="Minimise">
-        <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
+      <button class="win-btn" @click="minimize" title="Minimise">
+        <svg viewBox="0 0 10 10">
+          <line x1="1" y1="5" x2="9" y2="5"
+                stroke="currentColor"
+                stroke-width="1"
+                stroke-linecap="square"/>
+        </svg>
       </button>
-      <button class="win-btn"           @click="zoom"     title="Maximise / Restore">
-        <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><rect x="0.5" y="0.5" width="8" height="8" stroke="currentColor"/></svg>
+
+      <button class="win-btn" @click="zoom" title="Maximise / Restore">
+        <svg viewBox="0 0 10 10">
+          <rect x="1" y="1" width="8" height="8"
+                stroke="currentColor"
+                stroke-width="1"
+                fill="none"/>
+        </svg>
       </button>
-      <button class="win-btn win-close" @click="close"    title="Close (hides to tray)">
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-          <line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" stroke-width="1.3"/>
-          <line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" stroke-width="1.3"/>
+
+      <button class="win-btn win-close" @click="close" title="Close (hides to tray)">
+        <svg viewBox="0 0 10 10">
+          <line x1="2" y1="2" x2="8" y2="8"
+                stroke="currentColor"
+                stroke-width="1"
+                stroke-linecap="square"/>
+          <line x1="8" y1="2" x2="2" y2="8"
+                stroke="currentColor"
+                stroke-width="1"
+                stroke-linecap="square"/>
         </svg>
       </button>
     </div>
@@ -288,14 +306,33 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   -webkit-app-region: no-drag;
 }
 .win-btn {
-  display: flex; align-items: center; justify-content: center;
-  width: 46px; height: 100%;
-  background: transparent; border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  background: transparent;
+  border: none;
   color: #8b949e;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.win-btn:hover   { background: rgba(255,255,255,0.08); color: #fff; }
-.win-close:hover { background: #e81123; color: #fff; }
+
+/* FIXED ICON SIZE */
+.win-btn svg {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
+.win-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+}
+
+.win-close:hover {
+  background: #e81123;
+  color: #fff;
+}
 </style>
 
