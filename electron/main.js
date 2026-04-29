@@ -7,6 +7,7 @@ const fs    = require('fs')
 const { spawn } = require('child_process')
 
 let win, tray, pythonProcess, isQuitting = false
+let bustCacheEnabled = false
 
 async function buildUI () {
   if (app.isPackaged) return
@@ -121,6 +122,10 @@ function setupIPC () {
     }
   })
   ipcMain.on('shell:openExternal', (_e, url) => shell.openExternal(url))
+  ipcMain.on('menu:bustCacheSync', (_e, val) => {
+    bustCacheEnabled = !!val
+    setupMenu()   // rebuild native menu so checkmark reflects Vue's real state
+  })
 
   ipcMain.handle('dialog:saveFile', async (_e, { filename, content }) => {
     const { filePath, canceled } = await dialog.showSaveDialog(win, {
@@ -176,7 +181,16 @@ function setupMenu () {
         { label: 'Compose Request', click: () => js('openComposeNew()') },
         { label: 'Clear Traffic',   click: () => js('clearTraffic()') },
         { type: 'separator' },
-        { label: 'Bust Cache',      click: () => js('bustCache()') },
+        {
+          label:   'Bust Cache',
+          type:    'checkbox',
+          checked: bustCacheEnabled,
+          click:   () => {
+            bustCacheEnabled = !bustCacheEnabled
+            js('bustCache()')
+            setupMenu()   // rebuild so the checkmark updates
+          },
+        },
       ],
     },
     {

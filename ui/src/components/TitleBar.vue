@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { disableCache } from '../store.js'
 
 const isMac     = () => window.electronAPI?.platform === 'darwin'
 const isWindows = () => window.electronAPI?.platform === 'win32'
@@ -20,7 +21,7 @@ const MENUS = [
       { label: 'Compose Request', action: () => op()?.openComposeNew() },
       { label: 'Clear Traffic',   action: () => op()?.clearTraffic() },
       { type: 'separator' },
-      { label: 'Bust Cache',      action: () => op()?.bustCache() },
+      { label: 'Bust Cache', action: () => op()?.bustCache(), checked: () => disableCache.value },
     ],
   },
   {
@@ -139,7 +140,10 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
                 </template>
               </ul>
             </li>
-            <li v-else class="win-item" @click.stop="clickItem(item)">{{ item.label }}</li>
+            <li v-else class="win-item" @click.stop="clickItem(item)">
+              <span class="win-item-check">{{ item.checked?.() ? '✓' : '' }}</span>
+              {{ item.label }}
+            </li>
           </template>
         </ul>
       </div>
@@ -270,8 +274,8 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 .win-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 5px 14px;
+  gap: 6px;
+  padding: 5px 14px 5px 6px;
   font-size: 12px;
   color: #cdd9e5;
   cursor: default;
@@ -291,9 +295,17 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 }
 
 .win-arrow {
-  margin-left: 12px;
+  margin-left: auto;
   opacity: 0.6;
   flex-shrink: 0;
+}
+
+.win-item-check {
+  width: 12px;
+  font-size: 11px;
+  color: #cdd9e5;
+  flex-shrink: 0;
+  text-align: center;
 }
 
 /* ── Drag spacer ──────────────────────────────────────────────────────────── */

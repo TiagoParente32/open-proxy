@@ -8,4 +8,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   close:            ()           => ipcRenderer.send('window:close'),
   openExternal:     url          => ipcRenderer.send('shell:openExternal', url),
   saveFile:         (name, data) => ipcRenderer.invoke('dialog:saveFile', { filename: name, content: data }),
+  bustCacheSync:    (val)        => ipcRenderer.send('menu:bustCacheSync', val),
 })

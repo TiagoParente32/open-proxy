@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
 import { Splitpanes, Pane } from 'splitpanes'
 import 'splitpanes/dist/splitpanes.css'
 
@@ -52,6 +52,10 @@ import {
 onMounted(() => {
   initWebSocket()
   document.addEventListener('click', closeContextMenu)
+
+  // Sync bust cache state with the native macOS menu (keeps checkmark accurate)
+  window.electronAPI?.bustCacheSync(disableCache.value)
+  watch(disableCache, val => window.electronAPI?.bustCacheSync(val))
 
   // Native app menu bridge — Python calls window.__op.xxx() via evaluate_js
   window.__op = {
