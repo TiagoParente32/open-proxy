@@ -10,16 +10,6 @@ if (-not (Test-Path "ui\dist\index.html")) {
     Set-Location ..
 }
 
-# Start Python backend in background
-Write-Host "Starting Python backend..."
-$pythonExe = if (Test-Path "venv\Scripts\python.exe") { "venv\Scripts\python.exe" } else { "python" }
-$pythonProc = Start-Process -FilePath $pythonExe -ArgumentList "main.py" -PassThru -NoNewWindow
-
-Start-Sleep -Seconds 1
-
-# Launch Electron (blocks until window closes)
+# Electron spawns and manages the Python backend itself
 Write-Host "Launching Electron..."
 npm start
-
-# Kill Python when Electron exits
-Stop-Process -Id $pythonProc.Id -Force -ErrorAction SilentlyContinue
