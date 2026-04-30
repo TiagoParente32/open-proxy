@@ -96,11 +96,9 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 </script>
 
 <template>
-  <!-- macOS: drag strip only — native traffic lights (hiddenInset) sit on top -->
-  <div v-if="isMac()" class="titlebar-mac" />
-
-  <!-- Windows / Linux: app name + menu bar + drag region + window controls -->
-  <div v-else class="titlebar-win">
+  <!-- Windows / Linux only: app name + menu bar + drag region + window controls -->
+  <!-- macOS uses AppToolbar as the titlebar (traffic lights + drag region handled there) -->
+  <div v-if="!isMac()" class="titlebar-win">
 
     <!-- App name (non-draggable left side) -->
     <span class="win-app-name" @dblclick.stop>OpenProxy</span>
