@@ -175,6 +175,18 @@ function setupMenu () {
   const template = [
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+    {
       label: 'Proxy',
       submenu: [
         { label: 'Record / Pause',  click: () => js('toggleRecording()') },
