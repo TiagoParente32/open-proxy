@@ -1,6 +1,6 @@
 # <img src="icon.png" width="36" align="absmiddle" alt="OpenProxy Icon" /> OpenProxy
 
-OpenProxy is a fast, modern, lightweight network debugging proxy built for developers. It combines the raw power of `mitmproxy` with a sleek, native-feeling desktop UI built in Vue.js and Python (`pywebview`).
+OpenProxy is a fast, modern, lightweight network debugging proxy built for developers. It combines the raw power of `mitmproxy` with a sleek, native-feeling desktop UI built in **Electron**, **Vue 3**, and **Python**.
 
 Whether you need to mock API responses, rewrite routing rules on the fly, throttle your network, or automatically inject SSL certificates into an Android emulator, OpenProxy handles it without the bloat of traditional Java-based proxies.
 
@@ -12,134 +12,134 @@ Whether you need to mock API responses, rewrite routing rules on the fly, thrott
 * **Map Local (Mocking)**: Trick your app into receiving custom JSON/HTML responses without touching your backend.
 * **Map Remote (Rewrites)**: Transparently route production URLs to your `localhost` development server.
 * **Live Breakpoints**: Pause requests or responses mid-flight, edit their headers/bodies, and release them.
+* **VPN Mode**: Route device traffic through a WireGuard tunnel — no manual proxy configuration needed.
 * **Smart Android Setup**: 1-click ADB integration. Automatically detects rooted emulators to inject System Certificates, or gracefully falls back to User Certificates.
 * **Network Throttling**: Simulate "Fast 3G" or "Slow 3G" network conditions.
 * **Aggressive Cache Busting**: One-click toggle to strip caching headers and force fresh responses.
-* **Pro-Grade UI**: Ultra-compact filter chips, dark mode, right-click context menus, and split-pane layout.
+* **Pro-Grade UI**: Ultra-compact toolbar, dark mode, right-click context menus, and split-pane layout.
 
 ---
 
 ## 🛠️ Tech Stack
 
-* **Backend**: Python 3, `mitmproxy` (Core proxy engine), `websockets`
-* **Frontend**: Vue 3, Vite, raw CSS (No bulky component libraries)
-* **Bridge**: `pywebview` (Renders the Vue app in a native OS window)
+| Layer | Technology |
+|---|---|
+| **Backend** | Python 3, `mitmproxy` (proxy engine), `websockets` |
+| **Frontend** | Vue 3, Vite, raw CSS (no component libraries) |
+| **Desktop shell** | Electron — serves the Vue app and manages the Python subprocess |
+
+The app is structured as three loosely coupled pieces:
+- **Electron** (`electron/`) — the native window, OS menus, tray icon, and auto-updater. It spawns the Python backend on startup and loads the built Vue frontend.
+- **Vue UI** (`ui/`) — the entire interface, communicating with the Python backend over a local WebSocket.
+- **Python backend** (`main.py`) — runs `mitmproxy` and streams proxy state to the UI.
 
 ---
 
-## 💻 Local Development Setup
+## 💻 Local Development
 
-To work on OpenProxy, you need to run both the Vue frontend and the Python backend.
-
-### 1. Prerequisites
-* Python 3.10+
+### Prerequisites
 * Node.js 18+
-* ADB (Android Debug Bridge) installed and in your system PATH (for Android features)
-* OpenSSL (for Android root certificate hashing)
+* Python 3.10+
+* ADB (Android Debug Bridge) in your system PATH *(Android features only)*
+* OpenSSL *(Android root certificate hashing only)*
 
-### 2. Install Dependencies
+### 1. Install Dependencies
 
-**Frontend:**
+**Electron & root deps:**
 ```bash
-cd ui
 npm install
 ```
 
-**Backend:**
+**Vue frontend:**
 ```bash
-# Return to the root directory
-cd ..
+cd ui && npm install && cd ..
+```
+
+**Python backend:**
+```bash
 python3 -m venv venv
-source ./venv/bin/activate
+source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. Run the App in Dev Mode
-Use the provided script to build the UI and launch the app in one command:
+### 2. Run in Dev Mode
+
 ```bash
-chmod + ./run.sh
+# macOS / Linux
 ./run.sh
+
+# Windows
+.\run.ps1
 ```
 
-This will run `npm run build` inside the `ui/` folder and then start `python main.py` automatically. If the build fails, the app will not start.
+This launches Electron (`npm start`). On startup Electron will:
+1. Build the Vue UI automatically (`npm run build` inside `ui/`)
+2. Spawn the Python backend from the local `venv`
+3. Load the built UI in the window
+
+> The Python backend and the Vue frontend communicate over a local WebSocket — there is no HTTP server involved in serving the UI.
 
 ---
 
-## 📦 Building Native Executables (Production)
+## 📦 Building for Distribution
 
-You can bundle OpenProxy into a single `.exe` (Windows) or `.app` (macOS) using PyInstaller. This allows you to run the app without a terminal window and share it with others.
+The build is a **3-step pipeline**: Vue UI → Python binary (PyInstaller) → Electron installer (electron-builder).
 
-### 1. Prepare the Build
-1. Ensure your Vue app is fully built: `cd ui && npm run build`
-2. Ensure you have your icon files in the root directory:
-   * `icon.ico` (for Windows)
-   * `icon.icns` (for macOS)
-   * `icon.png` (for the internal pywebview window icon)
+Both scripts handle all three steps automatically.
 
-### 2. Install PyInstaller
+### macOS / Linux
 ```bash
-pip install pyinstaller
+./build.sh          # → DMG + ZIP in dist-electron/
+./build.sh --dir    # unpackaged app only (faster, for testing)
 ```
 
-### 3. Generate the Build
-
-**⚠️ Important:** You must build the Windows `.exe` on a Windows machine, and the macOS `.app` on a Mac.
-
-**🍎 For macOS:**
-Run this in your terminal from the root project folder:
-```bash
-pyinstaller --name "OpenProxy" \
-  --windowed \
-  --icon=icon.icns \
-  --add-data "ui/dist:ui/dist" \
-  --add-data "icon.png:." \
-  main.py
+### Windows
+```powershell
+.\build.ps1         # → NSIS installer + ZIP in dist-electron\
+.\build.ps1 --dir   # unpackaged app only (faster, for testing)
 ```
-*Note: macOS uses a colon (`:`) to separate paths in `--add-data`.*
 
-**🪟 For Windows:**
-Run this in Command Prompt or PowerShell from the root project folder:
-```bash
-pyinstaller --name "OpenProxy" ^
-  --noconsole ^
-  --icon=icon.ico ^
-  --add-data "ui/dist;ui/dist" ^
-  --add-data "icon.png;." ^
-  main.py
-```
-*Note: Windows uses a semicolon (`;`) to separate paths in `--add-data`.*
+### What each step produces
 
-### 4. Locate your App
-Once PyInstaller finishes, it will create a `dist/` folder in your project directory. Inside, you will find your standalone `OpenProxy` executable!
+| Step | Tool | Output |
+|---|---|---|
+| 1. Vue UI | Vite | `ui/dist/` |
+| 2. Python backend | PyInstaller | `backend-dist/OpenProxy-server/` |
+| 3. Installer | electron-builder | `dist-electron/` |
+
+> **Note:** You must build the macOS `.dmg` on a Mac and the Windows `.exe` on Windows. Cross-compilation is not supported.
+
+### Distribution targets
+
+| Platform | Targets |
+|---|---|
+| macOS | `.dmg`, `.zip` (arm64 + x64) |
+| Windows | NSIS `.exe` installer, `.zip` |
+| Linux | `.AppImage`, `.tar.gz` |
 
 ---
 
 ## 🤖 Android Certificate Notes
 
 Modern Android (API 24+) ignores user-installed certificates by default. To intercept traffic from your own apps:
-1. **The Easy Way (Root)**: Create a "Google APIs" emulator (NOT "Google Play"). Run it from the terminal with `emulator -avd <name> -writable-system`. Click OpenProxy's "Emulator" button to automatically inject the system cert.
-2. **The App Config Way (Non-Root)**: Add a `network_security_config.xml` to your Android Studio project to explicitly trust user certificates during debug mode.
+1. **The Easy Way (Root)**: Create a "Google APIs" emulator (NOT "Google Play"). Run it from the terminal with `emulator -avd <name> -writable-system`. Click OpenProxy's **Certificate → Android Emulator** to automatically inject the system cert.
+2. **The App Config Way (Non-Root)**: Add a `network_security_config.xml` to your Android Studio project to explicitly trust user certificates during debug builds.
 
-##  iOS Certificate Notes
+---
 
-The iOS Simulator on macOS shares your Mac's network stack, so you configure the Mac's proxy settings — the simulator inherits them automatically. Step-by-step:
-  1. Start OpenProxy — note the proxy port (starts at 9090) and your local IP shown in the UI.
-  2. Set your Mac's HTTP/HTTPS proxy:
-    - System Settings → Network → Wi-Fi → Details → Proxies
-    - Enable Web Proxy (HTTP) and Secure Web Proxy (HTTPS)
-    - Server: your local IP (e.g. 192.168.1.x) or 127.0.0.1
-    - Port: the port shown in OpenProxy (e.g. 9090)
-  3. Boot the iOS Simulator, open Safari, and go to: ```http://mitm.it```
-  4. Download the mitmproxy certificate profile from that page.
-  5. Install the profile:
-    - Settings → General → VPN & Device Management → Install the downloaded profile
-  6. Enable certificate trust (critical for HTTPS):
-    - Settings → General → About → Certificate Trust Settings → Toggle ON the mitmproxy cert
+## 🍎 iOS Certificate Notes
 
-Important notes:
+The iOS Simulator on macOS shares your Mac's network stack, so you configure the Mac's proxy settings — the simulator inherits them automatically.
 
-  - The simulator uses your Mac's network, so the Mac system proxy is what matters — you don't configure proxy settings on the simulator itself.
-  - You must enable certificate trust in step 6, or HTTPS traffic won't be intercepted.
-  - When you're done, remember to disable the Mac's proxy settings, otherwise your Mac's regular traffic will also route through OpenProxy.
+1. Start OpenProxy — note the proxy port (starts at 9090) and your local IP shown in the toolbar.
+2. Set your Mac's HTTP/HTTPS proxy:
+   - System Settings → Network → Wi-Fi → Details → Proxies
+   - Enable **Web Proxy (HTTP)** and **Secure Web Proxy (HTTPS)**
+   - Server: your local IP (e.g. `192.168.1.x`) or `127.0.0.1`, Port: as shown in OpenProxy
+3. In the iOS Simulator, open Safari and go to `http://mitm.it`
+4. Download and install the mitmproxy certificate profile.
+5. Enable certificate trust: Settings → General → About → Certificate Trust Settings → toggle the mitmproxy cert **ON**.
 
-The setup instructions are also available directly in the app — click the device setup button in the toolbar and select the iOS Simulator tab.
+> When you're done, remember to disable the Mac's proxy settings so your regular traffic stops routing through OpenProxy.
+
+The full setup guide is also available in-app — open **Certificate** in the toolbar and select the iOS Simulator tab.
