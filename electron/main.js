@@ -86,10 +86,10 @@ function createWindow () {
     // Windows: title bar hidden, native controls added via titleBarOverlay
     // Linux: use the OS/DE window decorations natively ('default')
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset'
-                 : process.platform === 'win32'  ? 'hidden'
+                 : (process.platform === 'win32' || process.platform === 'linux') ? 'hidden'
                  : 'default',
-    // Windows: keep native OS controls (real min/max/close) as an overlay
-    ...(process.platform === 'win32' && {
+    // Keep native OS controls as an overlay on Windows and Linux (macOS uses hiddenInset)
+    ...((process.platform === 'win32' || process.platform === 'linux') && {
       titleBarOverlay: {
         color:       '#222223',
         symbolColor: '#8b949e',
