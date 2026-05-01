@@ -211,7 +211,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 .titlebar-win {
   display: flex;
   align-items: center;
-  height: 38px;
+  height: 30px;
   background: var(--bg-sidebar);
   flex-shrink: 0;
   user-select: none;
@@ -339,7 +339,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   width: 26px; height: 26px;
   background: transparent;
   border: none;
-  border-radius: 5px;
+  border-radius: 50%;
   color: var(--fg-muted);
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
