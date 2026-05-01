@@ -211,7 +211,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 .titlebar-win {
   display: flex;
   align-items: center;
-  height: 30px;
+  height: 24px;
   background: var(--bg-sidebar);
   flex-shrink: 0;
   user-select: none;
@@ -336,7 +336,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 
 .lx-btn {
   display: flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px;
+  width: 22px; height: 22px;
   background: transparent;
   border: none;
   border-radius: 50%;
