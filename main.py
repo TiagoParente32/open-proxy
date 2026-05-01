@@ -188,7 +188,21 @@ def check_for_updates():
     """
     Query GitHub Releases API. Returns a dict if a newer version is available, else None.
     { version, current, download_url, release_url }
+
+    For local testing, set OPENPROXY_UPDATE_TEST_URL to a zip URL and the check
+    will immediately return a fake update pointing to that URL, e.g.:
+        OPENPROXY_UPDATE_TEST_URL=http://127.0.0.1:9999/update.zip ./OpenProxy.app/...
     """
+    test_url = os.environ.get('OPENPROXY_UPDATE_TEST_URL')
+    if test_url:
+        print(f"[Update] TEST MODE — using override URL: {test_url}")
+        return {
+            'version': 'v99.9.9',
+            'current': APP_VERSION,
+            'download_url': test_url,
+            'release_url': 'http://127.0.0.1:9999',
+        }
+
     try:
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         req = urllib.request.Request(url, headers={'User-Agent': f'OpenProxy/{APP_VERSION}'})
