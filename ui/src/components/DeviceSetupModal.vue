@@ -642,7 +642,13 @@ const modalTitle = () => {
                 <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'and_dev_port' }" @click="copyInfo(proxyPort, 'and_dev_port')">{{ proxyPort }}</code></div>
               </div>
             </li>
+            <li>Open the browser on your phone and navigate to <code class="ic">http://mitm.it</code> — tap the <strong>Android</strong> button to download the certificate.</li>
+            <li>Go to <strong>Settings › Security › Encryption &amp; Credentials › Install a certificate › CA Certificate</strong> and install the downloaded file.</li>
           </ol>
+          <div class="alert warning" style="margin-top:14px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            The <code class="ic">mitm.it</code> page only loads when the proxy is running and your phone is routing through it. Make sure OpenProxy is recording before visiting it.
+          </div>
         </div>
 
         <div v-if="deviceSetupType === 'ios_device'">
@@ -656,12 +662,13 @@ const modalTitle = () => {
                 <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'ios_dev_port' }" @click="copyInfo(proxyPort, 'ios_dev_port')">{{ proxyPort }}</code></div>
               </div>
             </li>
-            <li>Go to <strong>Settings › General › VPN &amp; Device Management</strong> and install the profile.</li>
+            <li>Open Safari on your iPhone and go to <code class="ic">http://mitm.it</code> — tap the <strong>iOS</strong> button to download the profile.</li>
+            <li>Go to <strong>Settings › General › VPN &amp; Device Management</strong> and install the downloaded profile.</li>
             <li><strong>Crucial:</strong> <strong>Settings › General › About › Certificate Trust Settings</strong> — toggle mitmproxy <strong>ON</strong>.</li>
           </ol>
           <div class="alert warning" style="margin-top:14px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            Skipping Step 6 causes SSL errors on all HTTPS traffic.
+            Skipping Step 6 causes SSL errors on all HTTPS traffic — the cert must be explicitly trusted after installing.
           </div>
         </div>
 
