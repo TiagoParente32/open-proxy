@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { disableCache } from '../store.js'
+import { currentThemeId, applyTheme } from '../composables/useTheme.js'
 
 const isMac = () => window.electronAPI?.platform === 'darwin'
 
@@ -47,6 +48,21 @@ const MENUS = [
           { label: 'No Throttling', action: () => op()?.setThrottle('None') },
           { label: 'Fast 3G',       action: () => op()?.setThrottle('Fast 3G') },
           { label: 'Slow 3G',       action: () => op()?.setThrottle('Slow 3G') },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'View',
+    items: [
+      {
+        label: 'Theme',
+        submenu: [
+          { label: 'Dark',     action: () => applyTheme('dark'),     checked: () => currentThemeId.value === 'dark' },
+          { label: 'Midnight', action: () => applyTheme('midnight'), checked: () => currentThemeId.value === 'midnight' },
+          { label: 'Ocean',    action: () => applyTheme('ocean'),    checked: () => currentThemeId.value === 'ocean' },
+          { label: 'Crimson',  action: () => applyTheme('crimson'),  checked: () => currentThemeId.value === 'crimson' },
+          { label: 'Light',    action: () => applyTheme('light'),    checked: () => currentThemeId.value === 'light' },
         ],
       },
     ],
@@ -129,7 +145,10 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
               <ul v-if="openSubmenu === item.label" class="win-dropdown win-subdropdown">
                 <template v-for="(sub, si) in item.submenu" :key="si">
                   <li v-if="sub.type === 'separator'" class="win-sep" />
-                  <li v-else class="win-item" @click.stop="clickItem(sub)">{{ sub.label }}</li>
+                  <li v-else class="win-item" @click.stop="clickItem(sub)">
+                    <span class="win-item-check">{{ sub.checked?.() ? '✓' : '' }}</span>
+                    {{ sub.label }}
+                  </li>
                 </template>
               </ul>
             </li>
