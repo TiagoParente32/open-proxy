@@ -211,7 +211,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 .titlebar-win {
   display: flex;
   align-items: center;
-  height: 24px;
+  height: 30px;
   background: var(--bg-sidebar);
   flex-shrink: 0;
   user-select: none;
@@ -220,8 +220,8 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 
 /* ── App name ─────────────────────────────────────────────────────────────── */
 .win-app-name {
-  padding: 0 8px 0 12px;
-  font-size: 12px;
+  padding: 0 6px 0 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--fg-secondary);
   letter-spacing: 0.02em;
@@ -241,8 +241,8 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   position: relative;
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  font-size: 12px;
+  padding: 0 8px;
+  font-size: 11px;
   color: var(--fg-muted);
   cursor: default;
   border-radius: 4px;
@@ -328,15 +328,15 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 .linux-controls {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 0 8px;
+  gap: 1px;
+  padding: 0 6px;
   -webkit-app-region: no-drag;
   flex-shrink: 0;
 }
 
 .lx-btn {
   display: flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px;
+  width: 24px; height: 24px;
   background: transparent;
   border: none;
   border-radius: 50%;
@@ -345,5 +345,4 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   transition: background 0.12s, color 0.12s;
 }
 .lx-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
-.lx-close:hover { background: var(--error-muted); color: var(--error); }
 </style>
