@@ -12,4 +12,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   bustCacheSync:    (val)        => ipcRenderer.send('menu:bustCacheSync', val),
   themeChanged:     (id)         => ipcRenderer.send('theme:changed', id),
   onSetTheme:       (cb)         => ipcRenderer.on('theme:set', (_e, id) => cb(id)),
+  onMaximizeChange: (cb)         => ipcRenderer.on('window:maximized', (_e, v) => cb(v)),
 })

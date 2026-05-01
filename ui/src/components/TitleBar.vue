@@ -3,7 +3,12 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { disableCache } from '../store.js'
 import { currentThemeId, applyTheme } from '../composables/useTheme.js'
 
-const isMac = () => window.electronAPI?.platform === 'darwin'
+const isMac   = () => window.electronAPI?.platform === 'darwin'
+const isLinux = () => window.electronAPI?.platform === 'linux'
+
+const eAPI = window.electronAPI
+const isMaximized = ref(false)
+onMounted(() => eAPI?.onMaximizeChange?.(v => isMaximized.value = v))
 
 // ── Menu structure ────────────────────────────────────────────────────────────
 const op = () => window.__op
@@ -161,8 +166,34 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
       </div>
     </nav>
 
-    <!-- Drag region fills remaining space (Windows: gives titleBarOverlay space to sit over) -->
+    <!-- Drag region -->
     <div class="win-drag" />
+
+    <!-- Linux custom window controls -->
+    <div v-if="isLinux()" class="linux-controls">
+      <button class="lx-btn" @click="eAPI?.minimize()" title="Minimize">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button class="lx-btn" @click="eAPI?.zoom()" :title="isMaximized ? 'Restore' : 'Maximize'">
+        <!-- Restore: two overlapping squares -->
+        <svg v-if="isMaximized" width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <rect x="3" y="1" width="6" height="6" rx="0.8" stroke="currentColor" stroke-width="1.4"/>
+          <path d="M1 3.5V8.2A0.8 0.8 0 0 0 1.8 9H6.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+        <!-- Maximize: single square -->
+        <svg v-else width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <rect x="1.5" y="1.5" width="7" height="7" rx="0.8" stroke="currentColor" stroke-width="1.4"/>
+        </svg>
+      </button>
+      <button class="lx-btn lx-close" @click="eAPI?.close()" title="Close">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <line x1="1.5" y1="1.5" x2="8.5" y2="8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="8.5" y1="1.5" x2="1.5" y2="8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -293,6 +324,26 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   -webkit-app-region: drag;
 }
 
-/* ── Window controls are now always native (macOS: hiddenInset, Windows: titleBarOverlay, Linux: 'default') ── */
-</style>
+/* ── Linux custom window controls ────────────────────────────────────────── */
+.linux-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+}
 
+.lx-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.lx-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
+.lx-close:hover { background: var(--error-muted); color: var(--error); }
+</style>

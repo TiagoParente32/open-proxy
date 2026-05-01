@@ -94,12 +94,10 @@ function createWindow () {
     minHeight: 720,
     // macOS: traffic lights overlay the content (hiddenInset)
     // Windows: title bar hidden, native controls added via titleBarOverlay
-    // Linux: use the OS/DE window decorations natively ('default')
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset'
-                 : (process.platform === 'win32' || process.platform === 'linux') ? 'hidden'
-                 : 'default',
-    // Keep native OS controls as an overlay on Windows and Linux (macOS uses hiddenInset)
-    ...((process.platform === 'win32' || process.platform === 'linux') && {
+    // Linux: title bar hidden, custom controls drawn in TitleBar.vue
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    // Windows-only native overlay controls (macOS uses hiddenInset, Linux uses custom HTML buttons)
+    ...(process.platform === 'win32' && {
       titleBarOverlay: {
         color:       '#222223',
         symbolColor: '#8b949e',
@@ -120,6 +118,10 @@ function createWindow () {
       win.hide()
     }
   })
+
+  const sendMaximized = () => win?.webContents.send('window:maximized', win.isMaximized())
+  win.on('maximize',   sendMaximized)
+  win.on('unmaximize', sendMaximized)
 }
 
 // ── IPC ──────────────────────────────────────────────────────────────────────
