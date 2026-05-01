@@ -172,23 +172,23 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
     <!-- Linux custom window controls -->
     <div v-if="isLinux()" class="linux-controls">
       <button class="lx-btn" @click="eAPI?.minimize()" title="Minimize">
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+        <svg viewBox="0 0 10 10" fill="none" width="12" height="12">
           <line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
         </svg>
       </button>
       <button class="lx-btn" @click="eAPI?.zoom()" :title="isMaximized ? 'Restore' : 'Maximize'">
         <!-- Restore: two overlapping squares -->
-        <svg v-if="isMaximized" width="10" height="10" viewBox="0 0 10 10" fill="none">
+        <svg v-if="isMaximized" viewBox="0 0 10 10" fill="none" width="12" height="12">
           <rect x="3" y="1" width="6" height="6" rx="0.8" stroke="currentColor" stroke-width="1.4"/>
           <path d="M1 3.5V8.2A0.8 0.8 0 0 0 1.8 9H6.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
         </svg>
         <!-- Maximize: single square -->
-        <svg v-else width="10" height="10" viewBox="0 0 10 10" fill="none">
+        <svg v-else viewBox="0 0 10 10" fill="none" width="12" height="12">
           <rect x="1.5" y="1.5" width="7" height="7" rx="0.8" stroke="currentColor" stroke-width="1.4"/>
         </svg>
       </button>
       <button class="lx-btn lx-close" @click="eAPI?.close()" title="Close">
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+        <svg viewBox="0 0 10 10" fill="none" width="12" height="12">
           <line x1="1.5" y1="1.5" x2="8.5" y2="8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           <line x1="8.5" y1="1.5" x2="1.5" y2="8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
         </svg>
@@ -328,7 +328,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 .linux-controls {
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: 4px;
   padding: 0 6px;
   -webkit-app-region: no-drag;
   flex-shrink: 0;
