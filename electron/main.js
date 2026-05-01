@@ -10,6 +10,15 @@ let win, tray, pythonProcess, isQuitting = false
 let bustCacheEnabled = false
 let currentTheme = 'dark'
 
+// Windows titleBarOverlay colors per theme (bg = --bg-sidebar, symbol = --fg-muted)
+const OVERLAY_COLORS = {
+  dark:     { color: '#222223', symbolColor: '#8b949e' },
+  midnight: { color: '#161b22', symbolColor: '#8b949e' },
+  ocean:    { color: '#132540', symbolColor: '#7da8c8' },
+  crimson:  { color: '#200f13', symbolColor: '#a07080' },
+  light:    { color: '#f0f0f0', symbolColor: '#666666' },
+}
+
 async function buildUI () {
   if (app.isPackaged) return
 
@@ -136,6 +145,10 @@ function setupIPC () {
 
   ipcMain.on('theme:changed', (_e, id) => {
     currentTheme = id
+    if (process.platform === 'win32' && win) {
+      const colors = OVERLAY_COLORS[id] || OVERLAY_COLORS.dark
+      win.setTitleBarOverlay({ ...colors, height: 38 })
+    }
     setupMenu()
   })
 
@@ -273,6 +286,10 @@ function setupMenu () {
 function setTheme(id) {
   currentTheme = id
   win?.webContents.send('theme:set', id)
+  if (process.platform === 'win32' && win) {
+    const colors = OVERLAY_COLORS[id] || OVERLAY_COLORS.dark
+    win.setTitleBarOverlay({ ...colors, height: 38 })
+  }
   setupMenu()
 }
 
