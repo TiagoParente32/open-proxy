@@ -762,6 +762,23 @@ export const requestWgConf = () => {
     wsConnection.send(JSON.stringify({ type: "GET_WG_CLIENT_CONF" }))
 }
 
+// Auto-update state
+export const updateInfo     = ref(null)   // { version, current, download_url, release_url }
+export const updateProgress = ref(null)   // 0-100 during download, null otherwise
+export const updateError    = ref(null)
+
+export const checkForUpdates = () => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    updateError.value = null
+    wsConnection.send(JSON.stringify({ type: "CHECK_FOR_UPDATES" }))
+}
+
+export const applyUpdate = (downloadUrl) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    updateProgress.value = 0
+    wsConnection.send(JSON.stringify({ type: "APPLY_UPDATE", download_url: downloadUrl }))
+}
+
 export const initWebSocket = () => {
     if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
@@ -998,6 +1015,22 @@ export const initWebSocket = () => {
             else if (d.status === 'disabled' || d.status === 'error') wgClientConf.value = ''
             if (d.port) wgPort.value = d.port
             wgError.value = d.error || ''
+        }
+        else if (payload.type === 'UPDATE_AVAILABLE') {
+            updateInfo.value = payload.data
+            updateError.value = null
+        }
+        else if (payload.type === 'UPDATE_PROGRESS') {
+            updateProgress.value = payload.data.pct
+        }
+        else if (payload.type === 'UPDATE_READY') {
+            updateProgress.value = null
+            // Give the helper script a moment to start, then fully quit so it can replace the app
+            setTimeout(() => window.electronAPI?.quit(), 500)
+        }
+        else if (payload.type === 'UPDATE_ERROR') {
+            updateProgress.value = null
+            updateError.value = payload.data.error
         }
     }
 

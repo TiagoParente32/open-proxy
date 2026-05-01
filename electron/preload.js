@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleFullscreen: ()           => ipcRenderer.send('window:toggleFullscreen'),
   zoom:             ()           => ipcRenderer.send('window:zoom'),
   close:            ()           => ipcRenderer.send('window:close'),
+  quit:             ()           => ipcRenderer.send('window:quit'),
   openExternal:     url          => ipcRenderer.send('shell:openExternal', url),
   saveFile:         (name, data) => ipcRenderer.invoke('dialog:saveFile', { filename: name, content: data }),
   bustCacheSync:    (val)        => ipcRenderer.send('menu:bustCacheSync', val),

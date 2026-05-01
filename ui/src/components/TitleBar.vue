@@ -2,13 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { disableCache } from '../store.js'
 
-const isMac     = () => window.electronAPI?.platform === 'darwin'
-const isWindows = () => window.electronAPI?.platform === 'win32'
-const eAPI      = () => window.electronAPI
-
-const minimize = () => eAPI()?.minimize()
-const close    = () => eAPI()?.close()
-const zoom     = () => eAPI()?.zoom()
+const isMac = () => window.electronAPI?.platform === 'darwin'
 
 // ── Menu structure ────────────────────────────────────────────────────────────
 const op = () => window.__op
@@ -148,42 +142,8 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
       </div>
     </nav>
 
-    <!-- Drag region fills remaining space -->
+    <!-- Drag region fills remaining space (Windows: gives titleBarOverlay space to sit over) -->
     <div class="win-drag" />
-
-    <!-- Window controls — Linux only; Windows uses native OS overlay buttons -->
-    <div v-if="!isWindows()" class="win-controls" @dblclick.stop>
-      <button class="win-btn" @click="minimize" title="Minimise">
-        <svg viewBox="0 0 10 10">
-          <line x1="1" y1="5" x2="9" y2="5"
-                stroke="currentColor"
-                stroke-width="1"
-                stroke-linecap="square"/>
-        </svg>
-      </button>
-
-      <button class="win-btn" @click="zoom" title="Maximise / Restore">
-        <svg viewBox="0 0 10 10">
-          <rect x="1" y="1" width="8" height="8"
-                stroke="currentColor"
-                stroke-width="1"
-                fill="none"/>
-        </svg>
-      </button>
-
-      <button class="win-btn win-close" @click="close" title="Close (hides to tray)">
-        <svg viewBox="0 0 10 10">
-          <line x1="2" y1="2" x2="8" y2="8"
-                stroke="currentColor"
-                stroke-width="1"
-                stroke-linecap="square"/>
-          <line x1="8" y1="2" x2="2" y2="8"
-                stroke="currentColor"
-                stroke-width="1"
-                stroke-linecap="square"/>
-        </svg>
-      </button>
-    </div>
   </div>
 </template>
 
@@ -314,41 +274,6 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   -webkit-app-region: drag;
 }
 
-/* ── Window controls ──────────────────────────────────────────────────────── */
-.win-controls {
-  display: flex;
-  align-items: stretch;
-  height: 100%;
-  -webkit-app-region: no-drag;
-}
-.win-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 46px;
-  height: 100%;
-  background: transparent;
-  border: none;
-  color: #8b949e;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-/* FIXED ICON SIZE */
-.win-btn svg {
-  width: 10px;
-  height: 10px;
-  flex-shrink: 0;
-}
-
-.win-btn:hover {
-  background: rgba(255,255,255,0.1);
-  color: #fff;
-}
-
-.win-close:hover {
-  background: #e81123;
-  color: #fff;
-}
+/* ── Window controls are now always native (macOS: hiddenInset, Windows: titleBarOverlay, Linux: 'default') ── */
 </style>
 

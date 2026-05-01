@@ -82,7 +82,12 @@ function createWindow () {
     height:   720,
     minWidth: 1024,
     minHeight: 720,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    // macOS: traffic lights overlay the content (hiddenInset)
+    // Windows: title bar hidden, native controls added via titleBarOverlay
+    // Linux: use the OS/DE window decorations natively ('default')
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset'
+                 : process.platform === 'win32'  ? 'hidden'
+                 : 'default',
     // Windows: keep native OS controls (real min/max/close) as an overlay
     ...(process.platform === 'win32' && {
       titleBarOverlay: {
@@ -112,6 +117,7 @@ function setupIPC () {
   ipcMain.on('window:minimize',        () => win?.minimize())
   ipcMain.on('window:toggleFullscreen', () => win?.setFullScreen(!win.isFullScreen()))
   ipcMain.on('window:close',           () => win?.hide())
+  ipcMain.on('window:quit',            () => quitApp())
   ipcMain.on('window:zoom', () => {
     if (!win) return
     // On macOS maximize() calls NSWindow performZoom which is a native toggle

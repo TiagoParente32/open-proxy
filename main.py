@@ -20,6 +20,13 @@ from mitmproxy import http, options
 from mitmproxy.tools.dump import DumpMaster
 from mitmproxy.proxy.mode_servers import WireGuardServerInstance
 
+APP_VERSION = "1.0.2"
+GITHUB_REPO = "TiagoParente32/open-proxy"
+
+# Global refs so background threads can reach the bridge and its event loop
+_global_bridge = None
+_global_loop   = None
+
 # ============================================================================
 # 1. NETWORK & SYSTEM HELPERS
 # ============================================================================
@@ -152,6 +159,184 @@ def get_resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 LOCAL_IP = get_local_ip()
+
+
+# ============================================================================
+# AUTO-UPDATE HELPERS
+# ============================================================================
+def _get_app_install_path():
+    """Return the Electron app root (the .app bundle on macOS, exe folder on Windows/Linux)."""
+    exe = os.path.abspath(sys.executable)
+    if sys.platform == 'darwin' and '.app/Contents/' in exe:
+        return exe.split('/Contents/')[0]   # /path/to/OpenProxy.app
+    if getattr(sys, 'frozen', False):
+        # PyInstaller onedir: exe at <electron_root>/resources/backend/OpenProxy-server/
+        # Navigate up 3 levels to reach the Electron app root
+        return os.path.normpath(os.path.join(os.path.dirname(exe), '..', '..', '..'))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _parse_version(tag):
+    """Parse a semver tag like 'v1.2.3' into a comparable tuple."""
+    try:
+        return tuple(int(x) for x in tag.lstrip('v').split('.'))
+    except Exception:
+        return (0,)
+
+
+def check_for_updates():
+    """
+    Query GitHub Releases API. Returns a dict if a newer version is available, else None.
+    { version, current, download_url, release_url }
+    """
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+        req = urllib.request.Request(url, headers={'User-Agent': f'OpenProxy/{APP_VERSION}'})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+
+        latest = data.get('tag_name', '').strip()
+        if not latest or _parse_version(latest) <= _parse_version(APP_VERSION):
+            return None
+
+        platform_keywords = {
+            'darwin': ['macos', 'mac', 'osx', 'darwin'],
+            'win32':  ['windows', 'win'],
+        }.get(sys.platform, ['linux'])
+
+        download_url = None
+        for asset in data.get('assets', []):
+            name = asset.get('name', '').lower()
+            if name.endswith('.zip') and any(kw in name for kw in platform_keywords):
+                download_url = asset['browser_download_url']
+                break
+
+        return {
+            'version': latest,
+            'current': APP_VERSION,
+            'download_url': download_url,
+            'release_url': f"https://github.com/{GITHUB_REPO}/releases/tag/{latest}",
+        }
+    except Exception as e:
+        print(f"[Update] Check failed: {e}")
+        return None
+
+
+def apply_update(download_url, progress_cb=None):
+    """
+    Download the release zip, extract it, then launch a helper script that
+    swaps the new app over the old one and relaunches.
+    progress_cb(pct) is called with 0-100 during download.
+    Raises on any error so the caller can surface it to the UI.
+    """
+    import tempfile, zipfile, shutil, stat
+
+    install_path = _get_app_install_path()
+    tmp_dir = tempfile.mkdtemp(prefix='openproxy_update_')
+
+    zip_path = os.path.join(tmp_dir, 'update.zip')
+    extract_dir = os.path.join(tmp_dir, 'extracted')
+    os.makedirs(extract_dir, exist_ok=True)
+
+    def reporthook(block_num, block_size, total_size):
+        if progress_cb and total_size > 0:
+            pct = min(100, int(block_num * block_size * 100 / total_size))
+            progress_cb(pct)
+
+    urllib.request.urlretrieve(download_url, zip_path, reporthook)
+    if progress_cb:
+        progress_cb(100)
+
+    if sys.platform == 'darwin':
+        subprocess.run(['ditto', '-x', '-k', zip_path, extract_dir], check=True)
+    elif sys.platform != 'win32':
+        result = subprocess.run(['unzip', '-q', zip_path, '-d', extract_dir])
+        if result.returncode != 0:
+            with zipfile.ZipFile(zip_path, 'r') as zf:
+                zf.extractall(extract_dir)
+    else:
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            zf.extractall(extract_dir)
+
+    if sys.platform == 'darwin':
+        new_app = next(
+            (os.path.join(extract_dir, f) for f in os.listdir(extract_dir) if f.endswith('.app')),
+            None
+        )
+        if not new_app:
+            raise FileNotFoundError("No .app bundle found in the downloaded zip")
+
+        app_name = os.path.splitext(os.path.basename(new_app))[0]
+        new_support_dir = os.path.join(extract_dir, app_name)
+
+        install_dir = os.path.dirname(install_path)
+        old_support_dir = os.path.join(install_dir, app_name)
+
+        log = os.path.join(tmp_dir, 'update.log')
+        script = os.path.join(tmp_dir, 'do_update.sh')
+        with open(script, 'w') as f:
+            support_lines = ""
+            if os.path.isdir(new_support_dir):
+                support_lines = f"""
+rm -rf "{old_support_dir}"
+mv -f "{new_support_dir}" "{old_support_dir}"
+xattr -r -d com.apple.quarantine "{old_support_dir}" 2>/dev/null || true"""
+
+            f.write(f"""#!/bin/bash
+exec >"{log}" 2>&1
+set -x
+sleep 2
+rm -rf "{install_path}"
+mv -f "{new_app}" "{install_path}"
+xattr -r -d com.apple.quarantine "{install_path}" 2>/dev/null || true{support_lines}
+bin=$(defaults read "{install_path}/Contents/Info" CFBundleExecutable 2>/dev/null)
+if [ -z "$bin" ]; then bin=$(ls "{install_path}/Contents/MacOS/" | head -1); fi
+chmod +x "{install_path}/Contents/MacOS/$bin"
+nohup "{install_path}/Contents/MacOS/$bin" &
+""")
+        os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
+        subprocess.Popen(['bash', script], close_fds=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    elif sys.platform == 'win32':
+        new_dir = next(
+            (os.path.join(extract_dir, f) for f in os.listdir(extract_dir)
+             if os.path.isdir(os.path.join(extract_dir, f))),
+            extract_dir
+        )
+        exe_name = os.path.basename(sys.executable)
+        log = os.path.join(tmp_dir, 'update.log')
+        script = os.path.join(tmp_dir, 'do_update.bat')
+        with open(script, 'w') as f:
+            f.write(f"""@echo off
+timeout /t 2 /nobreak >nul
+robocopy "{new_dir}" "{install_path}" /E /IS /IT /IM >"{log}" 2>&1
+start "" "{os.path.join(install_path, exe_name)}"
+""")
+        subprocess.Popen(['cmd', '/c', script], close_fds=True,
+                         creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+
+    else:
+        new_dir = next(
+            (os.path.join(extract_dir, f) for f in os.listdir(extract_dir)
+             if os.path.isdir(os.path.join(extract_dir, f))),
+            extract_dir
+        )
+        exe_name = os.path.basename(sys.executable)
+        log = os.path.join(tmp_dir, 'update.log')
+        script = os.path.join(tmp_dir, 'do_update.sh')
+        with open(script, 'w') as f:
+            f.write(f"""#!/bin/bash
+exec >"{log}" 2>&1
+set -x
+sleep 2
+cp -rf "{new_dir}/." "{install_path}/"
+chmod +x "{os.path.join(install_path, exe_name)}"
+nohup "{os.path.join(install_path, exe_name)}" &
+""")
+        os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
+        subprocess.Popen(['bash', script], close_fds=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 # ============================================================================
@@ -371,6 +556,7 @@ class ProxyUIBridge:
         self.wg_port = 51820
         self._master = None     # set by run_proxy_forever; used for WG restart + inject
         self._last_startup_error = ""   # captured from mitmproxy's log on startup failure
+        self.pending_update_info = None  # cached until a client connects
 
     def add_log(self, entry) -> None:
         """Capture mitmproxy ERROR log entries so we can surface them in the UI."""
@@ -1008,6 +1194,10 @@ class ProxyUIBridge:
                 "data": {"ip": LOCAL_IP, "port": self.proxy_port, "platform": sys.platform}
             }))
 
+            if self.pending_update_info:
+                await websocket.send(json.dumps({"type": "UPDATE_AVAILABLE", "data": self.pending_update_info}))
+                self.pending_update_info = None
+
             async for message in websocket:
                 payload = json.loads(message)
 
@@ -1217,6 +1407,39 @@ class ProxyUIBridge:
                                 "error": "WireGuard server is not running." if self.wg_enabled else "",
                             },
                         }))
+
+                elif payload.get("type") == "CHECK_FOR_UPDATES":
+                    async def _check():
+                        info = await asyncio.get_event_loop().run_in_executor(None, check_for_updates)
+                        if info:
+                            await websocket.send(json.dumps({"type": "UPDATE_AVAILABLE", "data": info}))
+                    asyncio.create_task(_check())
+
+                elif payload.get("type") == "APPLY_UPDATE":
+                    download_url = payload.get("download_url")
+                    if download_url:
+                        bridge = self
+                        loop = asyncio.get_event_loop()
+
+                        def _run_update():
+                            try:
+                                def progress(pct):
+                                    asyncio.run_coroutine_threadsafe(
+                                        bridge.broadcast_to_ui("UPDATE_PROGRESS", {"pct": pct}), loop
+                                    )
+
+                                apply_update(download_url, progress_cb=progress)
+
+                                asyncio.run_coroutine_threadsafe(
+                                    bridge.broadcast_to_ui("UPDATE_READY", {}), loop
+                                )
+                            except Exception as e:
+                                print(f"[Update] apply_update failed: {e}")
+                                asyncio.run_coroutine_threadsafe(
+                                    bridge.broadcast_to_ui("UPDATE_ERROR", {"error": str(e)}), loop
+                                )
+
+                        threading.Thread(target=_run_update, daemon=True).start()
 
         finally:
             self.connected_clients.remove(websocket)
@@ -1428,14 +1651,30 @@ async def run_ws_forever(bridge):
             print(f"[ERROR] WebSocket server crashed: {e}. Restarting in 3 seconds...")
             await asyncio.sleep(3)
 
+async def _auto_check_update(bridge):
+    """Wait for the UI to connect, then check for updates in the background."""
+    await asyncio.sleep(8)
+    try:
+        info = await asyncio.get_event_loop().run_in_executor(None, check_for_updates)
+        if info:
+            bridge.pending_update_info = info
+            await bridge.broadcast_to_ui("UPDATE_AVAILABLE", info)
+    except Exception as e:
+        print(f"[Update] Auto-check error: {e}")
+
+
 def run_async_loop(bridge, proxy_port):
+    global _global_bridge, _global_loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+    _global_bridge = bridge
+    _global_loop   = loop
 
     async def supervisor():
         await asyncio.gather(
             run_proxy_forever(bridge, proxy_port),
-            run_ws_forever(bridge)
+            run_ws_forever(bridge),
+            _auto_check_update(bridge),
         )
 
     try:
