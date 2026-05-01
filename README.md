@@ -16,6 +16,7 @@ Whether you need to mock API responses, rewrite routing rules on the fly, thrott
 * **Smart Android Setup**: 1-click ADB integration. Automatically detects rooted emulators to inject System Certificates, or gracefully falls back to User Certificates.
 * **Network Throttling**: Simulate "Fast 3G" or "Slow 3G" network conditions.
 * **Aggressive Cache Busting**: One-click toggle to strip caching headers and force fresh responses.
+* **Auto-Update**: The app checks for new releases on startup and can update itself in one click.
 * **Pro-Grade UI**: Ultra-compact toolbar, dark mode, right-click context menus, and split-pane layout.
 
 ---
@@ -29,7 +30,7 @@ Whether you need to mock API responses, rewrite routing rules on the fly, thrott
 | **Desktop shell** | Electron — serves the Vue app and manages the Python subprocess |
 
 The app is structured as three loosely coupled pieces:
-- **Electron** (`electron/`) — the native window, OS menus, tray icon, and auto-updater. It spawns the Python backend on startup and loads the built Vue frontend.
+- **Electron** (`electron/`) — the native window, OS menus, tray icon, and IPC bridge. It spawns the Python backend on startup and loads the built Vue frontend.
 - **Vue UI** (`ui/`) — the entire interface, communicating with the Python backend over a local WebSocket.
 - **Python backend** (`main.py`) — runs `mitmproxy` and streams proxy state to the UI.
 
@@ -38,6 +39,7 @@ The app is structured as three loosely coupled pieces:
 ## 💻 Local Development
 
 ### Prerequisites
+
 * Node.js 18+
 * Python 3.10+
 * ADB (Android Debug Bridge) in your system PATH *(Android features only)*
@@ -72,7 +74,7 @@ pip install -r requirements.txt
 .\run.ps1
 ```
 
-This launches Electron (`npm start`). On startup Electron will:
+This launches Electron. On startup Electron will:
 1. Build the Vue UI automatically (`npm run build` inside `ui/`)
 2. Spawn the Python backend from the local `venv`
 3. Load the built UI in the window
@@ -85,19 +87,37 @@ This launches Electron (`npm start`). On startup Electron will:
 
 The build is a **3-step pipeline**: Vue UI → Python binary (PyInstaller) → Electron installer (electron-builder).
 
-Both scripts handle all three steps automatically.
+### macOS
 
-### macOS / Linux
 ```bash
-./build.sh          # → DMG + ZIP in dist-electron/
+./build.sh          # → DMG + ZIP (arm64 + x64) in dist-electron/
 ./build.sh --dir    # unpackaged app only (faster, for testing)
 ```
 
+> Must be run on a Mac. Produces both Apple Silicon and Intel builds in one run.
+
 ### Windows
+
 ```powershell
-.\build.ps1         # → NSIS installer + ZIP in dist-electron\
+.\build.ps1         # → NSIS .exe installer + .zip in dist-electron\
 .\build.ps1 --dir   # unpackaged app only (faster, for testing)
 ```
+
+> Must be run on a Windows machine.
+
+### Linux
+
+```bash
+# Install required packaging tools (first time only)
+sudo apt install fakeroot dpkg rpm
+
+./build-linux.sh            # → .deb + .rpm + .AppImage + .tar.gz (x64) in dist-electron/
+./build-linux.sh --arm64    # → same targets for arm64 (must run on arm64 hardware)
+./build-linux.sh --dir      # unpackaged app only (fastest, for testing)
+```
+
+> `.deb` and `.rpm` can both be built from Ubuntu in one run — no Fedora machine needed.  
+> arm64 builds require arm64 hardware because PyInstaller compiles native binaries.
 
 ### What each step produces
 
@@ -107,15 +127,24 @@ Both scripts handle all three steps automatically.
 | 2. Python backend | PyInstaller | `backend-dist/OpenProxy-server/` |
 | 3. Installer | electron-builder | `dist-electron/` |
 
-> **Note:** You must build the macOS `.dmg` on a Mac and the Windows `.exe` on Windows. Cross-compilation is not supported.
-
 ### Distribution targets
 
-| Platform | Targets |
-|---|---|
-| macOS | `.dmg`, `.zip` (arm64 + x64) |
-| Windows | NSIS `.exe` installer, `.zip` |
-| Linux | `.AppImage`, `.tar.gz` |
+| Platform | Targets | Notes |
+|---|---|---|
+| macOS | `.dmg`, `.zip` (arm64 + x64) | DMG for fresh install, ZIP used by auto-update |
+| Windows | NSIS `.exe`, `.zip` | EXE for fresh install, ZIP used by auto-update |
+| Linux | `.deb`, `.rpm`, `.AppImage`, `.tar.gz` (x64) | DEB/RPM install to app launcher; AppImage used by auto-update |
+
+---
+
+## 🔄 Auto-Update
+
+The app checks GitHub Releases on startup (after an 8-second delay). If a newer version is found, a banner appears at the top of the window.
+
+- **Update Now** — downloads the release zip/AppImage for your platform and architecture, launches a background script that replaces the app and relaunches it.
+- The update check is also accessible from the native app menu → **Check for Updates**.
+
+To publish a release, upload all distribution targets to a GitHub Release tagged `vX.Y.Z`. The version is read from `APP_VERSION` in `main.py` — bump that and `version` in `package.json` together before building.
 
 ---
 

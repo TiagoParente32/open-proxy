@@ -38,7 +38,13 @@
     },
     "linux": {
       "icon": "icon.png",
-      "target": ["AppImage", "tar.gz"]
+      "category": "Development",
+      "target": [
+        { "target": "deb",      "arch": ["x64"] },
+        { "target": "rpm",      "arch": ["x64"] },
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "tar.gz",   "arch": ["x64"] }
+      ]
     }
   },
   "devDependencies": {

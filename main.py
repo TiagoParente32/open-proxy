@@ -199,17 +199,59 @@ def check_for_updates():
         if not latest or _parse_version(latest) <= _parse_version(APP_VERSION):
             return None
 
-        platform_keywords = {
-            'darwin': ['macos', 'mac', 'osx', 'darwin'],
-            'win32':  ['windows', 'win'],
-        }.get(sys.platform, ['linux'])
+        import platform as _platform
+        machine = _platform.machine().lower()
+        is_arm  = machine in ('arm64', 'aarch64')
 
+        assets = data.get('assets', [])
         download_url = None
-        for asset in data.get('assets', []):
-            name = asset.get('name', '').lower()
-            if name.endswith('.zip') and any(kw in name for kw in platform_keywords):
+
+        if sys.platform == 'darwin':
+            # electron-builder names: OpenProxy-1.0.0-arm64-mac.zip  /  OpenProxy-1.0.0-mac.zip
+            mac_zips = [
+                a for a in assets
+                if a.get('name', '').lower().endswith('.zip')
+                and any(kw in a.get('name', '').lower() for kw in ['mac', 'macos', 'osx', 'darwin'])
+            ]
+            if is_arm:
+                arm_zips = [a for a in mac_zips if 'arm64' in a.get('name', '').lower()]
+                chosen = arm_zips or mac_zips   # fall back to universal/x64 if no arm64 asset
+            else:
+                x64_zips = [a for a in mac_zips if 'arm64' not in a.get('name', '').lower()]
+                chosen = x64_zips or mac_zips   # fall back if no explicit x64 asset
+            if chosen:
+                download_url = chosen[0]['browser_download_url']
+
+        elif sys.platform == 'win32':
+            machine_win = _platform.machine().upper()
+            is_arm_win  = machine_win in ('ARM64',)
+            for asset in assets:
+                name = asset.get('name', '').lower()
+                if not name.endswith('.zip'):
+                    continue
+                if not any(kw in name for kw in ['windows', 'win']):
+                    continue
+                if is_arm_win and 'arm64' not in name:
+                    continue
+                if not is_arm_win and 'arm64' in name:
+                    continue
                 download_url = asset['browser_download_url']
                 break
+
+        else:  # Linux — prefer AppImage, fall back to tar.gz
+            for ext in ('.appimage', '.tar.gz', '.zip'):
+                for asset in assets:
+                    name = asset.get('name', '').lower()
+                    if name.endswith(ext) and any(kw in name for kw in ['linux', 'appimage']):
+                        # Architecture match
+                        if is_arm and 'arm64' not in name and 'aarch64' not in name:
+                            continue
+                        if not is_arm and ('arm64' in name or 'aarch64' in name):
+                            continue
+                        download_url = asset['browser_download_url']
+                        break
+                if download_url:
+                    break
 
         return {
             'version': latest,
@@ -235,6 +277,8 @@ def apply_update(download_url, progress_cb=None):
     tmp_dir = tempfile.mkdtemp(prefix='openproxy_update_')
 
     zip_path = os.path.join(tmp_dir, 'update.zip')
+    ext = os.path.splitext(download_url.split('?')[0])[1].lower()
+    dl_path = os.path.join(tmp_dir, f'update{ext}')
     extract_dir = os.path.join(tmp_dir, 'extracted')
     os.makedirs(extract_dir, exist_ok=True)
 
@@ -243,19 +287,41 @@ def apply_update(download_url, progress_cb=None):
             pct = min(100, int(block_num * block_size * 100 / total_size))
             progress_cb(pct)
 
-    urllib.request.urlretrieve(download_url, zip_path, reporthook)
+    urllib.request.urlretrieve(download_url, dl_path, reporthook)
     if progress_cb:
         progress_cb(100)
 
+    # ── Linux AppImage: single executable, no extraction needed ─────────────
+    if sys.platform not in ('darwin', 'win32') and dl_path.lower().endswith('.appimage'):
+        log    = os.path.join(tmp_dir, 'update.log')
+        script = os.path.join(tmp_dir, 'do_update.sh')
+        with open(script, 'w') as f:
+            f.write(f"""#!/bin/bash
+exec >"{log}" 2>&1
+set -x
+sleep 2
+cp -f "{dl_path}" "{install_path}"
+chmod +x "{install_path}"
+nohup "{install_path}" &
+""")
+        os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
+        subprocess.Popen(['bash', script], close_fds=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
+
+    # ── All other formats: extract the archive first ─────────────────────────
     if sys.platform == 'darwin':
-        subprocess.run(['ditto', '-x', '-k', zip_path, extract_dir], check=True)
+        subprocess.run(['ditto', '-x', '-k', dl_path, extract_dir], check=True)
     elif sys.platform != 'win32':
-        result = subprocess.run(['unzip', '-q', zip_path, '-d', extract_dir])
-        if result.returncode != 0:
-            with zipfile.ZipFile(zip_path, 'r') as zf:
-                zf.extractall(extract_dir)
+        if dl_path.endswith('.tar.gz'):
+            subprocess.run(['tar', '-xzf', dl_path, '-C', extract_dir], check=True)
+        else:
+            result = subprocess.run(['unzip', '-q', dl_path, '-d', extract_dir])
+            if result.returncode != 0:
+                with zipfile.ZipFile(dl_path, 'r') as zf:
+                    zf.extractall(extract_dir)
     else:
-        with zipfile.ZipFile(zip_path, 'r') as zf:
+        with zipfile.ZipFile(dl_path, 'r') as zf:
             zf.extractall(extract_dir)
 
     if sys.platform == 'darwin':
