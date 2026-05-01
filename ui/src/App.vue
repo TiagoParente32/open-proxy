@@ -1,5 +1,7 @@
 <script setup>
 import { onMounted, onUnmounted, watch } from 'vue'
+import { initTheme } from './composables/useTheme'
+initTheme()
 import { Splitpanes, Pane } from 'splitpanes'
 import 'splitpanes/dist/splitpanes.css'
 
@@ -324,35 +326,35 @@ const openBreakpointModalFromContext = () => {
 </template>
 
 <style>
-:root { background-color: #1a1a1b; color: #cccccc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --bg-main: #1e1e1f; --bg-sidebar: #222223; --bg-active: #2a2d2e; --border: #333333; }
+:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 body { margin: 0; padding: 0; }
 .app-wrapper { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
 /* --- SPLITPANES THEME OVERRIDES --- */
 .splitpanes.custom-theme .splitpanes__pane { background-color: var(--bg-main); }
 .splitpanes.custom-theme .splitpanes__splitter { background-color: var(--border); transition: background-color 0.2s; }
-.splitpanes.custom-theme .splitpanes__splitter:hover { background-color: #555; }
-.splitpanes.custom-theme.splitpanes--vertical > .splitpanes__splitter { width: 3px; border-left: 1px solid #111; }
-.splitpanes.custom-theme.splitpanes--horizontal > .splitpanes__splitter { height: 3px; border-top: 1px solid #111; }
+.splitpanes.custom-theme .splitpanes__splitter:hover { background-color: var(--fg-muted); }
+.splitpanes.custom-theme.splitpanes--vertical > .splitpanes__splitter { width: 3px; border-left: 1px solid var(--bg-deepest); }
+.splitpanes.custom-theme.splitpanes--horizontal > .splitpanes__splitter { height: 3px; border-top: 1px solid var(--bg-deepest); }
 
 /* --- SHARED UTILITIES --- */
-.action-btn { background: transparent; border: 1px solid #444; color: #ccc; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.2s; outline: none !important; }
+.action-btn { background: transparent; border: 1px solid var(--border); color: var(--fg-muted); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.2s; outline: none !important; }
 .action-btn:focus { outline: none !important; box-shadow: none !important; }
-.action-btn:hover { background: #333; color: white; }
+.action-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.text-muted { color: #8b949e; }
-.font-semibold { font-weight: 600; color: #e1e4e8; }
-.text-green { color: #10b981 !important; }
-.text-red { color: #ef4444 !important; }
-.global-empty { display: flex; justify-content: center; align-items: center; height: 100%; color: #666; font-style: italic; font-size: 12px; }
-.text-icon { font-size: 12px; color: #888; }
+.text-muted { color: var(--fg-muted); }
+.font-semibold { font-weight: 600; color: var(--fg-secondary); }
+.text-green { color: var(--success) !important; }
+.text-red { color: var(--error) !important; }
+.global-empty { display: flex; justify-content: center; align-items: center; height: 100%; color: var(--fg-muted); font-style: italic; font-size: 12px; }
+.text-icon { font-size: 12px; color: var(--fg-muted); }
 
 /* --- GLOBAL CONTEXT MENU --- */
 .context-menu {
   position: fixed;
-  background: #1e2023;
-  border: 1px solid #2e3133;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
   border-radius: 8px;
   padding: 4px;
   z-index: 9999;
@@ -362,7 +364,7 @@ body { margin: 0; padding: 0; }
   padding: 4px 10px 2px;
   font-size: 10px;
   font-weight: 700;
-  color: #484d52;
+  color: var(--fg-muted);
   letter-spacing: 0.5px;
   text-transform: uppercase;
   user-select: none;
@@ -370,13 +372,13 @@ body { margin: 0; padding: 0; }
 .context-menu-item {
   padding: 6px 10px;
   font-size: 12.5px;
-  color: #c0c8d0;
+  color: var(--fg-secondary);
   cursor: pointer;
   border-radius: 5px;
   text-align: left;
 }
-.context-menu-item:hover { background: #3b82f6; color: white; }
-.context-menu-divider { height: 1px; background: #2a2d30; margin: 3px 4px; }
+.context-menu-item:hover { background: var(--accent); color: var(--fg-primary); }
+.context-menu-divider { height: 1px; background: var(--border); margin: 3px 4px; }
 
 .context-menu-colors {
   display: flex;
@@ -418,19 +420,19 @@ body { margin: 0; padding: 0; }
   background: linear-gradient(90deg, rgba(59,130,246,0.15), rgba(99,102,241,0.15));
   border-bottom: 1px solid rgba(99,102,241,0.35);
   font-size: 13px;
-  color: #e2e8f0;
+  color: var(--fg-secondary);
   flex-shrink: 0;
 }
 .update-banner--progress { background: linear-gradient(90deg, rgba(16,185,129,0.12), rgba(59,130,246,0.12)); }
 .update-banner--error    { background: rgba(239,68,68,0.12); border-bottom-color: rgba(239,68,68,0.3); }
 .update-icon { font-size: 15px; }
 .update-text { flex: 1; }
-.update-release-link { margin-left: 8px; opacity: 0.7; color: #93c5fd; text-decoration: none; font-size: 12px; }
+.update-release-link { margin-left: 8px; opacity: 0.7; color: var(--accent); text-decoration: none; font-size: 12px; }
 .update-release-link:hover { opacity: 1; text-decoration: underline; }
 .update-btn-primary {
   padding: 4px 14px;
-  background: #3b82f6;
-  color: #fff;
+  background: var(--accent);
+  color: var(--fg-primary);
   border: none;
   border-radius: 6px;
   font-size: 12px;
@@ -438,28 +440,28 @@ body { margin: 0; padding: 0; }
   cursor: pointer;
   transition: background 0.15s;
 }
-.update-btn-primary:hover:not(:disabled) { background: #2563eb; }
+.update-btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
 .update-btn-primary:disabled { opacity: 0.45; cursor: default; }
 .update-btn-dismiss {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--fg-muted);
   cursor: pointer;
   font-size: 13px;
   padding: 2px 6px;
   border-radius: 4px;
 }
-.update-btn-dismiss:hover { color: #e2e8f0; background: rgba(255,255,255,0.07); }
+.update-btn-dismiss:hover { color: var(--fg-secondary); background: var(--surface-hover); }
 .update-progress-bar {
   width: 120px;
   height: 6px;
-  background: rgba(255,255,255,0.1);
+  background: var(--border-subtle);
   border-radius: 3px;
   overflow: hidden;
 }
 .update-progress-fill {
   height: 100%;
-  background: #3b82f6;
+  background: var(--accent);
   border-radius: 3px;
   transition: width 0.2s;
 }

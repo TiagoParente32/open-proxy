@@ -10,4 +10,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal:     url          => ipcRenderer.send('shell:openExternal', url),
   saveFile:         (name, data) => ipcRenderer.invoke('dialog:saveFile', { filename: name, content: data }),
   bustCacheSync:    (val)        => ipcRenderer.send('menu:bustCacheSync', val),
+  themeChanged:     (id)         => ipcRenderer.send('theme:changed', id),
+  onSetTheme:       (cb)         => ipcRenderer.on('theme:set', (_e, id) => cb(id)),
 })

@@ -223,7 +223,7 @@ const getHighlightedPayload = (content) => {
   display: flex; 
   justify-content: space-between; 
   align-items: center; 
-  color: #ccc;
+  color: var(--fg-secondary);
   gap: 12px;
 }
 .header-title {
@@ -232,14 +232,14 @@ const getHighlightedPayload = (content) => {
   gap: 8px;
   white-space: nowrap;
 }
-.badge { background: #333; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: bold; }
+.badge { background: var(--border); padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: bold; }
 
 .ws-search {
   flex: 1;
   max-width: 300px;
-  background: #111;
-  border: 1px solid #444;
-  color: #ccc;
+  background: var(--bg-deepest);
+  border: 1px solid var(--border);
+  color: var(--fg-secondary);
   padding: 4px 10px;
   border-radius: 4px;
   font-size: 11px;
@@ -247,7 +247,7 @@ const getHighlightedPayload = (content) => {
   outline: none;
   transition: border-color 0.2s;
 }
-.ws-search:focus { border-color: #3b82f6; }
+.ws-search:focus { border-color: var(--accent); }
 
 .ws-messages { 
   flex: 1; 
@@ -260,24 +260,24 @@ const getHighlightedPayload = (content) => {
   padding-bottom: 40px; /* Space for the jump button */
 }
 
-.empty-state { color: #666; font-style: italic; text-align: center; margin-top: 20px; }
+.empty-state { color: var(--fg-muted); font-style: italic; text-align: center; margin-top: 20px; }
 
-.ws-frame { border: 1px solid #333; border-radius: 6px; overflow: hidden; background: #1a1b1c; flex-shrink: 0; }
-.frame-meta { padding: 4px 8px; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 6px; font-size: 11px; }
-.meta-divider { color: #555; }
-.meta-text { color: #888; }
-.meta-text.size { color: #aaa; font-family: monospace; }
+.ws-frame { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg-card); flex-shrink: 0; }
+.frame-meta { padding: 4px 8px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.meta-divider { color: var(--fg-placeholder); }
+.meta-text { color: var(--fg-muted); }
+.meta-text.size { color: var(--fg-muted); font-family: monospace; }
 .direction-icon { font-size: 10px; }
 
-.client-frame { border-left: 3px solid #3b82f6; } 
-.client-frame .frame-meta { background: rgba(59, 130, 246, 0.1); }
+.client-frame { border-left: 3px solid var(--accent); } 
+.client-frame .frame-meta { background: var(--accent-muted); }
 
-.server-frame { border-left: 3px solid #10b981; } 
-.server-frame .frame-meta { background: rgba(16, 185, 129, 0.1); }
+.server-frame { border-left: 3px solid var(--success); } 
+.server-frame .frame-meta { background: var(--success-muted); }
 
 .frame-payload { 
   padding: 12px; 
-  color: #d4d4d4; 
+  color: var(--fg-secondary); 
   font-family: 'Consolas', monospace; 
   white-space: pre-wrap; 
   word-break: break-all; 
@@ -294,35 +294,35 @@ const getHighlightedPayload = (content) => {
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
-  background-color: rgba(59, 130, 246, 0.9);
+  background-color: rgba(59,130,246,0.9);
   color: white;
-  border: 1px solid #2563eb;
+  border: 1px solid var(--accent-hover);
   padding: 6px 16px;
   border-radius: 20px;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-lg);
   backdrop-filter: blur(4px);
   z-index: 10;
   transition: all 0.2s ease;
 }
 .jump-bottom-btn:hover {
-  background-color: #3b82f6;
+  background-color: var(--accent);
   transform: translateX(-50%) translateY(-2px);
 }
 
 /* Container for the payload so we can absolutely position the copy button */
 .frame-payload-wrapper {
   position: relative;
-  background: #111;
-  border-top: 1px solid #222;
+  background: var(--bg-deepest);
+  border-top: 1px solid var(--border-subtle);
 }
 
 /* The actual text container */
 .frame-payload { 
   padding: 12px; 
-  color: #d4d4d4; 
+  color: var(--fg-secondary); 
   font-family: 'Consolas', monospace; 
   white-space: pre-wrap; 
   word-break: break-all; 
@@ -337,9 +337,9 @@ const getHighlightedPayload = (content) => {
   position: absolute;
   top: 6px;
   right: 6px;
-  background: #2a2d2e;
-  color: #a1aab3;
-  border: 1px solid #404446;
+  background: var(--bg-active);
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
   padding: 4px 10px;
   border-radius: 4px;
   font-size: 10px;
@@ -356,29 +356,29 @@ const getHighlightedPayload = (content) => {
 }
 
 .copy-payload-btn:hover {
-  background: #3b82f6;
+  background: var(--accent);
   color: white;
-  border-color: #2563eb;
+  border-color: var(--accent-hover);
 }
 
 /* Lightweight OneDark Theme Colors */
 :deep(.cm-key) { 
-  color: #e06c75; /* Red/Pink for keys */
+  color: var(--syntax-red); /* Red/Pink for keys */
 }
 :deep(.cm-string) { 
-  color: #98c379; /* Green for strings */
+  color: var(--syntax-green); /* Green for strings */
 }
 :deep(.cm-number) { 
-  color: #d19a66; /* Orange for numbers */
+  color: var(--syntax-orange); /* Orange for numbers */
 }
 :deep(.cm-boolean) { 
-  color: #56b6c2; /* Cyan for booleans */
+  color: var(--syntax-cyan); /* Cyan for booleans */
 }
 :deep(.cm-null) { 
-  color: #c678dd; /* Purple for nulls */
+  color: var(--syntax-purple); /* Purple for nulls */
 }
 :deep(.cm-prefix) {
-  color: #61afef; /* Blue for the Socket.IO routing prefix */
+  color: var(--syntax-blue); /* Blue for the Socket.IO routing prefix */
   font-weight: bold;
 }
 </style>

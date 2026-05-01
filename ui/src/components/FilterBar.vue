@@ -18,7 +18,7 @@ const setChip = (category, value) => {
       <button 
         class="chip" :class="{ active: activeChips.starred }"
         @click="activeChips.starred = !activeChips.starred"
-        style="color: #f59e0b;"
+        style="color: var(--method-put);"
       >
         {{ activeChips.starred ? '⭐ Starred Only' : '⭐ Starred' }}
       </button>
@@ -82,10 +82,10 @@ const setChip = (category, value) => {
   display: flex;
   align-items: center;
   padding: 4px 16px;
-  background-color: #1e1e1f; /* Slightly darker than toolbar to create depth */
+  background-color: var(--bg-main);
   border-bottom: 1px solid var(--border);
   gap: 12px;
-  overflow-x: auto; /* Allows scrolling if window gets too small */
+  overflow-x: auto;
   user-select: none;
 }
 
@@ -102,8 +102,8 @@ const setChip = (category, value) => {
 .chip {
   background: transparent;
   border: 1px solid transparent;
-  color: #8b949e;
-  padding: 2px 8px; /* Extremely compact */
+  color: var(--fg-muted);
+  padding: 2px 8px;
   border-radius: 12px;
   font-size: 11px;
   font-weight: 500;
@@ -114,22 +114,21 @@ const setChip = (category, value) => {
 }
 
 .chip:hover {
-  color: #ccc;
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--fg-secondary);
+  background: var(--surface-hover);
 }
 
-/* The Active State (Proxyman Blue) */
 .chip.active {
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
-  border-color: rgba(59, 130, 246, 0.3);
+  background: var(--accent-muted);
+  color: var(--accent);
+  border-color: var(--accent-border);
   font-weight: 600;
 }
 
 .divider {
   width: 1px;
   height: 14px;
-  background: #333;
+  background: var(--border);
   flex-shrink: 0;
 }
 

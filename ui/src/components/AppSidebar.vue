@@ -157,11 +157,11 @@ const removePinnedSource = (source, event) => {
 .focus-mode-wrapper.focus-on { background: rgba(59, 130, 246, 0.1); border-bottom-color: rgba(59, 130, 246, 0.3); }
 .focus-mode-wrapper.focus-on .ui-icon { color: #3b82f6; opacity: 1; }
 
-.focus-label { flex: 1; font-weight: 600; font-size: 13px; color: #eee; }
+.focus-label { flex: 1; font-weight: 600; font-size: 13px; color: var(--fg-secondary); }
 
 .toggle-switch { width: 32px; height: 18px; background: #333; border-radius: 20px; position: relative; transition: background 0.3s; margin-left: auto; border: 1px solid #444; }
-.toggle-switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: #888; border-radius: 50%; transition: transform 0.3s, background 0.3s; }
-.toggle-switch.on { background: #3b82f6; border-color: #3b82f6; }
+.toggle-switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: var(--fg-muted); border-radius: 50%; transition: transform 0.3s, background 0.3s; }
+.toggle-switch.on { background: var(--accent); border-color: var(--accent); }
 .toggle-switch.on::after { transform: translateX(14px); background: #fff; }
 
 /* Subheaders */
@@ -170,12 +170,12 @@ const removePinnedSource = (source, event) => {
   margin-top: 24px; 
   margin-bottom: 8px; 
   font-size: 11px; 
-  color: #666; 
+  color: var(--fg-muted); 
   font-weight: 600; 
   letter-spacing: 0.5px; 
 }
 
-.empty-state { padding: 0 16px; font-size: 12px; color: #555; font-style: italic; }
+.empty-state { padding: 0 16px; font-size: 12px; color: var(--fg-placeholder); font-style: italic; }
 
 /* Tree Layout */
 .tree-container { padding: 8px; overflow-y: auto; flex: 1; }
@@ -189,45 +189,45 @@ const removePinnedSource = (source, event) => {
   border-radius: 6px; 
   margin-bottom: 2px; 
   font-size: 12.5px; 
-  color: #bbb; 
+  color: var(--fg-muted); 
   transition: all 0.1s; 
 }
-.tree-item:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
-.tree-item.active { background: #3b82f6; color: #fff; font-weight: 500; }
+.tree-item:hover { background: rgba(255, 255, 255, 0.05); color: var(--fg-primary); }
+.tree-item.active { background: var(--accent); color: #fff; font-weight: 500; }
 .tree-item.active .ui-icon, .tree-item.active .chevron-icon { opacity: 1; }
 
-.main-item { margin-bottom: 8px; font-weight: 500; color: #ddd; }
+.main-item { margin-bottom: 8px; font-weight: 500; color: var(--fg-secondary); }
 
 /* Pin Input & Items */
 .pin-input-group { padding: 0 8px; margin-bottom: 8px; display: flex; gap: 6px; }
 .filter-input-small { 
-  flex: 1; background: rgba(0, 0, 0, 0.2); border: 1px solid #333; color: #eee; 
+  flex: 1; background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-secondary); 
   padding: 6px 8px; border-radius: 4px; font-size: 11px; outline: none; transition: border-color 0.2s; 
 }
-.filter-input-small:focus { border-color: #3b82f6; }
+.filter-input-small:focus { border-color: var(--accent); }
 
 .action-btn { 
-  background: rgba(255, 255, 255, 0.05); border: 1px solid #333; color: #aaa; 
+  background: var(--surface-hover); border: 1px solid var(--border); color: var(--fg-muted); 
   border-radius: 4px; padding: 0 8px; cursor: pointer; transition: all 0.2s; 
   display: flex; align-items: center; justify-content: center;
 }
-.action-btn:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.action-btn:hover { background: rgba(255, 255, 255, 0.1); color: var(--fg-primary); }
 
-.delete-icon { margin-left: auto; color: #ef4444; opacity: 0; transition: opacity 0.2s; display: flex; align-items: center; padding: 2px; border-radius: 4px; }
-.delete-icon:hover { background: rgba(239, 68, 68, 0.2); }
+.delete-icon { margin-left: auto; color: var(--error); opacity: 0; transition: opacity 0.2s; display: flex; align-items: center; padding: 2px; border-radius: 4px; }
+.delete-icon:hover { background: var(--error-muted); }
 .tree-item:hover .delete-icon { opacity: 1; }
 
 /* Folders (IDE Style) */
 .folder-group { margin-bottom: 4px; }
 .folder-header { gap: 6px; }
-.folder-label { font-weight: 500; color: #ddd; }
+.folder-label { font-weight: 500; color: var(--fg-secondary); }
 
 .folder-contents { display: flex; flex-direction: column; position: relative; margin-left: 14px; padding-left: 10px; }
 .tree-line {
   position: absolute; left: 0; top: 0; bottom: 8px; width: 1px;
-  background: #333; /* The vertical line connecting children */
+  background: var(--border);
 }
 
-.sub-item { position: relative; font-size: 12px; color: #999; }
+.sub-item { position: relative; font-size: 12px; color: var(--fg-muted); }
 .child-icon { opacity: 0.4; width: 12px; height: 12px; }
 </style>

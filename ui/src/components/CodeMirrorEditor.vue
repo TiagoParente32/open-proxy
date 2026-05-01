@@ -158,7 +158,7 @@ const beautify = () => {
 
           <!-- Input -->
           <div class="cme-input-wrap">
-            <svg class="cme-field-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4a5160" stroke-width="2" stroke-linecap="round">
+            <svg class="cme-field-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg-placeholder)" stroke-width="2" stroke-linecap="round">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
             <input
@@ -210,7 +210,7 @@ const beautify = () => {
           <div class="cme-expand-spacer" />
 
           <div class="cme-input-wrap">
-            <svg class="cme-field-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4a5160" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="cme-field-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg-placeholder)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M17 10H3"/><path d="M21 6H3"/><path d="M21 14H3"/><path d="M17 18H3"/>
             </svg>
             <input
@@ -283,8 +283,8 @@ const beautify = () => {
 /* ── Panel container ────────────────────────────────────── */
 .cme-panel {
   flex-shrink: 0;
-  background: #131415;
-  border-bottom: 1px solid #252729;
+  background: var(--bg-deepest);
+  border-bottom: 1px solid var(--border-subtle);
   z-index: 10;
 }
 
@@ -302,10 +302,10 @@ const beautify = () => {
   display: flex; align-items: center; justify-content: center;
   width: 20px; height: 20px; padding: 0;
   background: none; border: none; border-radius: 4px;
-  color: #4a5160; cursor: pointer; flex-shrink: 0;
+  color: var(--fg-placeholder); cursor: pointer; flex-shrink: 0;
   transition: color 0.12s, background 0.12s;
 }
-.cme-expand-btn:hover { color: #aaa; background: rgba(255,255,255,0.06); }
+.cme-expand-btn:hover { color: var(--fg-muted); background: var(--surface-hover); }
 .cme-expand-btn svg { transition: transform 0.15s ease; }
 .cme-expand-btn.open svg { transform: rotate(90deg); }
 .cme-expand-spacer { width: 20px; flex-shrink: 0; }
@@ -318,9 +318,9 @@ const beautify = () => {
 .cme-field-icon { position: absolute; left: 8px; pointer-events: none; flex-shrink: 0; }
 .cme-input {
   width: 100%;
-  background: #0d0e0f;
-  border: 1px solid #252729;
-  color: #d0d4d8;
+  background: var(--bg-deepest);
+  border: 1px solid var(--border-subtle);
+  color: var(--fg-secondary);
   border-radius: 5px;
   padding: 0 8px 0 27px;
   height: 26px;
@@ -329,17 +329,17 @@ const beautify = () => {
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-.cme-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.12); }
+.cme-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(59,130,246,0.12); }
 
 /* ── Match count ────────────────────────────────────────── */
 .cme-count {
-  font-size: 11px; color: #4a5160;
+  font-size: 11px; color: var(--fg-placeholder);
   white-space: nowrap; flex-shrink: 0; min-width: 76px; text-align: right;
 }
-.cme-count.zero { color: #f87171; }
+.cme-count.zero { color: var(--error); }
 
 /* ── Separator ──────────────────────────────────────────── */
-.cme-sep { width: 1px; height: 14px; background: #252729; flex-shrink: 0; margin: 0 1px; }
+.cme-sep { width: 1px; height: 14px; background: var(--border-subtle); flex-shrink: 0; margin: 0 1px; }
 
 /* ── Button group ───────────────────────────────────────── */
 .cme-btn-group { display: flex; align-items: center; gap: 1px; flex-shrink: 0; }
@@ -349,34 +349,34 @@ const beautify = () => {
   display: flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; padding: 0;
   background: none; border: 1px solid transparent; border-radius: 4px;
-  color: #4a5160; cursor: pointer;
+  color: var(--fg-placeholder); cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s; flex-shrink: 0;
 }
-.cme-icon-btn:hover { background: rgba(255,255,255,0.07); color: #ccc; border-color: #2e3133; }
-.cme-close-btn:hover { color: #f87171 !important; }
+.cme-icon-btn:hover { background: var(--surface-hover); color: var(--fg-secondary); border-color: var(--border-subtle); }
+.cme-close-btn:hover { color: var(--error) !important; }
 
 /* ── Toggle buttons (Aa, .*) ────────────────────────────── */
 .cme-toggle {
   display: flex; align-items: center; justify-content: center;
   height: 26px; padding: 0 8px;
   background: none; border: 1px solid transparent; border-radius: 4px;
-  color: #4a5160; cursor: pointer;
+  color: var(--fg-placeholder); cursor: pointer;
   font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
   transition: background 0.12s, color 0.12s, border-color 0.12s; flex-shrink: 0;
 }
-.cme-toggle:hover { background: rgba(255,255,255,0.07); color: #aaa; border-color: #2e3133; }
-.cme-toggle.active { background: rgba(59,130,246,0.15); color: #60a5fa; border-color: rgba(59,130,246,0.3); }
+.cme-toggle:hover { background: var(--surface-hover); color: var(--fg-muted); border-color: var(--border-subtle); }
+.cme-toggle.active { background: var(--accent-muted); color: var(--accent); border-color: var(--accent-border); }
 
 /* ── Text action buttons (Replace, Replace All) ─────────── */
 .cme-text-btn {
   display: flex; align-items: center;
   height: 26px; padding: 0 12px;
-  background: #1e2022; border: 1px solid #2e3133; border-radius: 4px;
-  color: #9aa3ad; cursor: pointer;
+  background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 4px;
+  color: var(--fg-muted); cursor: pointer;
   font-family: inherit; font-size: 11px; font-weight: 500;
   transition: background 0.12s, color 0.12s, border-color 0.12s; flex-shrink: 0;
 }
-.cme-text-btn:hover { background: #272b2e; color: #e5e7eb; border-color: #3d4144; }
+.cme-text-btn:hover { background: var(--bg-active); color: var(--fg-secondary); border-color: var(--border); }
 
 /* ── Floating action buttons ────────────────────────────── */
 .cme-actions {
@@ -390,16 +390,16 @@ const beautify = () => {
 .cme-action-btn {
   display: flex; align-items: center; gap: 5px;
   height: 26px; padding: 0 10px;
-  background: #1a1c1e; border: 1px solid #2e3133; border-radius: 6px;
-  color: #8a9199; cursor: pointer;
+  background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px;
+  color: var(--fg-muted); cursor: pointer;
   font-family: inherit; font-size: 11.5px; font-weight: 500;
   backdrop-filter: blur(6px);
   transition: background 0.12s, color 0.12s, border-color 0.12s;
-  white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  white-space: nowrap; box-shadow: var(--shadow-lg);
 }
-.cme-action-btn:hover { background: #232629; color: #e5e7eb; border-color: #3d4144; }
-.cme-action-btn.active { background: rgba(59,130,246,0.14); color: #60a5fa; border-color: rgba(59,130,246,0.35); }
-.cme-action-btn.done { background: rgba(52,211,153,0.12); color: #34d399; border-color: rgba(52,211,153,0.3); }
+.cme-action-btn:hover { background: var(--bg-active); color: var(--fg-secondary); border-color: var(--border); }
+.cme-action-btn.active { background: var(--accent-muted); color: var(--accent); border-color: var(--accent-border); }
+.cme-action-btn.done { background: var(--success-muted); color: var(--success); border-color: rgba(16,185,129,0.3); }
 
 /* ── Slide transition ───────────────────────────────────── */
 .cme-slide-enter-active,

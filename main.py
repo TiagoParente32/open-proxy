@@ -20,7 +20,7 @@ from mitmproxy import http, options
 from mitmproxy.tools.dump import DumpMaster
 from mitmproxy.proxy.mode_servers import WireGuardServerInstance
 
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 GITHUB_REPO = "TiagoParente32/open-proxy"
 
 # Global refs so background threads can reach the bridge and its event loop

@@ -1,0 +1,28 @@
+{
+  "id": "ocean",
+  "name": "Ocean",
+  "dark": true,
+  "variables": {
+    "--bg-deepest": "#060d14",
+    "--bg-deep": "#0a1628",
+    "--bg-input": "#0e1c30",
+    "--bg-modal": "#111f35",
+    "--bg-main": "#0f2035",
+    "--bg-sidebar": "#132540",
+    "--bg-active": "#1a2f4a",
+    "--bg-card": "#111f35",
+    "--accent": "#06b6d4",
+    "--accent-hover": "#0891b2",
+    "--accent-muted": "rgba(6,182,212,0.15)",
+    "--accent-border": "rgba(6,182,212,0.35)",
+    "--border": "#1d3450",
+    "--border-subtle": "rgba(6,182,212,0.08)",
+    "--fg-muted": "#7da8c8",
+    "--row-selected": "#0e2d40",
+    "--syntax-cyan": "#06b6d4",
+    "--focus-ring": "0 0 0 2px rgba(6,182,212,0.25)",
+    "--selection-bg": "rgba(6,182,212,0.2)",
+    "--surface-hover": "rgba(255,255,255,0.04)",
+    "--surface-hover-strong": "rgba(255,255,255,0.08)"
+  }
+}

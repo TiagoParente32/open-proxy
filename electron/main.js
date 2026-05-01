@@ -8,6 +8,7 @@ const { spawn } = require('child_process')
 
 let win, tray, pythonProcess, isQuitting = false
 let bustCacheEnabled = false
+let currentTheme = 'dark'
 
 async function buildUI () {
   if (app.isPackaged) return
@@ -130,7 +131,12 @@ function setupIPC () {
   ipcMain.on('shell:openExternal', (_e, url) => shell.openExternal(url))
   ipcMain.on('menu:bustCacheSync', (_e, val) => {
     bustCacheEnabled = !!val
-    setupMenu()   // rebuild native menu so checkmark reflects Vue's real state
+    setupMenu()
+  })
+
+  ipcMain.on('theme:changed', (_e, id) => {
+    currentTheme = id
+    setupMenu()
   })
 
   ipcMain.handle('dialog:saveFile', async (_e, { filename, content }) => {
@@ -244,9 +250,30 @@ function setupMenu () {
         },
       ],
     },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Theme',
+          submenu: [
+            { label: 'Dark',     type: 'radio', checked: currentTheme === 'dark',     click: () => setTheme('dark') },
+            { label: 'Midnight', type: 'radio', checked: currentTheme === 'midnight', click: () => setTheme('midnight') },
+            { label: 'Ocean',    type: 'radio', checked: currentTheme === 'ocean',    click: () => setTheme('ocean') },
+            { label: 'Crimson',  type: 'radio', checked: currentTheme === 'crimson',  click: () => setTheme('crimson') },
+            { label: 'Light',    type: 'radio', checked: currentTheme === 'light',    click: () => setTheme('light') },
+          ],
+        },
+      ],
+    },
   ]
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+function setTheme(id) {
+  currentTheme = id
+  win?.webContents.send('theme:set', id)
+  setupMenu()
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

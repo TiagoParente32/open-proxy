@@ -173,7 +173,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   padding: 0 8px 0 12px;
   font-size: 12px;
   font-weight: 600;
-  color: #cdd9e5;
+  color: var(--fg-secondary);
   letter-spacing: 0.02em;
   white-space: nowrap;
   -webkit-app-region: no-drag;
@@ -193,15 +193,15 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   align-items: center;
   padding: 0 10px;
   font-size: 12px;
-  color: #8b949e;
+  color: var(--fg-muted);
   cursor: default;
   border-radius: 4px;
   transition: background 0.1s, color 0.1s;
 }
 .win-menu-root:hover,
 .win-menu-root.is-open {
-  background: rgba(255,255,255,0.08);
-  color: #cdd9e5;
+  background: var(--surface-hover-strong);
+  color: var(--fg-secondary);
 }
 
 /* ── Dropdown ─────────────────────────────────────────────────────────────── */
@@ -210,10 +210,10 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   top: 100%;
   left: 0;
   min-width: 180px;
-  background: #1e2228;
-  border: 1px solid rgba(255,255,255,0.12);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-lg);
   list-style: none;
   margin: 2px 0 0;
   padding: 4px 0;
@@ -236,7 +236,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   gap: 6px;
   padding: 5px 14px 5px 6px;
   font-size: 12px;
-  color: #cdd9e5;
+  color: var(--fg-secondary);
   cursor: default;
   white-space: nowrap;
   border-radius: 2px;
@@ -244,12 +244,12 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 }
 .win-item:hover,
 .win-item--sub.is-open {
-  background: rgba(255,255,255,0.1);
+  background: var(--surface-hover-strong);
 }
 
 .win-sep {
   height: 1px;
-  background: rgba(255,255,255,0.1);
+  background: var(--border-subtle);
   margin: 3px 0;
 }
 
@@ -262,7 +262,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 .win-item-check {
   width: 12px;
   font-size: 11px;
-  color: #cdd9e5;
+  color: var(--fg-secondary);
   flex-shrink: 0;
   text-align: center;
 }

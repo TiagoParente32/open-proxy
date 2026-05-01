@@ -1,0 +1,24 @@
+{
+  "id": "midnight",
+  "name": "Midnight",
+  "dark": true,
+  "variables": {
+    "--bg-deepest": "#010409",
+    "--bg-deep": "#0d1117",
+    "--bg-input": "#0d1117",
+    "--bg-modal": "#161b22",
+    "--bg-main": "#0d1117",
+    "--bg-sidebar": "#161b22",
+    "--bg-active": "#21262d",
+    "--bg-card": "#161b22",
+    "--border": "#30363d",
+    "--border-subtle": "rgba(255,255,255,0.05)",
+    "--accent": "#58a6ff",
+    "--accent-hover": "#388bfd",
+    "--accent-muted": "rgba(88,166,255,0.15)",
+    "--accent-border": "rgba(88,166,255,0.35)",
+    "--row-selected": "#1c2d3f",
+    "--focus-ring": "0 0 0 2px rgba(88,166,255,0.25)",
+    "--selection-bg": "rgba(88,166,255,0.25)"
+  }
+}
