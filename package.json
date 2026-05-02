@@ -37,11 +37,10 @@
       "target": ["nsis", "zip"]
     },
     "linux": {
-      "icon": "icon.png",
+      "icon": "icon.icns",
       "category": "Development",
       "target": [
         { "target": "deb",      "arch": ["x64"] },
-        { "target": "rpm",      "arch": ["x64"] },
         { "target": "AppImage", "arch": ["x64"] },
         { "target": "tar.gz",   "arch": ["x64"] }
       ]
@@ -50,5 +49,9 @@
   "devDependencies": {
     "electron": "^30.0.0",
     "electron-builder": "^24.0.0"
+  },
+  "author": {
+    "name": "Tiago",
+    "email": "t.parente.32@gmail.com"
   }
 }
