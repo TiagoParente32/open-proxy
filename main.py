@@ -13,15 +13,19 @@ import sqlite3
 import hashlib
 import urllib.request
 import websockets
-import webview
-from webview.menu import Menu, MenuAction, MenuSeparator
 import psutil
-import pystray
 import mitmproxy_rs
 from PIL import Image
 from mitmproxy import http, options
 from mitmproxy.tools.dump import DumpMaster
 from mitmproxy.proxy.mode_servers import WireGuardServerInstance
+
+APP_VERSION = "1.0.3"
+GITHUB_REPO = "TiagoParente32/open-proxy"
+
+# Global refs so background threads can reach the bridge and its event loop
+_global_bridge = None
+_global_loop   = None
 
 # ============================================================================
 # 1. NETWORK & SYSTEM HELPERS
@@ -155,6 +159,264 @@ def get_resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 LOCAL_IP = get_local_ip()
+
+
+# ============================================================================
+# AUTO-UPDATE HELPERS
+# ============================================================================
+def _get_app_install_path():
+    """Return the Electron app root (the .app bundle on macOS, exe folder on Windows/Linux)."""
+    exe = os.path.abspath(sys.executable)
+    if sys.platform == 'darwin' and '.app/Contents/' in exe:
+        return exe.split('/Contents/')[0]   # /path/to/OpenProxy.app
+    if getattr(sys, 'frozen', False):
+        # PyInstaller onedir: exe at <electron_root>/resources/backend/OpenProxy-server/
+        # Navigate up 3 levels to reach the Electron app root
+        return os.path.normpath(os.path.join(os.path.dirname(exe), '..', '..', '..'))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _parse_version(tag):
+    """Parse a semver tag like 'v1.2.3' into a comparable tuple."""
+    try:
+        return tuple(int(x) for x in tag.lstrip('v').split('.'))
+    except Exception:
+        return (0,)
+
+
+def check_for_updates():
+    """
+    Query GitHub Releases API. Returns a dict if a newer version is available, else None.
+    { version, current, download_url, release_url }
+
+    For local testing, set OPENPROXY_UPDATE_TEST_URL to a zip URL and the check
+    will immediately return a fake update pointing to that URL, e.g.:
+        OPENPROXY_UPDATE_TEST_URL=http://127.0.0.1:9999/update.zip ./OpenProxy.app/...
+    """
+    test_url = os.environ.get('OPENPROXY_UPDATE_TEST_URL')
+    if test_url:
+        print(f"[Update] TEST MODE — using override URL: {test_url}")
+        return {
+            'version': 'v99.9.9',
+            'current': APP_VERSION,
+            'download_url': test_url,
+            'release_url': 'http://127.0.0.1:9999',
+        }
+
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+        req = urllib.request.Request(url, headers={'User-Agent': f'OpenProxy/{APP_VERSION}'})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+
+        latest = data.get('tag_name', '').strip()
+        if not latest or _parse_version(latest) <= _parse_version(APP_VERSION):
+            return None
+
+        import platform as _platform
+        machine = _platform.machine().lower()
+        is_arm  = machine in ('arm64', 'aarch64')
+
+        assets = data.get('assets', [])
+        download_url = None
+
+        if sys.platform == 'darwin':
+            # electron-builder names: OpenProxy-1.0.0-arm64-mac.zip  /  OpenProxy-1.0.0-mac.zip
+            mac_zips = [
+                a for a in assets
+                if a.get('name', '').lower().endswith('.zip')
+                and any(kw in a.get('name', '').lower() for kw in ['mac', 'macos', 'osx', 'darwin'])
+            ]
+            if is_arm:
+                arm_zips = [a for a in mac_zips if 'arm64' in a.get('name', '').lower()]
+                chosen = arm_zips or mac_zips   # fall back to universal/x64 if no arm64 asset
+            else:
+                x64_zips = [a for a in mac_zips if 'arm64' not in a.get('name', '').lower()]
+                chosen = x64_zips or mac_zips   # fall back if no explicit x64 asset
+            if chosen:
+                download_url = chosen[0]['browser_download_url']
+
+        elif sys.platform == 'win32':
+            machine_win = _platform.machine().upper()
+            is_arm_win  = machine_win in ('ARM64',)
+            for asset in assets:
+                name = asset.get('name', '').lower()
+                if not name.endswith('.zip'):
+                    continue
+                if not any(kw in name for kw in ['windows', 'win']):
+                    continue
+                if is_arm_win and 'arm64' not in name:
+                    continue
+                if not is_arm_win and 'arm64' in name:
+                    continue
+                download_url = asset['browser_download_url']
+                break
+
+        else:  # Linux — prefer AppImage, fall back to tar.gz
+            for ext in ('.appimage', '.tar.gz', '.zip'):
+                for asset in assets:
+                    name = asset.get('name', '').lower()
+                    if name.endswith(ext) and any(kw in name for kw in ['linux', 'appimage']):
+                        # Architecture match
+                        if is_arm and 'arm64' not in name and 'aarch64' not in name:
+                            continue
+                        if not is_arm and ('arm64' in name or 'aarch64' in name):
+                            continue
+                        download_url = asset['browser_download_url']
+                        break
+                if download_url:
+                    break
+
+        return {
+            'version': latest,
+            'current': APP_VERSION,
+            'download_url': download_url,
+            'release_url': f"https://github.com/{GITHUB_REPO}/releases/tag/{latest}",
+        }
+    except Exception as e:
+        print(f"[Update] Check failed: {e}")
+        return None
+
+
+def apply_update(download_url, progress_cb=None):
+    """
+    Download the release zip, extract it, then launch a helper script that
+    swaps the new app over the old one and relaunches.
+    progress_cb(pct) is called with 0-100 during download.
+    Raises on any error so the caller can surface it to the UI.
+    """
+    import tempfile, zipfile, shutil, stat
+
+    install_path = _get_app_install_path()
+    tmp_dir = tempfile.mkdtemp(prefix='openproxy_update_')
+
+    zip_path = os.path.join(tmp_dir, 'update.zip')
+    ext = os.path.splitext(download_url.split('?')[0])[1].lower()
+    dl_path = os.path.join(tmp_dir, f'update{ext}')
+    extract_dir = os.path.join(tmp_dir, 'extracted')
+    os.makedirs(extract_dir, exist_ok=True)
+
+    def reporthook(block_num, block_size, total_size):
+        if progress_cb and total_size > 0:
+            pct = min(100, int(block_num * block_size * 100 / total_size))
+            progress_cb(pct)
+
+    urllib.request.urlretrieve(download_url, dl_path, reporthook)
+    if progress_cb:
+        progress_cb(100)
+
+    # ── Linux AppImage: single executable, no extraction needed ─────────────
+    if sys.platform not in ('darwin', 'win32') and dl_path.lower().endswith('.appimage'):
+        log    = os.path.join(tmp_dir, 'update.log')
+        script = os.path.join(tmp_dir, 'do_update.sh')
+        with open(script, 'w') as f:
+            f.write(f"""#!/bin/bash
+exec >"{log}" 2>&1
+set -x
+sleep 2
+cp -f "{dl_path}" "{install_path}"
+chmod +x "{install_path}"
+nohup "{install_path}" &
+""")
+        os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
+        subprocess.Popen(['bash', script], close_fds=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
+
+    # ── All other formats: extract the archive first ─────────────────────────
+    if sys.platform == 'darwin':
+        subprocess.run(['ditto', '-x', '-k', dl_path, extract_dir], check=True)
+    elif sys.platform != 'win32':
+        if dl_path.endswith('.tar.gz'):
+            subprocess.run(['tar', '-xzf', dl_path, '-C', extract_dir], check=True)
+        else:
+            result = subprocess.run(['unzip', '-q', dl_path, '-d', extract_dir])
+            if result.returncode != 0:
+                with zipfile.ZipFile(dl_path, 'r') as zf:
+                    zf.extractall(extract_dir)
+    else:
+        with zipfile.ZipFile(dl_path, 'r') as zf:
+            zf.extractall(extract_dir)
+
+    if sys.platform == 'darwin':
+        new_app = next(
+            (os.path.join(extract_dir, f) for f in os.listdir(extract_dir) if f.endswith('.app')),
+            None
+        )
+        if not new_app:
+            raise FileNotFoundError("No .app bundle found in the downloaded zip")
+
+        app_name = os.path.splitext(os.path.basename(new_app))[0]
+        new_support_dir = os.path.join(extract_dir, app_name)
+
+        install_dir = os.path.dirname(install_path)
+        old_support_dir = os.path.join(install_dir, app_name)
+
+        log = os.path.join(tmp_dir, 'update.log')
+        script = os.path.join(tmp_dir, 'do_update.sh')
+        with open(script, 'w') as f:
+            support_lines = ""
+            if os.path.isdir(new_support_dir):
+                support_lines = f"""
+rm -rf "{old_support_dir}"
+mv -f "{new_support_dir}" "{old_support_dir}"
+xattr -r -d com.apple.quarantine "{old_support_dir}" 2>/dev/null || true"""
+
+            f.write(f"""#!/bin/bash
+exec >"{log}" 2>&1
+set -x
+sleep 2
+rm -rf "{install_path}"
+mv -f "{new_app}" "{install_path}"
+xattr -r -d com.apple.quarantine "{install_path}" 2>/dev/null || true{support_lines}
+bin=$(defaults read "{install_path}/Contents/Info" CFBundleExecutable 2>/dev/null)
+if [ -z "$bin" ]; then bin=$(ls "{install_path}/Contents/MacOS/" | head -1); fi
+chmod +x "{install_path}/Contents/MacOS/$bin"
+nohup "{install_path}/Contents/MacOS/$bin" &
+""")
+        os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
+        subprocess.Popen(['bash', script], close_fds=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    elif sys.platform == 'win32':
+        new_dir = next(
+            (os.path.join(extract_dir, f) for f in os.listdir(extract_dir)
+             if os.path.isdir(os.path.join(extract_dir, f))),
+            extract_dir
+        )
+        exe_name = os.path.basename(sys.executable)
+        log = os.path.join(tmp_dir, 'update.log')
+        script = os.path.join(tmp_dir, 'do_update.bat')
+        with open(script, 'w') as f:
+            f.write(f"""@echo off
+timeout /t 2 /nobreak >nul
+robocopy "{new_dir}" "{install_path}" /E /IS /IT /IM >"{log}" 2>&1
+start "" "{os.path.join(install_path, exe_name)}"
+""")
+        subprocess.Popen(['cmd', '/c', script], close_fds=True,
+                         creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+
+    else:
+        new_dir = next(
+            (os.path.join(extract_dir, f) for f in os.listdir(extract_dir)
+             if os.path.isdir(os.path.join(extract_dir, f))),
+            extract_dir
+        )
+        exe_name = os.path.basename(sys.executable)
+        log = os.path.join(tmp_dir, 'update.log')
+        script = os.path.join(tmp_dir, 'do_update.sh')
+        with open(script, 'w') as f:
+            f.write(f"""#!/bin/bash
+exec >"{log}" 2>&1
+set -x
+sleep 2
+cp -rf "{new_dir}/." "{install_path}/"
+chmod +x "{os.path.join(install_path, exe_name)}"
+nohup "{os.path.join(install_path, exe_name)}" &
+""")
+        os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
+        subprocess.Popen(['bash', script], close_fds=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 # ============================================================================
@@ -344,57 +606,6 @@ def unset_macos_proxy() -> dict:
         return {'ok': False, 'services': services, 'error': str(e)}
 
 
-class PyWebViewAPI:
-    def __init__(self):
-        self.window = None
-
-    def save_file(self, filename, content):
-        import webview
-        import os
-
-        try:
-            dialog_type = webview.FileDialog.SAVE if hasattr(webview, 'FileDialog') else webview.SAVE_DIALOG
-            safe_dir = os.path.expanduser('~/Desktop')
-
-            result = self.window.create_file_dialog(
-                dialog_type,
-                directory=safe_dir,
-                save_filename=filename
-            )
-
-            print(f"[DEBUG] Dialog result: {result}")
-
-            if not result or len(result) == 0:
-                print("[INFO] User cancelled save dialog")
-                return False
-
-            save_path = result[0]
-
-            if isinstance(save_path, tuple):
-                save_path = save_path[0]
-
-            if not save_path or save_path == "/" or os.path.isdir(save_path):
-                print(f"[WARNING] Invalid path from dialog: {save_path}")
-                fallback_path = os.path.join(safe_dir, filename)
-                if not fallback_path.endswith(".json"):
-                    fallback_path += ".json"
-                with open(fallback_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
-                print(f"[INFO] Saved via fallback to {fallback_path}")
-                return True
-
-            if not save_path.endswith(".json"):
-                save_path += ".json"
-
-            with open(save_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-
-            print(f"[INFO] Export saved to {save_path}")
-            return True
-
-        except Exception as e:
-            print(f"[ERROR] API Save File failed: {e}")
-            return False
 
 
 # ============================================================================
@@ -425,6 +636,7 @@ class ProxyUIBridge:
         self.wg_port = 51820
         self._master = None     # set by run_proxy_forever; used for WG restart + inject
         self._last_startup_error = ""   # captured from mitmproxy's log on startup failure
+        self.pending_update_info = None  # cached until a client connects
 
     def add_log(self, entry) -> None:
         """Capture mitmproxy ERROR log entries so we can surface them in the UI."""
@@ -1059,8 +1271,12 @@ class ProxyUIBridge:
         try:
             await websocket.send(json.dumps({
                 "type": "SYSTEM_INFO",
-                "data": {"ip": LOCAL_IP, "port": self.proxy_port}
+                "data": {"ip": LOCAL_IP, "port": self.proxy_port, "platform": sys.platform}
             }))
+
+            if self.pending_update_info:
+                await websocket.send(json.dumps({"type": "UPDATE_AVAILABLE", "data": self.pending_update_info}))
+                self.pending_update_info = None
 
             async for message in websocket:
                 payload = json.loads(message)
@@ -1175,34 +1391,6 @@ class ProxyUIBridge:
                 elif payload.get("type") == "TOGGLE_MAP_REMOTE":
                     self.map_remote_enabled = payload.get("enabled", True)
 
-                elif payload.get("type") == "EXPORT_FILE":
-                    filename = payload.get("filename", "export.json")
-                    file_data = payload.get("data", "")
-
-                    def _save_dialog():
-                        try:
-                            window = webview.windows[0]
-                            dialog_type = webview.FileDialog.SAVE if hasattr(webview, 'FileDialog') else webview.SAVE_DIALOG
-                            safe_dir = os.path.expanduser('~/Desktop')
-
-                            result = window.create_file_dialog(
-                                dialog_type,
-                                directory=safe_dir,
-                                save_filename=filename
-                            )
-
-                            if result and len(result) > 0:
-                                save_path = result[0]
-                                if isinstance(save_path, tuple):
-                                    save_path = save_path[0]
-                                with open(save_path, 'w', encoding='utf-8') as f:
-                                    f.write(file_data)
-                                print(f"[INFO] Export saved to {save_path}")
-                        except Exception as e:
-                            print(f"[ERROR] Failed to open save dialog: {e}")
-
-                    threading.Thread(target=_save_dialog, daemon=True).start()
-
                 elif payload.get("type") == "RESOLVE_BREAKPOINT":
                     flow_id = payload.get("id")
                     action = payload.get("action")
@@ -1299,6 +1487,39 @@ class ProxyUIBridge:
                                 "error": "WireGuard server is not running." if self.wg_enabled else "",
                             },
                         }))
+
+                elif payload.get("type") == "CHECK_FOR_UPDATES":
+                    async def _check():
+                        info = await asyncio.get_event_loop().run_in_executor(None, check_for_updates)
+                        if info:
+                            await websocket.send(json.dumps({"type": "UPDATE_AVAILABLE", "data": info}))
+                    asyncio.create_task(_check())
+
+                elif payload.get("type") == "APPLY_UPDATE":
+                    download_url = payload.get("download_url")
+                    if download_url:
+                        bridge = self
+                        loop = asyncio.get_event_loop()
+
+                        def _run_update():
+                            try:
+                                def progress(pct):
+                                    asyncio.run_coroutine_threadsafe(
+                                        bridge.broadcast_to_ui("UPDATE_PROGRESS", {"pct": pct}), loop
+                                    )
+
+                                apply_update(download_url, progress_cb=progress)
+
+                                asyncio.run_coroutine_threadsafe(
+                                    bridge.broadcast_to_ui("UPDATE_READY", {}), loop
+                                )
+                            except Exception as e:
+                                print(f"[Update] apply_update failed: {e}")
+                                asyncio.run_coroutine_threadsafe(
+                                    bridge.broadcast_to_ui("UPDATE_ERROR", {"error": str(e)}), loop
+                                )
+
+                        threading.Thread(target=_run_update, daemon=True).start()
 
         finally:
             self.connected_clients.remove(websocket)
@@ -1510,14 +1731,30 @@ async def run_ws_forever(bridge):
             print(f"[ERROR] WebSocket server crashed: {e}. Restarting in 3 seconds...")
             await asyncio.sleep(3)
 
+async def _auto_check_update(bridge):
+    """Wait for the UI to connect, then check for updates in the background."""
+    await asyncio.sleep(8)
+    try:
+        info = await asyncio.get_event_loop().run_in_executor(None, check_for_updates)
+        if info:
+            bridge.pending_update_info = info
+            await bridge.broadcast_to_ui("UPDATE_AVAILABLE", info)
+    except Exception as e:
+        print(f"[Update] Auto-check error: {e}")
+
+
 def run_async_loop(bridge, proxy_port):
+    global _global_bridge, _global_loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+    _global_bridge = bridge
+    _global_loop   = loop
 
     async def supervisor():
         await asyncio.gather(
             run_proxy_forever(bridge, proxy_port),
-            run_ws_forever(bridge)
+            run_ws_forever(bridge),
+            _auto_check_update(bridge),
         )
 
     try:
@@ -1526,140 +1763,16 @@ def run_async_loop(bridge, proxy_port):
         print(f"[FATAL] Supervisor died: {e}")
 
 
-def _build_menu(window):
-    """Build the native app menu. Callbacks call into the Vue store via evaluate_js."""
-    def js(code):
-        try:
-            window.evaluate_js(f'window.__op && window.__op.{code}')
-        except Exception as e:
-            print(f'[MENU] JS error: {e}')
-
-    return [
-        Menu('Proxy', [
-            MenuAction('Record / Pause',     lambda: js('toggleRecording()')),
-            MenuAction('Compose Request',    lambda: js('openComposeNew()')),
-            MenuAction('Clear Traffic',      lambda: js('clearTraffic()')),
-            MenuSeparator(),
-            MenuAction('Bust Cache',         lambda: js('bustCache()')),
-        ]),
-        Menu('Tools', [
-            MenuAction('VPN Mode',           lambda: js('openVpnMode()')),
-            MenuAction('Breakpoints',        lambda: js('openBreakpoints()')),
-            MenuSeparator(),
-            MenuAction('Map Local',          lambda: js('openMapLocal()')),
-            MenuAction('Map Remote',         lambda: js('openMapRemote()')),
-            MenuAction('Highlight',          lambda: js('openHighlight()')),
-            MenuSeparator(),
-            Menu('Certificate Setup', [
-                MenuAction('Android Emulator', lambda: js("openCertSetup('android_emulator')")),
-                MenuAction('Android Device',   lambda: js("openCertSetup('android_device')")),
-                MenuSeparator(),
-                MenuAction('iOS Simulator',    lambda: js("openCertSetup('ios_simulator')")),
-                MenuAction('iOS Device',       lambda: js("openCertSetup('ios_device')")),
-                MenuSeparator(),
-                MenuAction('Browser / Desktop', lambda: js("openCertSetup('browser')")),
-            ]),
-            MenuSeparator(),
-            Menu('Throttle', [
-                MenuAction('No Throttling',  lambda: js("setThrottle('None')")),
-                MenuAction('Fast 3G',        lambda: js("setThrottle('Fast 3G')")),
-                MenuAction('Slow 3G',        lambda: js("setThrottle('Slow 3G')")),
-            ]),
-        ]),
-    ]
-
-
 if __name__ == "__main__":
     ACTIVE_PROXY_PORT = get_free_port(9090)
-    print(f"Starting OpenProxy on port {ACTIVE_PROXY_PORT}")
+    print(f"Starting OpenProxy on port {ACTIVE_PROXY_PORT}", flush=True)
 
     bridge = ProxyUIBridge(proxy_port=ACTIVE_PROXY_PORT)
 
     t = threading.Thread(target=run_async_loop, args=(bridge, ACTIVE_PROXY_PORT), daemon=True)
     t.start()
 
-    html_path = f"{get_resource_path('ui/dist/index.html')}?v={int(time.time())}"
-    if os.name == 'nt':
-        icon_path = get_resource_path('icon.ico')
-    else:
-        icon_path = get_resource_path('icon.png')
-
-    webview_api = PyWebViewAPI()
-
-    window = webview.create_window(
-        title='OpenProxy',
-        url=html_path,
-        width=1024,
-        height=720,
-        min_size=(1024, 720),
-        background_color='#1a1a1b',
-        js_api=webview_api
-    )
-
-    def on_loaded():
-        webview_api.window = window
-
-    window.events.loaded += on_loaded
-
-    def on_closing():
-        """Hide to tray instead of quitting when the close button is pressed."""
-        window.hide()
-        return False  # cancel the default close
-
-    window.events.closing += on_closing
-
-    # ── System tray icon ──────────────────────────────────────────────────────
     try:
-        tray_img = Image.open(icon_path).resize((64, 64), Image.LANCZOS)
-    except Exception:
-        tray_img = Image.new("RGBA", (64, 64), (59, 130, 246, 255))
-
-    def tray_show(icon, item):
-        window.show()
-
-    def tray_quit(icon, item):
-        icon.stop()
-        os._exit(0)
-
-    tray_menu = pystray.Menu(
-        pystray.MenuItem("Open OpenProxy", tray_show, default=True),
-        pystray.Menu.SEPARATOR,
-        pystray.MenuItem(f"Proxy  :{ACTIVE_PROXY_PORT}", None, enabled=False),
-        pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Quit", tray_quit),
-    )
-    tray = pystray.Icon("OpenProxy", tray_img, "OpenProxy", tray_menu)
-    tray.run_detached()
-    # ─────────────────────────────────────────────────────────────────────────
-
-    # macOS: clicking the dock icon while the window is hidden should reopen it.
-    # pywebview's AppDelegate doesn't implement applicationShouldHandleReopen,
-    # so we inject it before webview.start() launches the Cocoa run loop.
-    if sys.platform == "darwin":
-        try:
-            import objc
-            from webview.platforms.cocoa import BrowserView
-
-            def _reopen(self, sender, has_visible_windows):
-                if not has_visible_windows:
-                    window.show()
-                return True
-
-            objc.classAddMethod(
-                BrowserView.AppDelegate,
-                b"applicationShouldHandleReopen:hasVisibleWindows:",
-                _reopen,
-            )
-        except Exception as e:
-            print(f"[WARN] Could not install dock-reopen handler: {e}")
-
-    webview.start(
-        private_mode=False,
-        debug=False,
-        icon=icon_path,
-        menu = _build_menu(window) if sys.platform in ("darwin", "linux") else None
-    )
-
-    # When webview.start() returns (app quit normally), stop the tray too
-    tray.stop()
-    os._exit(0)
+        t.join()
+    except KeyboardInterrupt:
+        pass

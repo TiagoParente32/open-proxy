@@ -1,9 +1,12 @@
 <script setup>
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
+import { initTheme } from './composables/useTheme'
+initTheme()
 import { Splitpanes, Pane } from 'splitpanes'
 import 'splitpanes/dist/splitpanes.css'
 
 // Import our new components!
+import TitleBar from './components/TitleBar.vue'
 import AppToolbar from './components/AppToolbar.vue'
 import AppSidebar from './components/AppSidebar.vue'
 import TrafficTable from './components/TrafficTable.vue'
@@ -46,11 +49,20 @@ import {
   showDeviceSetupModal,
   throttleProfile,
   disableCache,
+  updateInfo,
+  updateProgress,
+  updateError,
+  checkForUpdates,
+  applyUpdate,
 } from './store.js'
 
 onMounted(() => {
   initWebSocket()
   document.addEventListener('click', closeContextMenu)
+
+  // Sync bust cache state with the native macOS menu (keeps checkmark accurate)
+  window.electronAPI?.bustCacheSync(disableCache.value)
+  watch(disableCache, val => window.electronAPI?.bustCacheSync(val))
 
   // Native app menu bridge — Python calls window.__op.xxx() via evaluate_js
   window.__op = {
@@ -65,12 +77,23 @@ onMounted(() => {
     openCertSetup:    (type) => { deviceSetupType.value = type; showDeviceSetupModal.value = true },
     setThrottle:      (profile) => { throttleProfile.value = profile },
     bustCache:        () => { disableCache.value = !disableCache.value },
+    checkForUpdates:  () => checkForUpdates(),
   }
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', closeContextMenu)
 })
+
+const startUpdate = () => {
+  if (updateInfo.value?.download_url) applyUpdate(updateInfo.value.download_url)
+}
+
+const dismissUpdate = () => {
+  updateInfo.value = null
+  updateError.value = null
+  updateProgress.value = null
+}
 
 const handleEditAndRepeatFromContext = () => {
   if (contextMenu.value.request) {
@@ -206,8 +229,35 @@ const openBreakpointModalFromContext = () => {
 
 <template>
   <div class="app-wrapper">
+    <TitleBar />
     <AppToolbar />
     <FilterBar />
+
+    <!-- Update Banner -->
+    <Transition name="update-banner">
+      <div v-if="updateInfo && updateProgress === null && !updateError" class="update-banner">
+        <span class="update-icon">🚀</span>
+        <span class="update-text">
+          <strong>{{ updateInfo.version }}</strong> is available
+          <a v-if="updateInfo.release_url" class="update-release-link" :href="updateInfo.release_url" target="_blank">See what's new</a>
+        </span>
+        <button class="update-btn-primary" :disabled="!updateInfo.download_url" @click="startUpdate">
+          {{ updateInfo.download_url ? 'Update Now' : 'No download for this platform' }}
+        </button>
+        <button class="update-btn-dismiss" @click="dismissUpdate">✕</button>
+      </div>
+      <div v-else-if="updateProgress !== null" class="update-banner update-banner--progress">
+        <span class="update-icon">⬇️</span>
+        <span class="update-text">Downloading update… {{ updateProgress }}%</span>
+        <div class="update-progress-bar"><div class="update-progress-fill" :style="{ width: updateProgress + '%' }"></div></div>
+      </div>
+      <div v-else-if="updateError" class="update-banner update-banner--error">
+        <span class="update-icon">⚠️</span>
+        <span class="update-text">Update failed: {{ updateError }}</span>
+        <button class="update-btn-dismiss" @click="dismissUpdate">✕</button>
+      </div>
+    </Transition>
+
     <splitpanes class="default-theme custom-theme" style="flex: 1; overflow: hidden;">
       
       <pane min-size="15" size="20">
@@ -276,35 +326,35 @@ const openBreakpointModalFromContext = () => {
 </template>
 
 <style>
-:root { background-color: #1a1a1b; color: #cccccc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --bg-main: #1e1e1f; --bg-sidebar: #222223; --bg-active: #2a2d2e; --border: #333333; }
+:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 body { margin: 0; padding: 0; }
 .app-wrapper { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
 /* --- SPLITPANES THEME OVERRIDES --- */
 .splitpanes.custom-theme .splitpanes__pane { background-color: var(--bg-main); }
 .splitpanes.custom-theme .splitpanes__splitter { background-color: var(--border); transition: background-color 0.2s; }
-.splitpanes.custom-theme .splitpanes__splitter:hover { background-color: #555; }
-.splitpanes.custom-theme.splitpanes--vertical > .splitpanes__splitter { width: 3px; border-left: 1px solid #111; }
-.splitpanes.custom-theme.splitpanes--horizontal > .splitpanes__splitter { height: 3px; border-top: 1px solid #111; }
+.splitpanes.custom-theme .splitpanes__splitter:hover { background-color: var(--fg-muted); }
+.splitpanes.custom-theme.splitpanes--vertical > .splitpanes__splitter { width: 3px; border-left: 1px solid var(--bg-deepest); }
+.splitpanes.custom-theme.splitpanes--horizontal > .splitpanes__splitter { height: 3px; border-top: 1px solid var(--bg-deepest); }
 
 /* --- SHARED UTILITIES --- */
-.action-btn { background: transparent; border: 1px solid #444; color: #ccc; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.2s; outline: none !important; }
+.action-btn { background: transparent; border: 1px solid var(--border); color: var(--fg-muted); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.2s; outline: none !important; }
 .action-btn:focus { outline: none !important; box-shadow: none !important; }
-.action-btn:hover { background: #333; color: white; }
+.action-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.text-muted { color: #8b949e; }
-.font-semibold { font-weight: 600; color: #e1e4e8; }
-.text-green { color: #10b981 !important; }
-.text-red { color: #ef4444 !important; }
-.global-empty { display: flex; justify-content: center; align-items: center; height: 100%; color: #666; font-style: italic; font-size: 12px; }
-.text-icon { font-size: 12px; color: #888; }
+.text-muted { color: var(--fg-muted); }
+.font-semibold { font-weight: 600; color: var(--fg-secondary); }
+.text-green { color: var(--success) !important; }
+.text-red { color: var(--error) !important; }
+.global-empty { display: flex; justify-content: center; align-items: center; height: 100%; color: var(--fg-muted); font-style: italic; font-size: 12px; }
+.text-icon { font-size: 12px; color: var(--fg-muted); }
 
 /* --- GLOBAL CONTEXT MENU --- */
 .context-menu {
   position: fixed;
-  background: #1e2023;
-  border: 1px solid #2e3133;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
   border-radius: 8px;
   padding: 4px;
   z-index: 9999;
@@ -314,7 +364,7 @@ body { margin: 0; padding: 0; }
   padding: 4px 10px 2px;
   font-size: 10px;
   font-weight: 700;
-  color: #484d52;
+  color: var(--fg-muted);
   letter-spacing: 0.5px;
   text-transform: uppercase;
   user-select: none;
@@ -322,13 +372,13 @@ body { margin: 0; padding: 0; }
 .context-menu-item {
   padding: 6px 10px;
   font-size: 12.5px;
-  color: #c0c8d0;
+  color: var(--fg-secondary);
   cursor: pointer;
   border-radius: 5px;
   text-align: left;
 }
-.context-menu-item:hover { background: #3b82f6; color: white; }
-.context-menu-divider { height: 1px; background: #2a2d30; margin: 3px 4px; }
+.context-menu-item:hover { background: var(--accent); color: var(--fg-primary); }
+.context-menu-divider { height: 1px; background: var(--border); margin: 3px 4px; }
 
 .context-menu-colors {
   display: flex;
@@ -360,6 +410,64 @@ body { margin: 0; padding: 0; }
 /* --- TEXT SELECTION FIXES --- */
 .traffic-table, .inspector-content, .modal-editor, .cm-editor, .cm-content { -webkit-user-select: text !important; user-select: text !important; cursor: text; }
 .toolbar, .sidebar, .action-btn, .panel-tabs, .sidebar-header, .splitpanes__splitter { -webkit-user-select: none !important; user-select: none !important; }
+
+/* --- UPDATE BANNER --- */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: linear-gradient(90deg, rgba(59,130,246,0.15), rgba(99,102,241,0.15));
+  border-bottom: 1px solid rgba(99,102,241,0.35);
+  font-size: 13px;
+  color: var(--fg-secondary);
+  flex-shrink: 0;
+}
+.update-banner--progress { background: linear-gradient(90deg, rgba(16,185,129,0.12), rgba(59,130,246,0.12)); }
+.update-banner--error    { background: rgba(239,68,68,0.12); border-bottom-color: rgba(239,68,68,0.3); }
+.update-icon { font-size: 15px; }
+.update-text { flex: 1; }
+.update-release-link { margin-left: 8px; opacity: 0.7; color: var(--accent); text-decoration: none; font-size: 12px; }
+.update-release-link:hover { opacity: 1; text-decoration: underline; }
+.update-btn-primary {
+  padding: 4px 14px;
+  background: var(--accent);
+  color: var(--fg-primary);
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.update-btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.update-btn-primary:disabled { opacity: 0.45; cursor: default; }
+.update-btn-dismiss {
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.update-btn-dismiss:hover { color: var(--fg-secondary); background: var(--surface-hover); }
+.update-progress-bar {
+  width: 120px;
+  height: 6px;
+  background: var(--border-subtle);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.update-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.2s;
+}
+.update-banner-enter-active, .update-banner-leave-active { transition: max-height 0.25s ease, opacity 0.2s; overflow: hidden; }
+.update-banner-enter-from, .update-banner-leave-to { max-height: 0; opacity: 0; }
+.update-banner-enter-to, .update-banner-leave-from { max-height: 60px; opacity: 1; }
 
 
 </style>

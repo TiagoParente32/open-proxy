@@ -9,19 +9,8 @@ import {
 } from '../store.js'
 
 const selectedRuleId = ref(null)
-const sidebarSearch = ref('')
 
 const activeRule = computed(() => highlightRules.value.find(r => r.id === selectedRuleId.value))
-
-const filteredRules = computed(() => {
-  const q = sidebarSearch.value.trim().toLowerCase()
-  if (!q) return highlightRules.value
-  return highlightRules.value.filter(r =>
-    (r.name || '').toLowerCase().includes(q) ||
-    (r.pattern || '').toLowerCase().includes(q) ||
-    (r.type || '').toLowerCase().includes(q)
-  )
-})
 
 watch(highlightRules, (newRules) => {
   if (newRules.length > 0 && !newRules.find(r => r.id === selectedRuleId.value)) {
@@ -104,19 +93,12 @@ const deleteRule = (id) => {
         <div class="pm-sidebar">
           
           <div class="pm-sidebar-header">
-            <strong style="color: #e0e0e0; font-size: 13px;">Highlight Rules</strong>
+            <strong style="color: var(--fg-secondary); font-size: 13px;">Highlight Rules</strong>
             <button class="pm-add-btn" @click="addNewRule">+ Add</button>
           </div>
 
-          <!-- Sidebar search -->
-          <div class="pm-sidebar-search">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input v-model="sidebarSearch" placeholder="Filter rules…" class="pm-sidebar-search-input" />
-            <button v-if="sidebarSearch" class="pm-sidebar-search-clear" @click="sidebarSearch = ''">✕</button>
-          </div>
-          
           <div class="pm-rule-list">
-            <div v-for="rule in filteredRules" :key="rule.id" 
+            <div v-for="rule in highlightRules" :key="rule.id" 
                  class="pm-rule-item" 
                  :class="{ active: selectedRuleId === rule.id, disabled: !rule.active }" 
                  :style="{ borderLeft: `3px solid var(--color-${rule.color})` }"
@@ -145,11 +127,8 @@ const deleteRule = (id) => {
 
             </div>
             
-            <div v-if="filteredRules.length === 0 && highlightRules.length === 0" class="pm-empty-sidebar">
+            <div v-if="highlightRules.length === 0" class="pm-empty-sidebar">
               No highlight rules yet.<br>Click <strong>+ Add</strong> to start coloring traffic.
-            </div>
-            <div v-else-if="filteredRules.length === 0" class="pm-empty-sidebar">
-              No rules match "{{ sidebarSearch }}"
             </div>
           </div>
 
@@ -185,7 +164,7 @@ const deleteRule = (id) => {
 
               <!-- Rule name -->
               <div class="pm-field-group">
-                <span class="pm-routing-label">RULE NAME <span style="color:#555; font-weight:400;">(optional)</span></span>
+                <span class="pm-routing-label">RULE NAME <span style="color:var(--fg-placeholder); font-weight:400;">(optional)</span></span>
                 <input type="text" v-model="activeRule.name" class="pm-routing-input" placeholder="e.g. Flag errors, Auth calls…" />
               </div>
 
@@ -222,7 +201,7 @@ const deleteRule = (id) => {
               </div>
 
               <div class="pm-routing-arrow">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round">
                   <line x1="12" y1="4" x2="12" y2="20"/><polyline points="18 14 12 20 6 14"/>
                 </svg>
               </div>
@@ -262,8 +241,8 @@ const deleteRule = (id) => {
 
 <style scoped>
 /* OVERLAY & MODAL */
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 99999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
-.pm-split-modal { background: #1e1e1e; border-radius: 8px; border: 1px solid #333; width: 900px; height: 620px; display: flex; flex-direction: row; box-shadow: 0 20px 50px rgba(0,0,0,0.5); overflow: hidden; }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--overlay); z-index: 99999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
+.pm-split-modal { background: var(--bg-main); border-radius: 8px; border: 1px solid var(--border); width: 900px; height: 620px; display: flex; flex-direction: row; box-shadow: var(--shadow-lg); overflow: hidden; }
 
 /* Color custom properties */
 .pm-split-modal {
@@ -276,108 +255,103 @@ const deleteRule = (id) => {
 }
 
 /* SIDEBAR */
-.pm-sidebar { width: 280px; background: #1a1a1b; border-right: 1px solid #333; display: flex; flex-direction: column; flex-shrink: 0; }
-.pm-sidebar-header { padding: 14px 16px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: #222; }
-.pm-add-btn { background: rgba(59,130,246,0.1); color: #3b82f6; border: 1px solid rgba(59,130,246,0.3); padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-.pm-add-btn:hover { background: #3b82f6; color: white; border-color: #3b82f6; }
+.pm-sidebar { width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+.pm-sidebar-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-active); }
+.pm-add-btn { background: var(--accent-muted); color: var(--accent); border: 1px solid var(--accent-border); padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.pm-add-btn:hover { background: var(--accent); color: var(--fg-primary); border-color: var(--accent); }
 
-/* Sidebar search */
-.pm-sidebar-search { display: flex; align-items: center; gap: 7px; padding: 7px 12px; background: #111213; border-bottom: 1px solid #2a2a2b; }
-.pm-sidebar-search-input { flex: 1; background: none; border: none; outline: none; color: #ccc; font-size: 12px; min-width: 0; }
-.pm-sidebar-search-input::placeholder { color: #3e4347; }
-.pm-sidebar-search-clear { background: none; border: none; color: #555; cursor: pointer; font-size: 11px; padding: 0; line-height: 1; }
-.pm-sidebar-search-clear:hover { color: #aaa; }
+/* Sidebar list */
 
 .pm-rule-list { flex: 1; overflow-y: auto; }
 .pm-rule-item { 
   min-height: 50px; padding: 0 12px 0 0;
-  border-bottom: 1px solid #1e1e1f;
+  border-bottom: 1px solid var(--bg-main);
   display: flex; align-items: center; gap: 8px;
   cursor: pointer; transition: background 0.15s;
   box-sizing: border-box;
 }
-.pm-rule-item:hover { background: #222; }
-.pm-rule-item.active { background: rgba(59,130,246,0.07); }
+.pm-rule-item:hover { background: var(--bg-active); }
+.pm-rule-item.active { background: var(--accent-muted); }
 .pm-rule-item.disabled { opacity: 0.5; }
 
 /* Checkbox */
 .pm-checkbox-container { display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer; user-select: none; width: 16px; height: 16px; flex-shrink: 0; margin: 0 0 0 10px; }
 .pm-checkbox-container input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
-.pm-checkmark { position: absolute; top: 0; left: 0; height: 16px; width: 16px; background: #111; border: 1px solid #555; border-radius: 4px; transition: all 0.2s; box-sizing: border-box; }
-.pm-checkbox-container:hover input ~ .pm-checkmark { border-color: #3b82f6; }
-.pm-checkbox-container input:checked ~ .pm-checkmark { background-color: #3b82f6; border-color: #3b82f6; }
+.pm-checkmark { position: absolute; top: 0; left: 0; height: 16px; width: 16px; background: var(--bg-deepest); border: 1px solid var(--fg-muted); border-radius: 4px; transition: all 0.2s; box-sizing: border-box; }
+.pm-checkbox-container:hover input ~ .pm-checkmark { border-color: var(--accent); }
+.pm-checkbox-container input:checked ~ .pm-checkmark { background-color: var(--accent); border-color: var(--accent); }
 .pm-checkmark:after { content: ""; position: absolute; display: none; }
 .pm-checkbox-container input:checked ~ .pm-checkmark:after { display: block; }
 .pm-checkbox-container .pm-checkmark:after { left: 50%; top: 45%; width: 4px; height: 9px; border: solid white; border-width: 0 2px 2px 0; transform: translate(-50%,-50%) rotate(45deg); }
 
 /* Rule text */
 .pm-rule-text-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; justify-content: center; gap: 3px; padding: 8px 0; }
-.pm-rule-name { font-size: 12px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
-.pm-rule-item.active .pm-rule-name { color: #fff; font-weight: 600; }
-.pm-rule-target { font-size: 10.5px; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pm-rule-item.active .pm-rule-target { color: #6b8aad; }
-.pm-rule-pattern-inline { color: #4a90d9; }
+.pm-rule-name { font-size: 12px; color: var(--fg-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+.pm-rule-item.active .pm-rule-name { color: var(--fg-primary); font-weight: 600; }
+.pm-rule-target { font-size: 10.5px; color: var(--fg-placeholder); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-rule-item.active .pm-rule-target { color: var(--fg-muted); }
+.pm-rule-pattern-inline { color: var(--accent); }
 
 /* Rule action buttons */
 .pm-rule-action, .pm-rule-del {
-  background: transparent; border: 1px solid transparent; color: #444;
+  background: transparent; border: 1px solid transparent; color: var(--border);
   cursor: pointer; padding: 4px; border-radius: 5px;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; transition: all 0.15s; opacity: 0;
 }
 .pm-rule-item:hover .pm-rule-action,
-.pm-rule-item:hover .pm-rule-del { opacity: 1; color: #666; }
-.pm-rule-action:hover { background: rgba(255,255,255,0.07); color: #aaa !important; }
-.pm-rule-del:hover { background: rgba(239,68,68,0.15) !important; color: #ef4444 !important; }
+.pm-rule-item:hover .pm-rule-del { opacity: 1; color: var(--fg-muted); }
+.pm-rule-action:hover { background: var(--surface-hover); color: var(--fg-muted) !important; }
+.pm-rule-del:hover { background: var(--error-muted) !important; color: var(--error) !important; }
 
-.pm-empty-sidebar { padding: 40px 20px; text-align: center; color: #555; font-size: 12px; line-height: 1.8; }
+.pm-empty-sidebar { padding: 40px 20px; text-align: center; color: var(--fg-placeholder); font-size: 12px; line-height: 1.8; }
 
 /* Sidebar footer */
-.pm-sidebar-footer { padding: 14px 16px; background: #151515; border-top: 1px solid #333; display: flex; flex-direction: column; gap: 12px; }
-.toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: #888; font-weight: 600; font-size: 12px; }
-.toggle.active { color: #10b981; }
-.switch { width: 32px; height: 18px; background: #111; border: 1px solid #444; border-radius: 14px; position: relative; }
-.switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: #888; border-radius: 50%; transition: transform 0.3s; }
-.toggle.active .switch::after { transform: translateX(14px); background: #10b981; }
-.pm-divider-horizontal { width: 100%; height: 1px; background: #2a2a2b; }
-.ghost-btn { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; background: transparent; border: 1px solid #444; color: #aaa; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500; transition: all 0.2s; }
-.ghost-btn:hover { background: rgba(255,255,255,0.08); color: #fff; border-color: #666; }
+.pm-sidebar-footer { padding: 14px 16px; background: var(--bg-modal); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+.toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--fg-muted); font-weight: 600; font-size: 12px; }
+.toggle.active { color: var(--success); }
+.switch { width: 32px; height: 18px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 14px; position: relative; }
+.switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: var(--fg-muted); border-radius: 50%; transition: transform 0.3s; }
+.toggle.active .switch::after { transform: translateX(14px); background: var(--success); }
+.pm-divider-horizontal { width: 100%; height: 1px; background: var(--border-subtle); }
+.ghost-btn { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; background: transparent; border: 1px solid var(--border); color: var(--fg-muted); border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500; transition: all 0.2s; }
+.ghost-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); border-color: var(--fg-muted); }
 
 /* MAIN AREA */
-.pm-main-area { flex: 1; display: flex; flex-direction: column; background: #1e1e1e; min-width: 0; }
-.pm-main-empty { flex: 1; display: flex; justify-content: center; align-items: center; color: #555; font-size: 13px; }
-.pm-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #252525; border-bottom: 1px solid #333; flex-shrink: 0; }
+.pm-main-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-main); min-width: 0; }
+.pm-main-empty { flex: 1; display: flex; justify-content: center; align-items: center; color: var(--fg-placeholder); font-size: 13px; }
+.pm-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: var(--bg-card); border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .pm-title { font-size: 13px; font-weight: 700; }
-.text-blue { color: #3b82f6 !important; }
-.pm-close-btn { background: transparent; border: none; color: #888; font-size: 16px; cursor: pointer; transition: color 0.2s; }
-.pm-close-btn:hover { color: #ef4444; }
+.text-blue { color: var(--accent) !important; }
+.pm-close-btn { background: transparent; border: none; color: var(--fg-muted); font-size: 16px; cursor: pointer; transition: color 0.2s; }
+.pm-close-btn:hover { color: var(--error); }
 
 .pm-editor-area { flex: 1; padding: 16px 24px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
 
 .pm-field-group { display: flex; flex-direction: column; gap: 5px; }
 
-.pm-routing-box { background: #1a1a1b; border: 1px solid #333; border-radius: 8px; overflow: visible !important; flex-shrink: 0; position: relative; }
+.pm-routing-box { background: var(--bg-sidebar); border: 1px solid var(--border); border-radius: 8px; overflow: visible !important; flex-shrink: 0; position: relative; }
 .pm-routing-box:first-child { z-index: 10; }
-.pm-routing-header { background: #222; padding: 8px 16px; font-size: 12px; font-weight: 700; color: #ccc; border-bottom: 1px solid #333; border-top-left-radius: 8px; border-top-right-radius: 8px; }
-.pm-routing-header.target-header { background: rgba(59,130,246,0.1); color: #60a5fa; border-bottom-color: rgba(59,130,246,0.2); }
-.pm-routing-box.target { border-color: rgba(59,130,246,0.3); }
+.pm-routing-header { background: var(--bg-active); padding: 8px 16px; font-size: 12px; font-weight: 700; color: var(--fg-secondary); border-bottom: 1px solid var(--border); border-top-left-radius: 8px; border-top-right-radius: 8px; }
+.pm-routing-header.target-header { background: var(--accent-muted); color: var(--accent); border-bottom-color: rgba(59,130,246,0.2); }
+.pm-routing-box.target { border-color: var(--accent-border); }
 .pm-routing-body { padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; }
-.pm-routing-label { font-size: 11px; font-weight: 600; color: #777; letter-spacing: 0.5px; }
-.pm-routing-input { width: 100%; background: #111; border: 1px solid #444; color: #fff; padding: 9px 12px; border-radius: 6px; font-size: 13px; font-family: 'Consolas', monospace; outline: none; transition: border-color 0.2s, box-shadow 0.2s; box-sizing: border-box; }
-.pm-routing-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 1px #3b82f6; }
+.pm-routing-label { font-size: 11px; font-weight: 600; color: var(--fg-muted); letter-spacing: 0.5px; }
+.pm-routing-input { width: 100%; background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-primary); padding: 9px 12px; border-radius: 6px; font-size: 13px; font-family: 'Consolas', monospace; outline: none; transition: border-color 0.2s, box-shadow 0.2s; box-sizing: border-box; }
+.pm-routing-input:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
 
 /* Custom select */
 .pm-custom-select-wrapper { position: relative; width: 100%; user-select: none; }
-.pm-custom-select-display { width: 100%; background: #111; border: 1px solid #444; color: #fff; padding: 9px 12px; border-radius: 6px; font-size: 13px; font-family: 'Consolas', monospace; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: border-color 0.2s; box-sizing: border-box; }
-.pm-custom-select-display:hover { border-color: #555; }
+.pm-custom-select-display { width: 100%; background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-primary); padding: 9px 12px; border-radius: 6px; font-size: 13px; font-family: 'Consolas', monospace; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: border-color 0.2s; box-sizing: border-box; }
+.pm-custom-select-display:hover { border-color: var(--fg-muted); }
 .pm-chevron { width: 16px; height: 16px; fill: currentColor; opacity: 0.6; }
 .pm-dropdown-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99; cursor: default; }
-.pm-custom-select-dropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: #252525; border: 1px solid #444; border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); z-index: 9999; padding: 4px 0; }
-.pm-select-separator { height: 1px; background: #333; margin: 3px 0; }
-.pm-select-group-label { padding: 5px 12px 2px; font-size: 10px; font-weight: 700; color: #555; letter-spacing: 0.5px; text-transform: uppercase; }
-.pm-custom-select-option { padding: 8px 12px; font-size: 12.5px; color: #ccc; cursor: pointer; transition: background 0.1s; }
-.pm-custom-select-option:hover { background: #333; color: #fff; }
-.pm-custom-select-option.selected { background: rgba(59,130,246,0.15); color: #3b82f6; font-weight: 600; }
+.pm-custom-select-dropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; box-shadow: var(--shadow-lg); z-index: 9999; padding: 4px 0; }
+.pm-select-separator { height: 1px; background: var(--border); margin: 3px 0; }
+.pm-select-group-label { padding: 5px 12px 2px; font-size: 10px; font-weight: 700; color: var(--fg-placeholder); letter-spacing: 0.5px; text-transform: uppercase; }
+.pm-custom-select-option { padding: 8px 12px; font-size: 12.5px; color: var(--fg-secondary); cursor: pointer; transition: background 0.1s; }
+.pm-custom-select-option:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
+.pm-custom-select-option.selected { background: var(--accent-muted); color: var(--accent); font-weight: 600; }
 
 .pm-routing-arrow { display: flex; justify-content: center; align-items: center; padding: 2px 0; flex-shrink: 0; }
 
@@ -393,7 +367,7 @@ const deleteRule = (id) => {
 .pm-color-dot.blue   { background: #3b82f6; }
 .pm-color-dot.purple { background: #8b5cf6; }
 
-.pm-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 14px 20px; background: #1a1a1b; border-top: 1px solid #333; flex-shrink: 0; }
-.pm-btn-execute { background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 8px 32px; font-weight: 600; font-size: 13px; cursor: pointer; transition: background 0.2s; }
-.pm-btn-execute:hover { background: #2563eb; }
+.pm-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 14px 20px; background: var(--bg-sidebar); border-top: 1px solid var(--border); flex-shrink: 0; }
+.pm-btn-execute { background: var(--accent); color: var(--fg-primary); border: none; border-radius: 6px; padding: 8px 32px; font-weight: 600; font-size: 13px; cursor: pointer; transition: background 0.2s; }
+.pm-btn-execute:hover { background: var(--accent-hover); }
 </style>

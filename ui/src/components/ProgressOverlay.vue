@@ -45,27 +45,27 @@ const closeOnFail = () => {
 </template>
 
 <style scoped>
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.75); z-index: 999999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(3px); }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--overlay); z-index: 999999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(3px); }
 
-.progress-card { background: var(--bg-main); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); padding: 24px; width: 340px; text-align: left; display: flex; flex-direction: column; }
+.progress-card { background: var(--bg-main); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 24px; width: 340px; text-align: left; display: flex; flex-direction: column; }
 
 .steps-container { display: flex; flex-direction: column; gap: 14px; }
 
-.step-row { display: flex; align-items: center; gap: 12px; color: #666; font-size: 13px; font-weight: 500; transition: color 0.3s; }
-.step-row.loading { color: #fff; }
-.step-row.success { color: #a1aab3; }
-.step-row.error { color: #ef4444; }
+.step-row { display: flex; align-items: center; gap: 12px; color: var(--fg-muted); font-size: 13px; font-weight: 500; transition: color 0.3s; }
+.step-row.loading { color: var(--fg-primary); }
+.step-row.success { color: var(--fg-muted); }
+.step-row.error { color: var(--error); }
 
 .icon-wrapper { width: 18px; height: 18px; display: flex; justify-content: center; align-items: center; flex-shrink: 0; }
 
-.dot.pending { width: 6px; height: 6px; background: #333; border-radius: 50%; }
+.dot.pending { width: 6px; height: 6px; background: var(--border); border-radius: 50%; }
 
-.icon-success { color: #10b981; width: 16px; height: 16px; }
-.icon-error { color: #ef4444; width: 16px; height: 16px; }
+.icon-success { color: var(--success); width: 16px; height: 16px; }
+.icon-error { color: var(--error); width: 16px; height: 16px; }
 
 /* Beautiful SVG Spinner */
 .spinner { animation: rotate 2s linear infinite; width: 18px; height: 18px; }
-.spinner .path { stroke: #3b82f6; stroke-linecap: round; animation: dash 1.5s ease-in-out infinite; }
+.spinner .path { stroke: var(--accent); stroke-linecap: round; animation: dash 1.5s ease-in-out infinite; }
 
 @keyframes rotate { 100% { transform: rotate(360deg); } }
 @keyframes dash {
@@ -74,7 +74,7 @@ const closeOnFail = () => {
   100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
 }
 
-.error-box { margin-top: 20px; padding: 12px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; color: #ef4444; }
-.close-btn { margin-top: 12px; width: 100%; background: #2a2d2e; border: 1px solid #444; color: #ccc; border-radius: 4px; padding: 6px 16px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
-.close-btn:hover { background: #333; color: white; border-color: #555; }
+.error-box { margin-top: 20px; padding: 12px; background: var(--error-muted); border: 1px solid rgba(239,68,68,0.3); border-radius: 6px; color: var(--error); }
+.close-btn { margin-top: 12px; width: 100%; background: var(--bg-active); border: 1px solid var(--border); color: var(--fg-secondary); border-radius: 4px; padding: 6px 16px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+.close-btn:hover { background: var(--border); color: var(--fg-primary); border-color: var(--fg-muted); }
 </style>

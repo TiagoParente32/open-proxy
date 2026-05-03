@@ -1,6 +1,4 @@
 mitmproxy
 websockets
-pywebview
 psutil
-pystray
 Pillow

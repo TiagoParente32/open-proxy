@@ -88,8 +88,8 @@ const closeAllMenus = (e) => {
 }
 
 const getMethodColor = (method) => {
-  const colors = { GET: '#3b82f6', POST: '#10b981', PUT: '#f59e0b', DELETE: '#ef4444', OPTIONS: '#8b5cf6' }
-  return colors[method] || '#8b949e'
+  const colors = { GET: 'var(--method-get)', POST: 'var(--method-post)', PUT: 'var(--method-put)', DELETE: 'var(--method-delete)', OPTIONS: 'var(--method-other)' }
+  return colors[method] || 'var(--fg-muted)'
 }
 
 const openContextMenu = (e, req) => {
@@ -172,7 +172,7 @@ onUnmounted(() => {
 
         <!-- Clear button -->
         <button v-if="searchQuery" class="clear-btn" @click="clearSearch" title="Clear (Esc)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2.5" stroke-linecap="round">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--fg-muted)" stroke-width="2.5" stroke-linecap="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
         </button>
@@ -187,7 +187,7 @@ onUnmounted(() => {
                 class="scope-option" :class="{ active: searchScope === s.key }"
                 @click="selectScope(s.key)"
               >
-                <svg v-if="searchScope === s.key" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round">
+                <svg v-if="searchScope === s.key" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
                 <span v-else class="scope-option-gap" />
@@ -207,7 +207,7 @@ onUnmounted(() => {
                 class="scope-option" :class="{ active: searchMatchType === m.key }"
                 @click="selectMatch(m.key)"
               >
-                <svg v-if="searchMatchType === m.key" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round">
+                <svg v-if="searchMatchType === m.key" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
                 <span v-else class="scope-option-gap" />
@@ -287,36 +287,36 @@ onUnmounted(() => {
   position: relative;
   display: flex;
   align-items: center;
-  background: #111213;
-  border: 1px solid #2e3133;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
   border-radius: 7px;
   transition: border-color 0.15s;
   height: 30px;
 }
-.search-scope-wrapper:focus-within { border-color: #3b82f6; }
+.search-scope-wrapper:focus-within { border-color: var(--accent); }
 
 .scope-trigger {
   display: flex; align-items: center; gap: 5px;
   padding: 0 10px;
   background: none; border: none; cursor: pointer;
-  color: #7a8390; font-size: 11.5px; font-weight: 600;
+  color: var(--fg-muted); font-size: 11.5px; font-weight: 600;
   white-space: nowrap; flex-shrink: 0;
   height: 100%;
   border-radius: 6px 0 0 6px;
   transition: color 0.15s, background 0.15s;
 }
-.scope-trigger:hover { color: #c0c8d0; background: rgba(255,255,255,0.04); }
+.scope-trigger:hover { color: var(--fg-secondary); background: var(--surface-hover); }
 
 .match-trigger {
   display: flex; align-items: center; gap: 5px;
   padding: 0 9px;
   background: none; border: none; cursor: pointer;
-  color: #7a8390; font-size: 11.5px; font-weight: 500;
+  color: var(--fg-muted); font-size: 11.5px; font-weight: 500;
   white-space: nowrap; flex-shrink: 0;
   height: 100%;
   transition: color 0.15s, background 0.15s;
 }
-.match-trigger:hover { color: #c0c8d0; background: rgba(255,255,255,0.04); }
+.match-trigger:hover { color: var(--fg-secondary); background: var(--surface-hover); }
 
 .scope-label { max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
 
@@ -325,26 +325,26 @@ onUnmounted(() => {
 
 .scope-divider {
   width: 1px; height: 16px;
-  background: #2e3133; flex-shrink: 0;
+  background: var(--border); flex-shrink: 0;
 }
 
 .search-input {
   flex: 1;
   background: none; border: none; outline: none;
-  color: #d0d4d8; font-size: 12px;
+  color: var(--fg-secondary); font-size: 12px;
   padding: 0 8px;
   min-width: 0;
 }
-.search-input::placeholder { color: #3e4347; }
+.search-input::placeholder { color: var(--fg-placeholder); }
 
 .clear-btn {
   display: flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; margin-right: 4px; padding: 0;
-  background: rgba(255,255,255,0.06); border: none; border-radius: 4px;
-  color: #aaa; cursor: pointer; flex-shrink: 0;
+  background: var(--surface-hover); border: none; border-radius: 4px;
+  color: var(--fg-muted); cursor: pointer; flex-shrink: 0;
   transition: background 0.15s, color 0.15s;
 }
-.clear-btn:hover { background: rgba(255,255,255,0.12); color: #eee; border-color: transparent; }
+.clear-btn:hover { background: var(--surface-hover-strong); color: var(--fg-secondary); border-color: transparent; }
 
 /* ── Scope dropdown (teleported to body) ──────────── */
 /* dropdown styles moved to non-scoped block below */
@@ -372,17 +372,17 @@ onUnmounted(() => {
 .resize-handle {
   display: flex; align-items: center;
   padding: 6px 10px;
-  color: #888; font-weight: 500;
+  color: var(--fg-muted); font-weight: 500;
   cursor: pointer;
   resize: horizontal; overflow: hidden;
   box-sizing: border-box;
   transition: color 0.2s;
 }
-.resize-handle:hover { color: #ccc; }
+.resize-handle:hover { color: var(--fg-secondary); }
 
 .traffic-table td {
   padding: 4px 10px;
-  border-bottom: 1px solid #282829;
+  border-bottom: 1px solid var(--border-subtle);
   white-space: nowrap;
   text-align: left;
   overflow: hidden;
@@ -392,7 +392,7 @@ onUnmounted(() => {
 
 .traffic-table tbody tr { scroll-margin-top: 30px; }
 .traffic-table tbody tr:hover { background-color: var(--bg-active); cursor: pointer; }
-.traffic-table tbody tr.selected { background-color: #1e3a5f !important; color: #fff; }
+.traffic-table tbody tr.selected { background-color: var(--row-selected) !important; color: var(--fg-primary); }
 .traffic-table tbody tr.row-red    { background-color: rgba(239, 68, 68,  0.15); }
 .traffic-table tbody tr.row-orange { background-color: rgba(249, 115, 22, 0.15); }
 .traffic-table tbody tr.row-yellow { background-color: rgba(245, 158, 11, 0.15); }
@@ -402,17 +402,17 @@ onUnmounted(() => {
 
 .text-id { font-family: monospace; font-size: 11px; }
 .method-badge { padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10px; }
-.status-badge { padding: 2px 6px; border-radius: 4px; background: #333; font-size: 10px; font-weight: bold; border: 1px solid #444; }
+.status-badge { padding: 2px 6px; border-radius: 4px; background: var(--border); font-size: 10px; font-weight: bold; border: 1px solid var(--border); }
 </style>
 
 <!-- Non-scoped: styles for teleported dropdown (rendered at body level) -->
 <style>
 .scope-dropdown-portal {
   min-width: 220px;
-  background: #1c1e21;
-  border: 1px solid #2e3133;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+  box-shadow: var(--shadow-lg);
   padding: 4px;
   z-index: 99999;
 }
@@ -423,18 +423,18 @@ onUnmounted(() => {
   border-radius: 5px;
   cursor: pointer;
   font-size: 12px;
-  color: #9aa3ad;
+  color: var(--fg-muted);
   transition: background 0.1s, color 0.1s;
 }
-.scope-dropdown-portal .scope-option:hover { background: rgba(59,130,246,0.1); color: #d0d4d8; }
-.scope-dropdown-portal .scope-option.active .scope-option-label { color: #3b82f6; font-weight: 600; }
+.scope-dropdown-portal .scope-option:hover { background: var(--accent-muted); color: var(--fg-secondary); }
+.scope-dropdown-portal .scope-option.active .scope-option-label { color: var(--accent); font-weight: 600; }
 
 .scope-dropdown-portal .scope-option-gap { display: inline-block; width: 11px; flex-shrink: 0; }
 .scope-dropdown-portal .scope-option-label { flex: 1; }
 
 .dropdown-separator {
   height: 1px;
-  background: #2a2d30;
+  background: var(--border);
   margin: 3px 6px;
 }
 </style>

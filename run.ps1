@@ -1,7 +1,6 @@
-Write-Host "Building UI..."
-Set-Location ui
-npm run build
-Set-Location ..
+$ErrorActionPreference = "Stop"
+Set-Location $PSScriptRoot
 
-Write-Host "Starting app..."
-python main.py
+# Electron handles the UI build and Python backend startup automatically
+Write-Host "Launching Electron..."
+npm start

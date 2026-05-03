@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { Codemirror } from 'vue-codemirror'
 import { json } from '@codemirror/lang-json'
-import { oneDark } from '@codemirror/theme-one-dark'
+import { cmTheme } from '../composables/useTheme'
 import { EditorView } from '@codemirror/view'
 import CodeMirrorEditor from './CodeMirrorEditor.vue'
 
@@ -17,7 +17,7 @@ import {
 } from '../store.js'
 
 // --- 1. CORE REFS & COMPUTEDS ---
-const extensions = [json(), oneDark, EditorView.lineWrapping]
+const extensions = computed(() => [json(), ...cmTheme.value, EditorView.lineWrapping])
 const activeRule = computed(() => mapLocalRules.value.find(r => r.id === selectedRuleId.value))
 const activeTab = ref('Body')
 const queryParams = ref([{ key: '', value: '' }])
@@ -156,7 +156,7 @@ const saveAndApplyRules = () => {
 
         <div class="pm-sidebar">
           <div class="pm-sidebar-header">
-            <strong style="color: #e0e0e0; font-size: 13px;">Map Local Rules</strong>
+            <strong style="color: var(--fg-secondary); font-size: 13px;">Map Local Rules</strong>
             <button class="pm-add-btn" @click="addNewRule">+ Add</button>
           </div>
 
@@ -306,7 +306,7 @@ const saveAndApplyRules = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--overlay);
   z-index: 99999;
   display: flex;
   justify-content: center;
@@ -315,21 +315,21 @@ const saveAndApplyRules = () => {
 }
 
 .pm-split-modal {
-  background: #1e1e1e;
+  background: var(--bg-main);
   border-radius: 8px;
-  border: 1px solid #333;
+  border: 1px solid var(--border);
   width: 1000px;
   height: 650px;
   display: flex;
   flex-direction: row;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 
 .pm-sidebar {
   width: 300px;
-  background: #1a1a1b;
-  border-right: 1px solid #333;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -337,17 +337,17 @@ const saveAndApplyRules = () => {
 
 .pm-sidebar-header {
   padding: 16px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #222;
+  background: var(--bg-active);
 }
 
 .pm-add-btn {
-  background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--accent-muted);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
   padding: 4px 10px;
   border-radius: 4px;
   font-size: 11px;
@@ -357,9 +357,9 @@ const saveAndApplyRules = () => {
 }
 
 .pm-add-btn:hover {
-  background: #3b82f6;
-  color: white;
-  border-color: #3b82f6;
+  background: var(--accent);
+  color: var(--fg-primary);
+  border-color: var(--accent);
 }
 
 .pm-rule-list {
@@ -370,7 +370,7 @@ const saveAndApplyRules = () => {
 .pm-rule-item {
   min-height: 48px;
   padding: 0 16px;
-  border-bottom: 1px solid #2a2a2b;
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -379,12 +379,12 @@ const saveAndApplyRules = () => {
 }
 
 .pm-rule-item:hover {
-  background: #222;
+  background: var(--bg-active);
 }
 
 .pm-rule-item.active {
-  background: #252d38;
-  border-left: 3px solid #3b82f6;
+  background: var(--accent-muted);
+  border-left: 3px solid var(--accent);
   padding-left: 13px;
 }
 
@@ -392,7 +392,7 @@ const saveAndApplyRules = () => {
 .empty-state {
   padding: 40px;
   text-align: center;
-  color: #666;
+  color: var(--fg-muted);
   font-style: italic;
   font-size: 12px;
 }
@@ -402,7 +402,7 @@ const saveAndApplyRules = () => {
   display: flex;
   justify-content: center;
   align-items: center;
-  color: #666;
+  color: var(--fg-muted);
   font-style: italic;
   font-size: 12px;
 }
@@ -418,7 +418,7 @@ const saveAndApplyRules = () => {
 .pm-rule-pattern {
   font-family: 'Consolas', monospace;
   font-size: 11px;
-  color: #ccc;
+  color: var(--fg-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -427,7 +427,7 @@ const saveAndApplyRules = () => {
 
 .pm-rule-subtext {
   font-size: 9px;
-  color: #666;
+  color: var(--fg-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -457,14 +457,14 @@ const saveAndApplyRules = () => {
   left: 0;
   height: 16px;
   width: 16px;
-  background-color: #111;
-  border: 1px solid #555;
+  background-color: var(--bg-deepest);
+  border: 1px solid var(--fg-muted);
   border-radius: 4px;
 }
 
 .pm-checkbox-container input:checked~.pm-checkmark {
-  background-color: #3b82f6;
-  border-color: #3b82f6;
+  background-color: var(--accent);
+  border-color: var(--accent);
 }
 
 .pm-checkmark:after {
@@ -488,7 +488,7 @@ const saveAndApplyRules = () => {
 .pm-rule-del {
   background: transparent;
   border: none;
-  color: #666;
+  color: var(--fg-muted);
   cursor: pointer;
   padding: 5px;
   border-radius: 6px;
@@ -499,18 +499,18 @@ const saveAndApplyRules = () => {
 }
 
 .pm-rule-item:hover .pm-rule-del {
-  color: #888;
+  color: var(--fg-muted);
 }
 
 .pm-rule-del:hover {
-  background: rgba(239, 68, 68, 0.15) !important;
-  color: #ef4444 !important;
+  background: var(--error-muted) !important;
+  color: var(--error) !important;
 }
 
 .pm-sidebar-footer {
   padding: 16px;
-  background: #151515;
-  border-top: 1px solid #333;
+  background: var(--bg-modal);
+  border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -521,19 +521,19 @@ const saveAndApplyRules = () => {
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
-  color: #888;
+  color: var(--fg-muted);
   font-weight: 600;
 }
 
 .toggle.active {
-  color: #10b981;
+  color: var(--success);
 }
 
 .switch {
   width: 32px;
   height: 18px;
-  background: #111;
-  border: 1px solid #444;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
   border-radius: 14px;
   position: relative;
 }
@@ -545,20 +545,20 @@ const saveAndApplyRules = () => {
   left: 1px;
   width: 14px;
   height: 14px;
-  background: #888;
+  background: var(--fg-muted);
   border-radius: 50%;
   transition: transform 0.3s;
 }
 
 .toggle.active .switch::after {
   transform: translateX(14px);
-  background: #10b981;
+  background: var(--success);
 }
 
 .pm-divider-horizontal {
   width: 100%;
   height: 1px;
-  background: #333;
+  background: var(--border);
 }
 
 .ghost-btn {
@@ -568,8 +568,8 @@ const saveAndApplyRules = () => {
   height: 26px;
   padding: 0 8px;
   background: transparent;
-  border: 1px solid #444;
-  color: #aaa;
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
   border-radius: 4px;
   cursor: pointer;
   font-size: 11px;
@@ -580,7 +580,7 @@ const saveAndApplyRules = () => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #1e1e1e;
+  background: var(--bg-main);
   min-width: 0;
 }
 
@@ -589,20 +589,20 @@ const saveAndApplyRules = () => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 20px;
-  background: #252525;
-  border-bottom: 1px solid #333;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
 }
 
 .pm-title {
   font-size: 13px;
   font-weight: 700;
-  color: #3b82f6;
+  color: var(--accent);
 }
 
 .pm-close-btn {
   background: transparent;
   border: none;
-  color: #888;
+  color: var(--fg-muted);
   font-size: 16px;
   cursor: pointer;
 }
@@ -616,15 +616,15 @@ const saveAndApplyRules = () => {
 .pm-routing-label {
   font-size: 11px;
   font-weight: 600;
-  color: #888;
+  color: var(--fg-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .pm-routing-input {
-  background: #111;
-  border: 1px solid #444;
-  color: #eee;
+  background: var(--bg-deepest);
+  border: 1px solid var(--border);
+  color: var(--fg-primary);
   padding: 10px 12px;
   border-radius: 6px;
   font-size: 13px;
@@ -632,7 +632,7 @@ const saveAndApplyRules = () => {
 }
 
 .pm-routing-input:focus {
-  border-color: #3b82f6;
+  border-color: var(--accent);
 }
 
 .pm-omnibar-container {
@@ -642,8 +642,8 @@ const saveAndApplyRules = () => {
 .pm-omnibar {
   display: flex;
   align-items: center;
-  background: #121212;
-  border: 1px solid #444;
+  background: var(--bg-deepest);
+  border: 1px solid var(--border);
   border-radius: 6px;
 }
 
@@ -651,7 +651,7 @@ const saveAndApplyRules = () => {
   flex: 1;
   background: transparent;
   border: none;
-  color: #e0e0e0;
+  color: var(--fg-secondary);
   padding: 10px 12px;
   font-size: 13px;
   outline: none;
@@ -661,14 +661,14 @@ const saveAndApplyRules = () => {
 .pm-divider {
   width: 1px;
   height: 24px;
-  background: #333;
+  background: var(--border);
 }
 
 .pm-method-display.read-only {
   padding: 10px 16px;
   font-weight: 700;
   font-size: 11px;
-  color: #888;
+  color: var(--fg-muted);
 }
 
 .pm-status-wrapper {
@@ -679,9 +679,9 @@ const saveAndApplyRules = () => {
 }
 
 .pm-status-input {
-  background: #111;
-  border: 1px solid #444;
-  color: #10b981;
+  background: var(--bg-deepest);
+  border: 1px solid var(--border);
+  color: var(--success);
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 13px;
@@ -694,11 +694,11 @@ const saveAndApplyRules = () => {
   display: flex;
   gap: 24px;
   padding: 0 24px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--border);
 }
 
 .pm-tab {
-  color: #888;
+  color: var(--fg-muted);
   font-size: 13px;
   padding: 10px 0;
   cursor: pointer;
@@ -706,15 +706,15 @@ const saveAndApplyRules = () => {
 }
 
 .pm-tab.active {
-  color: #e0e0e0;
-  border-bottom-color: #3b82f6;
+  color: var(--fg-secondary);
+  border-bottom-color: var(--accent);
 }
 
 .pm-editor-area {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #111;
+  background: var(--bg-deepest);
   overflow: hidden;
 }
 
@@ -726,9 +726,9 @@ const saveAndApplyRules = () => {
 
 .pm-helper-text {
   font-size: 11px;
-  color: #666;
+  color: var(--fg-muted);
   padding: 8px 24px;
-  background: #181818;
+  background: var(--bg-card);
 }
 
 .pm-codemirror {
@@ -746,21 +746,21 @@ const saveAndApplyRules = () => {
   justify-content: flex-end;
   gap: 12px;
   padding: 16px 20px;
-  background: #1a1a1b;
-  border-top: 1px solid #333;
+  background: var(--bg-sidebar);
+  border-top: 1px solid var(--border);
 }
 
 .pm-btn-cancel {
   background: transparent;
-  border: 1px solid #444;
-  color: #ccc;
+  border: 1px solid var(--border);
+  color: var(--fg-secondary);
   padding: 8px 24px;
   border-radius: 6px;
   cursor: pointer;
 }
 
 .pm-btn-execute {
-  background: #3b82f6;
+  background: var(--accent);
   border: none;
   color: white;
   padding: 8px 32px;
@@ -778,10 +778,10 @@ const saveAndApplyRules = () => {
 .pm-param-header {
   display: flex;
   font-size: 11px;
-  color: #888;
+  color: var(--fg-muted);
   font-weight: 600;
   padding-bottom: 8px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--border);
   margin-bottom: 8px;
 }
 
@@ -804,8 +804,8 @@ const saveAndApplyRules = () => {
 .pm-param-input {
   flex: 1;
   background: transparent;
-  border: 1px solid #333;
-  color: #ccc;
+  border: 1px solid var(--border);
+  color: var(--fg-secondary);
   padding: 6px 10px;
   font-size: 13px;
   font-family: 'Consolas', monospace;
@@ -814,20 +814,20 @@ const saveAndApplyRules = () => {
 }
 
 .pm-param-input:focus {
-  border-color: #3b82f6;
-  background: #1a1a1b;
+  border-color: var(--accent);
+  background: var(--bg-sidebar);
 }
 
 .pm-param-del {
   background: transparent;
   border: none;
-  color: #555;
+  color: var(--fg-placeholder);
   cursor: pointer;
   width: 32px;
   font-size: 14px;
 }
 
 .pm-param-del:hover {
-  color: #ef4444;
+  color: var(--error);
 }
 </style>

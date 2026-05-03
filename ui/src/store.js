@@ -62,11 +62,8 @@ export const exportRules = (rules, filename) => {
     const data = rules.value !== undefined ? rules.value : rules;
     const jsonString = JSON.stringify(data, null, 2);
 
-    if (window.pywebview && window.pywebview.api) {
-        window.pywebview.api.save_file(filename + '.json', jsonString)
-            .then((success) => {
-                if (!success) console.log("Export canceled by user.");
-            })
+    if (window.electronAPI) {
+        window.electronAPI.saveFile(filename + '.json', jsonString)
             .catch(err => console.error("Export failed:", err));
     } else {
         alert("System API not ready yet. Please wait a moment and try again.");
@@ -103,6 +100,7 @@ export const importRules = (event, rulesRef) => {
 // ============================================================================
 export const requests = ref(loadState('requests', []))
 export const connectionStatus = ref('Connecting...')
+export const platform = ref('')  // 'darwin' | 'win32' | 'linux'
 export const isRecording = ref(true)
 export const proxyHost = ref('Detecting...')
 
@@ -764,6 +762,23 @@ export const requestWgConf = () => {
     wsConnection.send(JSON.stringify({ type: "GET_WG_CLIENT_CONF" }))
 }
 
+// Auto-update state
+export const updateInfo     = ref(null)   // { version, current, download_url, release_url }
+export const updateProgress = ref(null)   // 0-100 during download, null otherwise
+export const updateError    = ref(null)
+
+export const checkForUpdates = () => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    updateError.value = null
+    wsConnection.send(JSON.stringify({ type: "CHECK_FOR_UPDATES" }))
+}
+
+export const applyUpdate = (downloadUrl) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    updateProgress.value = 0
+    wsConnection.send(JSON.stringify({ type: "APPLY_UPDATE", download_url: downloadUrl }))
+}
+
 export const initWebSocket = () => {
     if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
@@ -792,6 +807,7 @@ export const initWebSocket = () => {
 
         if (payload.type === "SYSTEM_INFO") {
             proxyHost.value = `${payload.data.ip}:${payload.data.port}`
+            if (payload.data.platform) platform.value = payload.data.platform
         }
         else if (payload.type === "ALERT") {
             alert(payload.message)
@@ -999,6 +1015,22 @@ export const initWebSocket = () => {
             else if (d.status === 'disabled' || d.status === 'error') wgClientConf.value = ''
             if (d.port) wgPort.value = d.port
             wgError.value = d.error || ''
+        }
+        else if (payload.type === 'UPDATE_AVAILABLE') {
+            updateInfo.value = payload.data
+            updateError.value = null
+        }
+        else if (payload.type === 'UPDATE_PROGRESS') {
+            updateProgress.value = payload.data.pct
+        }
+        else if (payload.type === 'UPDATE_READY') {
+            updateProgress.value = null
+            // Give the helper script a moment to start, then fully quit so it can replace the app
+            setTimeout(() => window.electronAPI?.quit(), 500)
+        }
+        else if (payload.type === 'UPDATE_ERROR') {
+            updateProgress.value = null
+            updateError.value = payload.data.error
         }
     }
 
