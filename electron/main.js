@@ -16,6 +16,7 @@ const OVERLAY_COLORS = {
   midnight: { color: '#161b22', symbolColor: '#8b949e' },
   ocean:    { color: '#132540', symbolColor: '#7da8c8' },
   crimson:  { color: '#200f13', symbolColor: '#a07080' },
+  postman:  { color: '#e8e8e8', symbolColor: '#5c5c5c' },
   light:    { color: '#f0f0f0', symbolColor: '#666666' },
 }
 
@@ -275,6 +276,7 @@ function setupMenu () {
             { label: 'Midnight', type: 'radio', checked: currentTheme === 'midnight', click: () => setTheme('midnight') },
             { label: 'Ocean',    type: 'radio', checked: currentTheme === 'ocean',    click: () => setTheme('ocean') },
             { label: 'Crimson',  type: 'radio', checked: currentTheme === 'crimson',  click: () => setTheme('crimson') },
+            { label: 'Ember',  type: 'radio', checked: currentTheme === 'ember',  click: () => setTheme('ember') },
             { label: 'Light',    type: 'radio', checked: currentTheme === 'light',    click: () => setTheme('light') },
           ],
         },

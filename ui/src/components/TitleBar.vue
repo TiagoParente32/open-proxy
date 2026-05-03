@@ -67,6 +67,7 @@ const MENUS = [
           { label: 'Midnight', action: () => applyTheme('midnight'), checked: () => currentThemeId.value === 'midnight' },
           { label: 'Ocean',     action: () => applyTheme('ocean'),    checked: () => currentThemeId.value === 'ocean' },
           { label: 'Crimson',  action: () => applyTheme('crimson'),  checked: () => currentThemeId.value === 'crimson' },
+          { label: 'Ember',  action: () => applyTheme('ember'),  checked: () => currentThemeId.value === 'ember' },
           { label: 'Light',     action: () => applyTheme('light'),    checked: () => currentThemeId.value === 'light' },
         ],
       },
