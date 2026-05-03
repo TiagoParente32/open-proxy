@@ -1065,13 +1065,13 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .tab-btn {
   display: flex; align-items: center; gap: 6px;
   padding: 5px 10px; font-size: 12px; font-weight: 500;
-  color: var(--fg-placeholder); background: none; border: none; border-radius: 6px;
+  color: var(--fg-muted); background: none; border: none; border-radius: 6px;
   cursor: pointer; transition: all 0.15s; white-space: nowrap;
 }
 .tab-btn svg { opacity: 0.6; transition: opacity 0.15s; }
-.tab-btn:hover { color: var(--fg-muted); background: rgba(255,255,255,0.04); }
+.tab-btn:hover { color: var(--fg-secondary); background: rgba(255,255,255,0.04); }
 .tab-btn:hover svg { opacity: 0.9; }
-.tab-btn.active { color: #e5e7eb; background: rgba(255,255,255,0.09); }
+.tab-btn.active { color: var(--fg-primary); background: rgba(255,255,255,0.09); }
 .tab-btn.active svg { opacity: 1; }
 
 /* ── Scrollable body ──────────────────────────────── */
