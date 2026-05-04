@@ -93,7 +93,6 @@ function createWindow () {
     height:   720,
     minWidth: 1024,
     minHeight: 720,
-    show: false,
     // macOS: traffic lights overlay the content (hiddenInset)
     // Windows: title bar hidden, native controls added via titleBarOverlay
     // Linux: title bar hidden, custom controls drawn in TitleBar.vue
@@ -113,8 +112,6 @@ function createWindow () {
       nodeIntegration: false,
     },
   })
-
-  win.once('ready-to-show', () => win.show())
 
   win.on('close', e => {
     if (!isQuitting) {
