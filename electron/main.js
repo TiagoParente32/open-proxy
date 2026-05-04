@@ -93,6 +93,7 @@ function createWindow () {
     height:   720,
     minWidth: 1024,
     minHeight: 720,
+    show: false,
     // macOS: traffic lights overlay the content (hiddenInset)
     // Windows: title bar hidden, native controls added via titleBarOverlay
     // Linux: title bar hidden, custom controls drawn in TitleBar.vue
@@ -112,6 +113,8 @@ function createWindow () {
       nodeIntegration: false,
     },
   })
+
+  win.once('ready-to-show', () => win.show())
 
   win.on('close', e => {
     if (!isQuitting) {
@@ -315,19 +318,20 @@ app.whenReady().then(async () => {
   setupIPC()
   setupTray()
   setupMenu()
-  createWindow()          // creates window instantly (shows background colour)
+  createWindow()
 
-  // Build UI and start Python in parallel — both must finish before loading
-  await Promise.all([
-    buildUI(),
-    startPython(),
-  ])
-
-  // Load the UI only after Python's WebSocket server is bound
   const index = app.isPackaged
     ? path.join(process.resourcesPath, 'ui', 'dist', 'index.html')
     : path.join(__dirname, '..', 'ui', 'dist', 'index.html')
+
+  // In dev, build UI first; in production the dist is already bundled
+  if (!app.isPackaged) await buildUI()
+
+  // Load UI immediately — the frontend's WS reconnect logic handles backend not being ready yet
   win.loadFile(index)
+
+  // Start Python in parallel — no need to block the renderer on it
+  startPython()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
