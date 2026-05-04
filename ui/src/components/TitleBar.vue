@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { disableCache } from '../store.js'
+import { disableCache, toolbarVisibility } from '../store.js'
 import { currentThemeId, applyTheme } from '../composables/useTheme.js'
 
 const isMac   = () => window.electronAPI?.platform === 'darwin'
@@ -33,6 +33,7 @@ const MENUS = [
       { label: 'Map Local',   action: () => op()?.openMapLocal() },
       { label: 'Map Remote',  action: () => op()?.openMapRemote() },
       { label: 'Highlight',   action: () => op()?.openHighlight() },
+      { label: 'Scripts',     action: () => op()?.openScripting() },
       { type: 'separator' },
       {
         label: 'Certificate Setup',
@@ -69,6 +70,22 @@ const MENUS = [
           { label: 'Crimson',  action: () => applyTheme('crimson'),  checked: () => currentThemeId.value === 'crimson' },
           { label: 'Ember',  action: () => applyTheme('ember'),  checked: () => currentThemeId.value === 'ember' },
           { label: 'Light',     action: () => applyTheme('light'),    checked: () => currentThemeId.value === 'light' },
+        ],
+      },
+      {
+        label: 'Toolbar',
+        submenu: [
+          { label: 'VPN Mode',      action: () => op()?.toggleToolbarVisibility('vpnMode'),       checked: () => toolbarVisibility.value.vpnMode },
+          { type: 'separator' },
+          { label: 'Breakpoints',   action: () => op()?.toggleToolbarVisibility('breakpoints'),   checked: () => toolbarVisibility.value.breakpoints },
+          { label: 'Map Local',     action: () => op()?.toggleToolbarVisibility('mapLocal'),      checked: () => toolbarVisibility.value.mapLocal },
+          { label: 'Map Remote',    action: () => op()?.toggleToolbarVisibility('mapRemote'),     checked: () => toolbarVisibility.value.mapRemote },
+          { label: 'Highlights',    action: () => op()?.toggleToolbarVisibility('highlights'),    checked: () => toolbarVisibility.value.highlights },
+          { label: 'Scripts',       action: () => op()?.toggleToolbarVisibility('scripts'),       checked: () => toolbarVisibility.value.scripts },
+          { type: 'separator' },
+          { label: 'Certificates',  action: () => op()?.toggleToolbarVisibility('certificates'),  checked: () => toolbarVisibility.value.certificates },
+          { label: 'Throttle',      action: () => op()?.toggleToolbarVisibility('throttle'),      checked: () => toolbarVisibility.value.throttle },
+          { label: 'Bust Cache',    action: () => op()?.toggleToolbarVisibility('bustCache'),     checked: () => toolbarVisibility.value.bustCache },
         ],
       },
     ],

@@ -13,4 +13,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   themeChanged:     (id)         => ipcRenderer.send('theme:changed', id),
   onSetTheme:       (cb)         => ipcRenderer.on('theme:set', (_e, id) => cb(id)),
   onMaximizeChange: (cb)         => ipcRenderer.on('window:maximized', (_e, v) => cb(v)),
+  toolbarSyncToMain: (vis)       => ipcRenderer.send('toolbar:syncToMain', vis),
+  onToolbarSet:     (cb)         => ipcRenderer.on('toolbar:set', (_e, vis) => cb(vis)),
 })

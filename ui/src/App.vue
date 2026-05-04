@@ -19,6 +19,7 @@ import MapRemoteModal from './components/MapRemoteModal.vue'
 import FilterBar from './components/FilterBar.vue'
 import HighlightModal from './components/HighlightModal.vue'
 import DeviceSetupModal from './components/DeviceSetupModal.vue'
+import ScriptingModal from './components/ScriptingModal.vue'
 import ProgressOverlay from './components/ProgressOverlay.vue'
 // Import just the logic needed for the top-level app overlay (WebSockets & Context Menu)
 import { 
@@ -54,6 +55,7 @@ import {
   updateError,
   checkForUpdates,
   applyUpdate,
+  toolbarVisibility,
 } from './store.js'
 
 onMounted(() => {
@@ -63,6 +65,13 @@ onMounted(() => {
   // Sync bust cache state with the native macOS menu (keeps checkmark accurate)
   window.electronAPI?.bustCacheSync(disableCache.value)
   watch(disableCache, val => window.electronAPI?.bustCacheSync(val))
+
+  // Sync toolbar visibility with native menu on startup (main process always starts fresh)
+  window.electronAPI?.toolbarSyncToMain?.({ ...toolbarVisibility.value })
+  // When native menu toggles a toolbar item, main pushes the new state here
+  window.electronAPI?.onToolbarSet?.((vis) => {
+    Object.assign(toolbarVisibility.value, vis)
+  })
 
   // Native app menu bridge — Python calls window.__op.xxx() via evaluate_js
   window.__op = {
@@ -74,10 +83,12 @@ onMounted(() => {
     openMapLocal:     () => { showMapModal.value = true },
     openMapRemote:    () => { showMapRemoteModal.value = true },
     openHighlight:    () => { showHighlightModal.value = true },
+    openScripting:    () => { showScriptingModal.value = true },
     openCertSetup:    (type) => { deviceSetupType.value = type; showDeviceSetupModal.value = true },
     setThrottle:      (profile) => { throttleProfile.value = profile },
     bustCache:        () => { disableCache.value = !disableCache.value },
     checkForUpdates:  () => checkForUpdates(),
+    toggleToolbarVisibility: (tool) => { toolbarVisibility.value[tool] = !toolbarVisibility.value[tool] },
   }
 })
 
@@ -322,6 +333,7 @@ const openBreakpointModalFromContext = () => {
     <ComposeModal />
     <HighlightModal />
     <DeviceSetupModal />
+    <ScriptingModal />
   </div>
 </template>
 

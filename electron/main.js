@@ -9,6 +9,11 @@ const { spawn } = require('child_process')
 let win, tray, pythonProcess, isQuitting = false
 let bustCacheEnabled = false
 let currentTheme = 'dark'
+let toolbarVisibility = {
+  vpnMode: true, breakpoints: true, mapLocal: true,
+  mapRemote: true, highlights: true, scripts: false,
+  certificates: true, throttle: true, bustCache: true,
+}
 
 // Windows titleBarOverlay colors per theme (bg = --bg-sidebar, symbol = --fg-muted)
 const OVERLAY_COLORS = {
@@ -155,6 +160,11 @@ function setupIPC () {
     setupMenu()
   })
 
+  ipcMain.on('toolbar:syncToMain', (_e, vis) => {
+    toolbarVisibility = { ...toolbarVisibility, ...vis }
+    setupMenu()
+  })
+
   ipcMain.handle('dialog:saveFile', async (_e, { filename, content }) => {
     const { filePath, canceled } = await dialog.showSaveDialog(win, {
       defaultPath: path.join(app.getPath('desktop'), filename),
@@ -242,6 +252,7 @@ function setupMenu () {
         { label: 'Map Local',    click: () => js('openMapLocal()') },
         { label: 'Map Remote',   click: () => js('openMapRemote()') },
         { label: 'Highlight',    click: () => js('openHighlight()') },
+        { label: 'Scripts',      click: () => js('openScripting()') },
         { type: 'separator' },
         {
           label: 'Certificate Setup',
@@ -279,6 +290,34 @@ function setupMenu () {
             { label: 'Ember',  type: 'radio', checked: currentTheme === 'ember',  click: () => setTheme('ember') },
             { label: 'Light',    type: 'radio', checked: currentTheme === 'light',    click: () => setTheme('light') },
           ],
+        },
+        {
+          label: 'Toolbar',
+          submenu: Object.entries({
+            vpnMode: 'VPN Mode', breakpoints: 'Breakpoints', mapLocal: 'Map Local',
+            mapRemote: 'Map Remote', highlights: 'Highlights', scripts: 'Scripts',
+          }).flatMap(([key, label], i) => [
+            ...(i === 1 ? [{ type: 'separator' }] : []),  // separator before Breakpoints
+            {
+              label, type: 'checkbox', checked: toolbarVisibility[key],
+              click: () => {
+                toolbarVisibility[key] = !toolbarVisibility[key]
+                win?.webContents.send('toolbar:set', { ...toolbarVisibility })
+                setupMenu()
+              },
+            },
+          ]).concat([
+            { type: 'separator' },
+            ...['certificates', 'throttle', 'bustCache'].map((key) => ({
+              label: { certificates: 'Certificates', throttle: 'Throttle', bustCache: 'Bust Cache' }[key],
+              type: 'checkbox', checked: toolbarVisibility[key],
+              click: () => {
+                toolbarVisibility[key] = !toolbarVisibility[key]
+                win?.webContents.send('toolbar:set', { ...toolbarVisibility })
+                setupMenu()
+              },
+            })),
+          ]),
         },
       ],
     },
