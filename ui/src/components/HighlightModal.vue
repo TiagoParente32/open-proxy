@@ -154,10 +154,14 @@ const deleteRule = (id) => {
           <div v-if="activeRule" style="display: flex; flex-direction: column; height: 100%;">
             
             <div class="pm-header">
-              <strong class="pm-title text-blue">
+              <strong class="pm-title">
                 {{ activeRule.name || 'Highlight Rule' }}
               </strong>
-              <button class="pm-close-btn" @click="showHighlightModal = false">✕</button>
+              <button class="pm-close-btn" @click="showHighlightModal = false">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
             </div>
 
             <div class="pm-editor-area">
@@ -242,7 +246,7 @@ const deleteRule = (id) => {
 <style scoped>
 /* OVERLAY & MODAL */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--overlay); z-index: 99999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
-.pm-split-modal { background: var(--bg-main); border-radius: 8px; border: 1px solid var(--border); width: 900px; height: 620px; display: flex; flex-direction: row; box-shadow: var(--shadow-lg); overflow: hidden; }
+.pm-split-modal { background: var(--bg-main); border-radius: 10px; border: 1px solid var(--border); width: 1000px; height: 650px; min-width: 600px; min-height: 420px; max-width: calc(100vw - 20px); max-height: calc(100vh - 40px); display: flex; flex-direction: row; box-shadow: var(--shadow-lg); overflow: hidden; resize: both; }
 
 /* Color custom properties */
 .pm-split-modal {
@@ -256,15 +260,14 @@ const deleteRule = (id) => {
 
 /* SIDEBAR */
 .pm-sidebar { width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
-.pm-sidebar-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-active); }
-.pm-add-btn { background: var(--accent-muted); color: var(--accent); border: 1px solid var(--accent-border); padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-.pm-add-btn:hover { background: var(--accent); color: var(--fg-primary); border-color: var(--accent); }
+.pm-sidebar-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-sidebar); }
+.pm-add-btn { background: var(--accent-muted); color: var(--accent); border: 1px solid var(--accent-border); padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.pm-add-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 /* Sidebar list */
-
 .pm-rule-list { flex: 1; overflow-y: auto; }
-.pm-rule-item { 
-  min-height: 50px; padding: 0 12px 0 0;
+.pm-rule-item {
+  height: 44px; padding: 0 12px 0 0;
   border-bottom: 1px solid var(--bg-main);
   display: flex; align-items: center; gap: 8px;
   cursor: pointer; transition: background 0.15s;
@@ -294,46 +297,42 @@ const deleteRule = (id) => {
 
 /* Rule action buttons */
 .pm-rule-action, .pm-rule-del {
-  background: transparent; border: 1px solid transparent; color: var(--border);
+  background: transparent; border: 1px solid transparent; color: var(--fg-muted);
   cursor: pointer; padding: 4px; border-radius: 5px;
   display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; transition: all 0.15s; opacity: 0;
+  flex-shrink: 0; transition: all 0.15s;
 }
-.pm-rule-item:hover .pm-rule-action,
-.pm-rule-item:hover .pm-rule-del { opacity: 1; color: var(--fg-muted); }
 .pm-rule-action:hover { background: var(--surface-hover); color: var(--fg-muted) !important; }
-.pm-rule-del:hover { background: var(--error-muted) !important; color: var(--error) !important; }
+.pm-rule-del:hover { background: var(--error-muted) !important; border-color: rgba(239,68,68,.3) !important; color: var(--error) !important; }
 
-.pm-empty-sidebar { padding: 40px 20px; text-align: center; color: var(--fg-placeholder); font-size: 12px; line-height: 1.8; }
+.pm-empty-sidebar { padding: 40px 20px; text-align: center; color: var(--fg-placeholder); font-size: 12px; line-height: 1.6; }
 
 /* Sidebar footer */
-.pm-sidebar-footer { padding: 14px 16px; background: var(--bg-modal); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+.pm-sidebar-footer { padding: 14px 16px; background: var(--bg-modal); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
 .toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--fg-muted); font-weight: 600; font-size: 12px; }
-.toggle.active { color: var(--success); }
-.switch { width: 32px; height: 18px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 14px; position: relative; }
-.switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: var(--fg-muted); border-radius: 50%; transition: transform 0.3s; }
-.toggle.active .switch::after { transform: translateX(14px); background: var(--success); }
+.toggle.active { color: var(--accent); }
+.switch { width: 32px; height: 18px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 14px; position: relative; transition: all 0.3s; box-sizing: border-box; }
+.switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: var(--fg-muted); border-radius: 50%; transition: transform 0.3s, background 0.3s; }
+.toggle.active .switch { background: var(--accent-muted); border-color: var(--accent); }
+.toggle.active .switch::after { transform: translateX(14px); background: var(--accent); }
 .pm-divider-horizontal { width: 100%; height: 1px; background: var(--border-subtle); }
-.ghost-btn { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; background: transparent; border: 1px solid var(--border); color: var(--fg-muted); border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500; transition: all 0.2s; }
+.ghost-btn { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; background: transparent; border: 1px solid var(--border); color: var(--fg-muted); border-radius: 5px; cursor: pointer; font-size: 11px; font-weight: 500; transition: all 0.15s; }
 .ghost-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); border-color: var(--fg-muted); }
 
 /* MAIN AREA */
 .pm-main-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-main); min-width: 0; }
 .pm-main-empty { flex: 1; display: flex; justify-content: center; align-items: center; color: var(--fg-placeholder); font-size: 13px; }
-.pm-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: var(--bg-card); border-bottom: 1px solid var(--border); flex-shrink: 0; }
-.pm-title { font-size: 13px; font-weight: 700; }
-.text-blue { color: var(--accent) !important; }
-.pm-close-btn { background: transparent; border: none; color: var(--fg-muted); font-size: 16px; cursor: pointer; transition: color 0.2s; }
-.pm-close-btn:hover { color: var(--error); }
+.pm-header { display: flex; justify-content: space-between; align-items: center; padding: 0 16px; height: 44px; background: var(--bg-sidebar); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.pm-title { font-size: 13px; font-weight: 600; color: var(--fg-primary); }
+.pm-close-btn { background: none; border: none; cursor: pointer; color: var(--fg-muted); padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: background 0.12s, color 0.12s; }
+.pm-close-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
 
 .pm-editor-area { flex: 1; padding: 16px 24px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
-
 .pm-field-group { display: flex; flex-direction: column; gap: 5px; }
-
 .pm-routing-box { background: var(--bg-sidebar); border: 1px solid var(--border); border-radius: 8px; overflow: visible !important; flex-shrink: 0; position: relative; }
 .pm-routing-box:first-child { z-index: 10; }
 .pm-routing-header { background: var(--bg-active); padding: 8px 16px; font-size: 12px; font-weight: 700; color: var(--fg-secondary); border-bottom: 1px solid var(--border); border-top-left-radius: 8px; border-top-right-radius: 8px; }
-.pm-routing-header.target-header { background: var(--accent-muted); color: var(--accent); border-bottom-color: rgba(59,130,246,0.2); }
+.pm-routing-header.target-header { background: var(--accent-muted); color: var(--accent); border-bottom-color: var(--accent-border); }
 .pm-routing-box.target { border-color: var(--accent-border); }
 .pm-routing-body { padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; }
 .pm-routing-label { font-size: 11px; font-weight: 600; color: var(--fg-muted); letter-spacing: 0.5px; }
@@ -355,7 +354,7 @@ const deleteRule = (id) => {
 
 .pm-routing-arrow { display: flex; justify-content: center; align-items: center; padding: 2px 0; flex-shrink: 0; }
 
-/* Color picker — now with 6 colors */
+/* Color picker */
 .pm-color-picker { display: flex; gap: 12px; margin-top: 4px; padding: 4px 0; flex-wrap: wrap; }
 .pm-color-dot { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s; }
 .pm-color-dot:hover { transform: scale(1.1); }
@@ -367,7 +366,7 @@ const deleteRule = (id) => {
 .pm-color-dot.blue   { background: #3b82f6; }
 .pm-color-dot.purple { background: #8b5cf6; }
 
-.pm-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 14px 20px; background: var(--bg-sidebar); border-top: 1px solid var(--border); flex-shrink: 0; }
-.pm-btn-execute { background: var(--accent); color: var(--fg-primary); border: none; border-radius: 6px; padding: 8px 32px; font-weight: 600; font-size: 13px; cursor: pointer; transition: background 0.2s; }
+.pm-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 16px; background: var(--bg-sidebar); border-top: 1px solid var(--border); flex-shrink: 0; }
+.pm-btn-execute { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 6px 24px; font-weight: 500; font-size: 12px; cursor: pointer; transition: background 0.15s; }
 .pm-btn-execute:hover { background: var(--accent-hover); }
 </style>

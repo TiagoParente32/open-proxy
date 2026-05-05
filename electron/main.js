@@ -9,6 +9,11 @@ const { spawn } = require('child_process')
 let win, tray, pythonProcess, isQuitting = false
 let bustCacheEnabled = false
 let currentTheme = 'dark'
+let toolbarVisibility = {
+  vpnMode: true, breakpoints: true, mapLocal: true,
+  mapRemote: true, highlights: true, scripts: false,
+  certificates: true, throttle: true, bustCache: true,
+}
 
 // Windows titleBarOverlay colors per theme (bg = --bg-sidebar, symbol = --fg-muted)
 const OVERLAY_COLORS = {
@@ -16,6 +21,7 @@ const OVERLAY_COLORS = {
   midnight: { color: '#161b22', symbolColor: '#8b949e' },
   ocean:    { color: '#132540', symbolColor: '#7da8c8' },
   crimson:  { color: '#200f13', symbolColor: '#a07080' },
+  ember:    { color: '#e8e8e8', symbolColor: '#5c5c5c' },
   light:    { color: '#f0f0f0', symbolColor: '#666666' },
 }
 
@@ -154,6 +160,11 @@ function setupIPC () {
     setupMenu()
   })
 
+  ipcMain.on('toolbar:syncToMain', (_e, vis) => {
+    toolbarVisibility = { ...toolbarVisibility, ...vis }
+    setupMenu()
+  })
+
   ipcMain.handle('dialog:saveFile', async (_e, { filename, content }) => {
     const { filePath, canceled } = await dialog.showSaveDialog(win, {
       defaultPath: path.join(app.getPath('desktop'), filename),
@@ -241,6 +252,7 @@ function setupMenu () {
         { label: 'Map Local',    click: () => js('openMapLocal()') },
         { label: 'Map Remote',   click: () => js('openMapRemote()') },
         { label: 'Highlight',    click: () => js('openHighlight()') },
+        { label: 'Scripts',      click: () => js('openScripting()') },
         { type: 'separator' },
         {
           label: 'Certificate Setup',
@@ -275,8 +287,37 @@ function setupMenu () {
             { label: 'Midnight', type: 'radio', checked: currentTheme === 'midnight', click: () => setTheme('midnight') },
             { label: 'Ocean',    type: 'radio', checked: currentTheme === 'ocean',    click: () => setTheme('ocean') },
             { label: 'Crimson',  type: 'radio', checked: currentTheme === 'crimson',  click: () => setTheme('crimson') },
+            { label: 'Ember',  type: 'radio', checked: currentTheme === 'ember',  click: () => setTheme('ember') },
             { label: 'Light',    type: 'radio', checked: currentTheme === 'light',    click: () => setTheme('light') },
           ],
+        },
+        {
+          label: 'Toolbar',
+          submenu: Object.entries({
+            vpnMode: 'VPN Mode', breakpoints: 'Breakpoints', mapLocal: 'Map Local',
+            mapRemote: 'Map Remote', highlights: 'Highlights', scripts: 'Scripts',
+          }).flatMap(([key, label], i) => [
+            ...(i === 1 ? [{ type: 'separator' }] : []),  // separator before Breakpoints
+            {
+              label, type: 'checkbox', checked: toolbarVisibility[key],
+              click: () => {
+                toolbarVisibility[key] = !toolbarVisibility[key]
+                win?.webContents.send('toolbar:set', { ...toolbarVisibility })
+                setupMenu()
+              },
+            },
+          ]).concat([
+            { type: 'separator' },
+            ...['certificates', 'throttle', 'bustCache'].map((key) => ({
+              label: { certificates: 'Certificates', throttle: 'Throttle', bustCache: 'Bust Cache' }[key],
+              type: 'checkbox', checked: toolbarVisibility[key],
+              click: () => {
+                toolbarVisibility[key] = !toolbarVisibility[key]
+                win?.webContents.send('toolbar:set', { ...toolbarVisibility })
+                setupMenu()
+              },
+            })),
+          ]),
         },
       ],
     },
@@ -313,19 +354,20 @@ app.whenReady().then(async () => {
   setupIPC()
   setupTray()
   setupMenu()
-  createWindow()          // creates window instantly (shows background colour)
+  createWindow()
 
-  // Build UI and start Python in parallel — both must finish before loading
-  await Promise.all([
-    buildUI(),
-    startPython(),
-  ])
-
-  // Load the UI only after Python's WebSocket server is bound
   const index = app.isPackaged
     ? path.join(process.resourcesPath, 'ui', 'dist', 'index.html')
     : path.join(__dirname, '..', 'ui', 'dist', 'index.html')
+
+  // In dev, build UI first; in production the dist is already bundled
+  if (!app.isPackaged) await buildUI()
+
+  // Load UI immediately — the frontend's WS reconnect logic handles backend not being ready yet
   win.loadFile(index)
+
+  // Start Python in parallel — no need to block the renderer on it
+  startPython()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

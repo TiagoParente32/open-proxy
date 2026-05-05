@@ -116,8 +116,12 @@ const saveAndApplyRules = () => {
           <div v-if="activeRule" style="display: flex; flex-direction: column; height: 100%;">
             
             <div class="pm-header">
-              <strong class="pm-title text-amber">Breakpoint Configuration</strong>
-              <button class="pm-close-btn" @click="saveAndApplyRules">✕</button>
+              <strong class="pm-title">Breakpoint Configuration</strong>
+              <button class="pm-close-btn" @click="saveAndApplyRules">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
             </div>
 
             <div class="pm-editor-area">
@@ -132,7 +136,7 @@ const saveAndApplyRules = () => {
               </div>
 
               <div class="pm-routing-arrow">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--color-breakpoint)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19"></line>
                   <polyline points="19 12 12 19 5 12"></polyline>
                 </svg>
@@ -188,31 +192,31 @@ const saveAndApplyRules = () => {
 <style scoped>
 /* OVERLAY & MODAL */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--overlay); z-index: 99999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
-.pm-split-modal { background: var(--bg-main); border-radius: 8px; border: 1px solid var(--border); width: 1000px; height: 650px; display: flex; flex-direction: row; box-shadow: var(--shadow-lg); overflow: hidden; }
+.pm-split-modal { background: var(--bg-main); border-radius: 10px; border: 1px solid var(--border); width: 1000px; height: 650px; min-width: 600px; min-height: 420px; max-width: calc(100vw - 20px); max-height: calc(100vh - 40px); display: flex; flex-direction: row; box-shadow: var(--shadow-lg); overflow: hidden; resize: both; }
 
 /* SIDEBAR STYLES */
-.pm-sidebar { width: 300px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
-.pm-sidebar-header { padding: 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-active);}
-.pm-add-btn { background: var(--warning-muted); color: var(--color-breakpoint); border: 1px solid rgba(245,158,11,0.3); padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-.pm-add-btn:hover { background: var(--color-breakpoint); color: var(--fg-primary); border-color: var(--color-breakpoint); }
+.pm-sidebar { width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+.pm-sidebar-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-sidebar); }
+.pm-add-btn { background: var(--accent-muted); color: var(--accent); border: 1px solid var(--accent-border); padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.pm-add-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 .pm-rule-list { flex: 1; overflow-y: auto; }
-.pm-rule-item { height: 46px; padding: 0 16px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 12px; cursor: pointer; transition: background 0.2s; box-sizing: border-box; }
+.pm-rule-item { height: 44px; padding: 0 14px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 10px; cursor: pointer; transition: background 0.15s; box-sizing: border-box; }
 .pm-rule-item:hover { background: var(--bg-active); }
-.pm-rule-item.active { background: var(--warning-muted); border-left: 3px solid var(--color-breakpoint); padding-left: 13px; }
+.pm-rule-item.active { background: var(--accent-muted); border-left: 3px solid var(--accent); padding-left: 11px; }
 
-/* Sleek Checkbox */
+/* Checkbox */
 .pm-checkbox-container { display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer; user-select: none; width: 16px; height: 16px; flex-shrink: 0; margin: 0; }
 .pm-checkbox-container input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
 .pm-checkmark { position: absolute; top: 0; left: 0; height: 16px; width: 16px; background-color: var(--bg-deepest); border: 1px solid var(--fg-muted); border-radius: 4px; transition: border-color 0.2s, background-color 0.2s; box-sizing: border-box; }
-.pm-checkbox-container:hover input ~ .pm-checkmark { border-color: var(--color-breakpoint); }
-.pm-checkbox-container input:checked ~ .pm-checkmark { background-color: var(--color-breakpoint); border-color: var(--color-breakpoint); }
+.pm-checkbox-container:hover input ~ .pm-checkmark { border-color: var(--accent); }
+.pm-checkbox-container input:checked ~ .pm-checkmark { background-color: var(--accent); border-color: var(--accent); }
 .pm-checkmark:after { content: ""; position: absolute; display: none; }
 .pm-checkbox-container input:checked ~ .pm-checkmark:after { display: block; }
 .pm-checkbox-container .pm-checkmark:after { left: 50%; top: 45%; width: 4px; height: 9px; border: solid white; border-width: 0 2px 2px 0; transform: translate(-50%, -50%) rotate(45deg); }
 
 /* Stacked Rule Text & Badges */
-.pm-rule-text-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; justify-content: center; gap: 4px;}
+.pm-rule-text-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; justify-content: center; gap: 4px; }
 .pm-rule-pattern { font-family: 'Consolas', monospace; font-size: 11px; color: var(--fg-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1; }
 .pm-rule-item.active .pm-rule-pattern { color: var(--fg-primary); font-weight: bold; }
 .pm-rule-badges { display: flex; gap: 4px; }
@@ -221,81 +225,64 @@ const saveAndApplyRules = () => {
 .pm-badge.res { color: var(--success); background: var(--success-muted); border-color: rgba(16,185,129,0.3); }
 .pm-badge.none { color: var(--fg-muted); background: var(--bg-active); border-color: var(--border); }
 
-/* Trashcan */
-.pm-rule-del { background: transparent; border: 1px solid transparent; color: var(--fg-muted); cursor: pointer; padding: 5px; border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
-.pm-rule-item:hover .pm-rule-del { background: var(--bg-active); border-color: var(--border); color: var(--fg-muted); }
-.pm-rule-del:hover { background: var(--error-muted) !important; border-color: rgba(239,68,68,0.4) !important; color: var(--error) !important; }
+/* Delete button */
+.pm-rule-del { background: transparent; border: 1px solid transparent; color: var(--fg-muted); cursor: pointer; padding: 4px; border-radius: 5px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0; }
+.pm-rule-del:hover { background: var(--error-muted) !important; border-color: rgba(239,68,68,.3) !important; color: var(--error) !important; }
 
-.pm-empty-sidebar { padding: 40px 20px; text-align: center; color: var(--fg-muted); font-size: 12px; line-height: 1.5; }
+.pm-empty-sidebar { padding: 40px 20px; text-align: center; color: var(--fg-placeholder); font-size: 12px; line-height: 1.6; }
 
 /* Sidebar Footer & Toggles */
-.pm-sidebar-footer { padding: 16px; background: var(--bg-modal); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px;}
-.toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--fg-muted); font-weight: 600; transition: color 0.2s; }
-.toggle.active { color: var(--color-breakpoint); }
-.toggle:hover { color: var(--fg-secondary); }
+.pm-sidebar-footer { padding: 14px 16px; background: var(--bg-modal); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--fg-muted); font-weight: 600; font-size: 12px; }
+.toggle.active { color: var(--accent); }
 .toggle-label { font-size: 12px; }
-.switch { width: 32px; height: 18px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 14px; position: relative; transition: all 0.3s; box-sizing: border-box;}
+.switch { width: 32px; height: 18px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 14px; position: relative; transition: all 0.3s; box-sizing: border-box; }
 .switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: var(--fg-muted); border-radius: 50%; transition: transform 0.3s, background 0.3s; }
-.toggle.active .switch { background: var(--warning-muted); border-color: var(--color-breakpoint); }
-.toggle.active .switch::after { transform: translateX(14px); background: var(--color-breakpoint); }
+.toggle.active .switch { background: var(--accent-muted); border-color: var(--accent); }
+.toggle.active .switch::after { transform: translateX(14px); background: var(--accent); }
 .pm-divider-horizontal { width: 100%; height: 1px; background: var(--border); }
-.ghost-btn { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; background: transparent; border: 1px solid var(--border); color: var(--fg-muted); border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500; transition: all 0.2s; }
-.ghost-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); border-color: var(--fg-muted);}
+.ghost-btn { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; background: transparent; border: 1px solid var(--border); color: var(--fg-muted); border-radius: 5px; cursor: pointer; font-size: 11px; font-weight: 500; transition: all 0.15s; }
+.ghost-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); border-color: var(--fg-muted); }
 
 /* MAIN EDITOR STYLES */
 .pm-main-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-main); min-width: 0; }
 .pm-main-empty { flex: 1; display: flex; justify-content: center; align-items: center; color: var(--fg-placeholder); font-size: 13px; }
-.pm-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: var(--bg-card); border-bottom: 1px solid var(--border); flex-shrink: 0; }
-.pm-title { font-size: 13px; font-weight: 700; }
-.text-amber { color: var(--color-breakpoint) !important; }
-.pm-close-btn { background: transparent; border: none; color: var(--fg-muted); font-size: 16px; cursor: pointer; transition: color 0.2s; }
-.pm-close-btn:hover { color: var(--error); }
+.pm-header { display: flex; justify-content: space-between; align-items: center; padding: 0 16px; height: 44px; background: var(--bg-sidebar); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.pm-title { font-size: 13px; font-weight: 600; color: var(--fg-primary); }
+.pm-close-btn { background: none; border: none; cursor: pointer; color: var(--fg-muted); padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: background 0.12s, color 0.12s; }
+.pm-close-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
 
 .pm-editor-area { flex: 1; padding: 24px; display: flex; flex-direction: column; overflow-y: auto; }
 
-/* Custom Configuration UI */
+/* Configuration boxes */
 .pm-routing-box { background: var(--bg-sidebar); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
 .pm-routing-header { background: var(--bg-active); padding: 10px 16px; font-size: 12px; font-weight: 700; color: var(--fg-secondary); border-bottom: 1px solid var(--border); }
-.pm-routing-header.target-header { background: var(--warning-muted); color: var(--color-breakpoint); border-bottom-color: rgba(245,158,11,0.2); }
-.pm-routing-box.target { border-color: rgba(245,158,11,0.3); }
-
+.pm-routing-header.target-header { background: var(--accent-muted); color: var(--accent); border-bottom-color: var(--accent-border); }
+.pm-routing-box.target { border-color: var(--accent-border); }
 .pm-routing-body { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
-/* THIS FIXES THE BOTTOM EDGE CLIPPING */
 .pm-routing-body-generous { padding: 16px 16px 24px 16px; display: flex; flex-direction: column; gap: 8px; }
-
 .pm-routing-label { font-size: 11px; font-weight: 600; color: var(--fg-muted); letter-spacing: 0.5px; }
 .pm-routing-input { width: 100%; background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-primary); padding: 12px 16px; border-radius: 6px; font-size: 14px; font-family: 'Consolas', monospace; outline: none; transition: border-color 0.2s, box-shadow 0.2s; box-sizing: border-box; }
 .pm-routing-input:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
 .pm-routing-helper { font-size: 11px; color: var(--fg-muted); margin-top: 4px; }
 .pm-routing-arrow { display: flex; justify-content: center; align-items: center; padding: 16px 0; flex-shrink: 0; }
 
-/* Phase Checkboxes */
+/* Phase checkboxes */
 .pm-phase-options { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
-.pm-custom-checkbox-large { 
-  display: flex; 
-  align-items: flex-start; 
-  gap: 12px; 
-  cursor: pointer; 
-  padding: 14px 16px; /* Enhanced internal breathing room */
-  background: var(--bg-active); 
-  border: 1px solid var(--border); 
-  border-radius: 6px; 
-  transition: all 0.2s; 
-  user-select: none; 
-}
+.pm-custom-checkbox-large { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 14px 16px; background: var(--bg-active); border: 1px solid var(--border); border-radius: 6px; transition: all 0.2s; user-select: none; }
 .pm-custom-checkbox-large:hover { border-color: var(--fg-muted); background: var(--bg-active); }
 .pm-custom-checkbox-large input { display: none; }
-.pm-large-box { width: 18px; height: 18px; border: 1px solid var(--fg-muted); border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; background: var(--bg-deepest); flex-shrink: 0; margin-top: 2px;}
-.pm-custom-checkbox-large input:checked + .pm-large-box { background: var(--color-breakpoint); border-color: var(--color-breakpoint); }
+.pm-large-box { width: 18px; height: 18px; border: 1px solid var(--fg-muted); border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; background: var(--bg-deepest); flex-shrink: 0; margin-top: 2px; }
+.pm-custom-checkbox-large input:checked + .pm-large-box { background: var(--accent); border-color: var(--accent); }
 .pm-custom-checkbox-large input:checked + .pm-large-box::after { content: '✓'; color: white; font-size: 13px; font-weight: bold; }
 .pm-large-text { display: flex; flex-direction: column; gap: 4px; }
 .pm-large-text strong { font-size: 13px; color: var(--fg-secondary); line-height: 1.2; }
 .pm-large-text span { font-size: 11px; color: var(--fg-muted); line-height: 1.4; display: block; }
-.pm-custom-checkbox-large input:checked ~ .pm-large-text strong { color: var(--color-breakpoint); }
+.pm-custom-checkbox-large input:checked ~ .pm-large-text strong { color: var(--accent); }
 
-.pm-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 20px; background: var(--bg-sidebar); border-top: 1px solid var(--border); flex-shrink: 0; }
-.pm-btn-cancel { background: transparent; color: var(--fg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 8px 24px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+.pm-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 16px; background: var(--bg-sidebar); border-top: 1px solid var(--border); flex-shrink: 0; }
+.pm-btn-cancel { background: transparent; color: var(--fg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 6px 20px; font-weight: 500; font-size: 12px; cursor: pointer; transition: all 0.15s; }
 .pm-btn-cancel:hover { background: var(--surface-hover-strong); color: var(--fg-primary); border-color: var(--fg-muted); }
-.pm-btn-execute { background: var(--color-breakpoint); color: white; border: none; border-radius: 6px; padding: 8px 32px; font-weight: 600; font-size: 13px; cursor: pointer; transition: background 0.2s; }
-.pm-btn-execute:hover { background: var(--color-breakpoint-dark); }
+.pm-btn-execute { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 6px 24px; font-weight: 500; font-size: 12px; cursor: pointer; transition: background 0.15s; }
+.pm-btn-execute:hover { background: var(--accent-hover); }
 </style>

@@ -18,6 +18,21 @@ import {
   openVpnMode,
   wgEnabled,
   wgStatus,
+  showScriptingModal,
+  anyScriptEnabled,
+  anyMapLocalActive,
+  anyMapRemoteActive,
+  anyBreakpointActive,
+  anyHighlightActive,
+  showBreakpointsBtn,
+  showMapLocalBtn,
+  showMapRemoteBtn,
+  showHighlightBtn,
+  showScriptBtn,
+  showVpnModeBtn,
+  showCertificatesBtn,
+  showThrottleBtn,
+  showBustCacheBtn,
 } from '../store.js'
 
 const isMac = () => window.electronAPI?.platform === 'darwin'
@@ -115,6 +130,7 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
 
     <div class="toolbar-group right">
       <button
+        v-if="showVpnModeBtn"
         class="secondary-pill"
         :class="{ 'wg-active': wgEnabled && wgStatus === 'ready', 'wg-loading': wgStatus === 'starting' }"
         @click="openVpnMode()"
@@ -122,20 +138,45 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
       >
         VPN Mode
       </button>
-      <button class="secondary-pill" @click="showBreakpointModal = true" title="Manage Breakpoints">
+      <button
+        v-if="showBreakpointsBtn"
+        class="secondary-pill"
+        :class="{ 'script-active': anyBreakpointActive }"
+        @click="showBreakpointModal = true" title="Manage Breakpoints">
         Breakpoints
       </button>
-      <button class="secondary-pill" @click="showMapModal = true" title="Map Local Rules">
+      <button
+        v-if="showMapLocalBtn"
+        class="secondary-pill"
+        :class="{ 'script-active': anyMapLocalActive }"
+        @click="showMapModal = true" title="Map Local Rules">
         Map Local
       </button>
-      <button class="secondary-pill" @click="showMapRemoteModal = true" title="Map Remote Rules">
+      <button
+        v-if="showMapRemoteBtn"
+        class="secondary-pill"
+        :class="{ 'script-active': anyMapRemoteActive }"
+        @click="showMapRemoteModal = true" title="Map Remote Rules">
         Map Remote
       </button>
-      <button class="secondary-pill" @click="showHighlightModal = true" title="Highlight Rules">
+      <button
+        v-if="showHighlightBtn"
+        class="secondary-pill"
+        :class="{ 'script-active': anyHighlightActive }"
+        @click="showHighlightModal = true" title="Highlight Rules">
         Highlight
       </button>
+      <button
+        v-if="showScriptBtn"
+        class="secondary-pill"
+        :class="{ 'script-active': anyScriptEnabled }"
+        @click="showScriptingModal = true"
+        title="User Script"
+      >
+        Script
+      </button>
 
-      <div class="cert-wrapper">
+      <div v-if="showCertificatesBtn" class="cert-wrapper">
         <button
           class="secondary-pill"
           @click="showCertMenu = !showCertMenu"
@@ -158,7 +199,7 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         </div>
       </div>
 
-      <div class="throttle-wrapper">
+      <div v-if="showThrottleBtn" class="throttle-wrapper">
         <button
           class="secondary-pill"
           :class="{ 'active-throttle': throttleProfile !== 'None' }"
@@ -190,9 +231,10 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         </div>
       </div>
 
-      <div class="divider"></div>
+      <div v-if="showBustCacheBtn" class="divider"></div>
 
       <div
+        v-if="showBustCacheBtn"
         class="toggle"
         @click="toggleCache"
         :class="{ active: disableCache }"
@@ -349,6 +391,15 @@ button,
 .secondary-pill.active-throttle:hover {
   background: rgba(245,158,11,.25);
   border-color: rgba(245,158,11,.4);
+}
+.secondary-pill.script-active {
+  color: var(--accent);
+  background: var(--accent-muted);
+  border-color: var(--accent-border);
+}
+.secondary-pill.script-active:hover {
+  background: var(--accent-muted);
+  border-color: var(--accent);
 }
 
 /* --- Cert / Throttle wrappers --- */

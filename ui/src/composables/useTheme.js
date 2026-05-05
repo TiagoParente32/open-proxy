@@ -7,12 +7,14 @@ import midnightTheme from '../themes/midnight.json'
 import oceanTheme from '../themes/ocean.json'
 import lightTheme from '../themes/light.json'
 import crimsonTheme from '../themes/crimson.json'
+import emberTheme from '../themes/ember.json'
 
 const THEMES = [
   { ...darkTheme,    preview: { bg: '#1e1e1f', accent: '#3b82f6', sidebar: '#222223' } },
   { ...midnightTheme,preview: { bg: '#0d1117', accent: '#58a6ff', sidebar: '#161b22' } },
   { ...oceanTheme,   preview: { bg: '#0f2035', accent: '#06b6d4', sidebar: '#132540' } },
   { ...crimsonTheme, preview: { bg: '#1a0c10', accent: '#e11d48', sidebar: '#200f13' } },
+  { ...emberTheme, preview: { bg: '#fafafa', accent: '#ff6c37', sidebar: '#e8e8e8' } },
   { ...lightTheme,   preview: { bg: '#fafafa', accent: '#3b82f6', sidebar: '#f0f0f0' } },
 ]
 

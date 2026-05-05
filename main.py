@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import time
+import types
 import socket
 import asyncio
 import re
@@ -11,6 +12,8 @@ import threading
 import ssl
 import sqlite3
 import hashlib
+import traceback
+import uuid
 import urllib.request
 import websockets
 import psutil
@@ -22,6 +25,10 @@ from mitmproxy.proxy.mode_servers import WireGuardServerInstance
 
 APP_VERSION = "1.0.3"
 GITHUB_REPO = "TiagoParente32/open-proxy"
+
+OPENPROXY_DATA_DIR = os.path.join(os.path.expanduser("~"), ".openproxy")
+SCRIPTS_DIR        = os.path.join(OPENPROXY_DATA_DIR, "scripts")
+SCRIPTS_META_FILE  = os.path.join(OPENPROXY_DATA_DIR, "scripts_meta.json")
 
 # Global refs so background threads can reach the bridge and its event loop
 _global_bridge = None
@@ -609,6 +616,164 @@ def unset_macos_proxy() -> dict:
 
 
 # ============================================================================
+# USER SCRIPTING
+# ============================================================================
+
+DEFAULT_SCRIPT = """\
+# OpenProxy User Script
+# Available hooks: request(flow), response(flow), websocket_message(flow), error(flow)
+# Hooks must be regular (non-async) functions.
+# The script is auto-disabled on runtime error.
+# Docs: https://docs.mitmproxy.org/stable/api/mitmproxy/http.html
+
+def request(flow):
+    \"\"\"Called for every intercepted request. Modify flow.request here.\"\"\"
+    pass
+
+
+def response(flow):
+    \"\"\"Called for every intercepted response. Modify flow.response here.\"\"\"
+    pass
+
+
+def error(flow):
+    \"\"\"Called when a connection or protocol error occurs.\"\"\"
+    pass
+"""
+
+
+def _script_path(script_id: str) -> str:
+    return os.path.join(SCRIPTS_DIR, f"{script_id}.py")
+
+
+def _compile_script(script_id: str, name: str, source: str, enabled: bool) -> dict:
+    entry = {
+        'id':      script_id,
+        'name':    name,
+        'source':  source,
+        'enabled': enabled,
+        'module':  None,
+        'error':   '',
+    }
+    try:
+        code = compile(source, _script_path(script_id), 'exec')
+        mod  = types.ModuleType(f'user_script_{script_id}')
+        mod.__file__ = _script_path(script_id)
+        exec(code, mod.__dict__)
+        entry['module'] = mod
+    except BaseException:
+        entry['error']   = traceback.format_exc()
+        entry['enabled'] = False
+    return entry
+
+
+class ScriptsManager:
+    def __init__(self):
+        self._scripts: list[dict] = []
+
+    def load_all(self):
+        os.makedirs(SCRIPTS_DIR, exist_ok=True)
+        meta = []
+        try:
+            if os.path.exists(SCRIPTS_META_FILE):
+                with open(SCRIPTS_META_FILE, 'r') as f:
+                    meta = json.load(f)
+        except Exception:
+            pass
+
+        self._scripts = []
+        for entry in meta:
+            sid     = entry.get('id', '')
+            name    = entry.get('name', 'Script')
+            enabled = bool(entry.get('enabled', False))
+            source  = DEFAULT_SCRIPT
+            try:
+                p = _script_path(sid)
+                if os.path.exists(p):
+                    with open(p, 'r', encoding='utf-8') as f:
+                        source = f.read()
+            except Exception:
+                pass
+            self._scripts.append(_compile_script(sid, name, source, enabled))
+
+    def _save_meta(self):
+        os.makedirs(OPENPROXY_DATA_DIR, exist_ok=True)
+        meta = [{'id': s['id'], 'name': s['name'], 'enabled': s['enabled']} for s in self._scripts]
+        with open(SCRIPTS_META_FILE, 'w') as f:
+            json.dump(meta, f)
+
+    def _save_source(self, script_id: str, source: str):
+        os.makedirs(SCRIPTS_DIR, exist_ok=True)
+        with open(_script_path(script_id), 'w', encoding='utf-8') as f:
+            f.write(source)
+
+    def new_script(self, name: str = "New Script") -> dict:
+        sid   = str(uuid.uuid4())[:8]
+        entry = _compile_script(sid, name, DEFAULT_SCRIPT, False)
+        self._scripts.append(entry)
+        self._save_source(sid, DEFAULT_SCRIPT)
+        self._save_meta()
+        return entry
+
+    def save_script(self, script_id: str, name: str, source: str, enabled: bool) -> dict | None:
+        for i, s in enumerate(self._scripts):
+            if s['id'] == script_id:
+                new_entry = _compile_script(script_id, name, source, enabled)
+                if new_entry['error']:
+                    new_entry['enabled'] = False
+                self._scripts[i] = new_entry
+                self._save_source(script_id, source)
+                self._save_meta()
+                return new_entry
+        return None
+
+    def delete_script(self, script_id: str):
+        self._scripts = [s for s in self._scripts if s['id'] != script_id]
+        try:
+            os.remove(_script_path(script_id))
+        except Exception:
+            pass
+        self._save_meta()
+
+    def toggle_script(self, script_id: str, enabled: bool) -> dict | None:
+        for s in self._scripts:
+            if s['id'] == script_id:
+                s['enabled'] = enabled
+                self._save_meta()
+                return s
+        return None
+
+    def call_hooks(self, hook: str, flow) -> list[str]:
+        """Run hook on all enabled scripts. Returns list of script IDs that errored."""
+        errored = []
+        for s in self._scripts:
+            if not s['enabled'] or not s['module']:
+                continue
+            fn = getattr(s['module'], hook, None)
+            if fn is None:
+                continue
+            try:
+                result = fn(flow)
+                if asyncio.iscoroutine(result):
+                    result.close()
+                    s['error']   = f"Hook '{hook}' must be a regular (non-async) function."
+                    s['enabled'] = False
+                    errored.append(s['id'])
+            except BaseException:
+                s['error']   = traceback.format_exc()
+                s['enabled'] = False
+                errored.append(s['id'])
+        return errored
+
+    def state_list(self) -> list[dict]:
+        return [
+            {'id': s['id'], 'name': s['name'], 'content': s['source'],
+             'enabled': s['enabled'], 'error': s['error']}
+            for s in self._scripts
+        ]
+
+
+# ============================================================================
 # 2. CORE BRIDGE LOGIC (Mitmproxy -> Vue UI)
 # ============================================================================
 class ProxyUIBridge:
@@ -637,6 +802,10 @@ class ProxyUIBridge:
         self._master = None     # set by run_proxy_forever; used for WG restart + inject
         self._last_startup_error = ""   # captured from mitmproxy's log on startup failure
         self.pending_update_info = None  # cached until a client connects
+
+        # User scripting
+        self.scripts_manager = ScriptsManager()
+        self.scripts_manager.load_all()
 
     def add_log(self, entry) -> None:
         """Capture mitmproxy ERROR log entries so we can surface them in the UI."""
@@ -693,6 +862,10 @@ class ProxyUIBridge:
             flow.request.headers.pop("If-None-Match", None)
             flow.request.headers["Cache-Control"] = "no-cache"
             flow.request.headers["Pragma"] = "no-cache"
+
+        # User script hooks — run after built-in mutations, before recording to UI
+        if self.scripts_manager.call_hooks('request', flow):
+            await self._broadcast_scripts_list()
 
         req_body = ""
         req_is_image = False
@@ -822,6 +995,10 @@ class ProxyUIBridge:
             flow.response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             flow.response.headers["Expires"] = "0"
 
+        # User script hooks
+        if self.scripts_manager.call_hooks('response', flow):
+            await self._broadcast_scripts_list()
+
         res_body = ""
         res_is_image = False
         res_is_binary = False
@@ -903,6 +1080,10 @@ class ProxyUIBridge:
 
         latest_msg = flow.websocket.messages[-1]
 
+        # User script hooks
+        if self.scripts_manager.call_hooks('websocket_message', flow):
+            await self._broadcast_scripts_list()
+
         try:
             content_str = latest_msg.content.decode('utf-8')
         except UnicodeDecodeError:
@@ -922,6 +1103,18 @@ class ProxyUIBridge:
                 await ws.send(json.dumps(payload))
             except Exception as e:
                 print(f"[DEBUG WS ERROR] Failed to send to UI: {e}")
+
+    # -------------------------------------------------------------------------
+    # USER SCRIPT HELPERS
+    # -------------------------------------------------------------------------
+
+    async def _broadcast_scripts_list(self):
+        await self.broadcast_to_ui("SCRIPTS_LIST", {"scripts": self.scripts_manager.state_list()})
+
+    async def error(self, flow: http.HTTPFlow):
+        """mitmproxy lifecycle hook — connection/protocol errors."""
+        if self.scripts_manager.call_hooks('error', flow):
+            await self._broadcast_scripts_list()
 
     # -------------------------------------------------------------------------
     # ANDROID SETUP HELPERS
@@ -1278,6 +1471,8 @@ class ProxyUIBridge:
                 await websocket.send(json.dumps({"type": "UPDATE_AVAILABLE", "data": self.pending_update_info}))
                 self.pending_update_info = None
 
+            await websocket.send(json.dumps({"type": "SCRIPTS_LIST", "data": {"scripts": self.scripts_manager.state_list()}}))
+
             async for message in websocket:
                 payload = json.loads(message)
 
@@ -1487,6 +1682,39 @@ class ProxyUIBridge:
                                 "error": "WireGuard server is not running." if self.wg_enabled else "",
                             },
                         }))
+
+                elif payload.get("type") == "SCRIPT_SAVE":
+                    self.scripts_manager.save_script(
+                        payload.get("id", ""),
+                        payload.get("name", "Script"),
+                        payload.get("content", DEFAULT_SCRIPT),
+                        bool(payload.get("enabled", False)),
+                    )
+                    await self._broadcast_scripts_list()
+
+                elif payload.get("type") == "SCRIPT_TOGGLE":
+                    self.scripts_manager.toggle_script(
+                        payload.get("id", ""),
+                        bool(payload.get("enabled", False)),
+                    )
+                    await self._broadcast_scripts_list()
+
+                elif payload.get("type") == "SCRIPT_NEW":
+                    self.scripts_manager.new_script(payload.get("name", "New Script"))
+                    await self._broadcast_scripts_list()
+
+                elif payload.get("type") == "SCRIPT_DELETE":
+                    self.scripts_manager.delete_script(payload.get("id", ""))
+                    await self._broadcast_scripts_list()
+
+                elif payload.get("type") == "SCRIPT_RENAME":
+                    sid = payload.get("id", "")
+                    for s in self.scripts_manager._scripts:
+                        if s["id"] == sid:
+                            s["name"] = payload.get("name", s["name"])
+                            self.scripts_manager._save_meta()
+                            break
+                    await self._broadcast_scripts_list()
 
                 elif payload.get("type") == "CHECK_FOR_UPDATES":
                     async def _check():
