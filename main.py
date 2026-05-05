@@ -23,7 +23,20 @@ from mitmproxy import http, options
 from mitmproxy.tools.dump import DumpMaster
 from mitmproxy.proxy.mode_servers import WireGuardServerInstance
 
-APP_VERSION = "1.0.3"
+def _read_app_version():
+    """Read version from package.json so there's a single source of truth."""
+    try:
+        if getattr(sys, 'frozen', False):
+            # PyInstaller: exe is inside resources/backend/OpenProxy-server/
+            root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(sys.executable)), '..', '..', '..'))
+        else:
+            root = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(root, 'package.json')) as _f:
+            return json.load(_f)['version']
+    except Exception:
+        return "1.0.4"   # fallback — keep in sync if auto-read ever fails
+
+APP_VERSION = _read_app_version()
 GITHUB_REPO = "TiagoParente32/open-proxy"
 
 OPENPROXY_DATA_DIR = os.path.join(os.path.expanduser("~"), ".openproxy")
@@ -1898,6 +1911,7 @@ async def run_proxy_forever(bridge, proxy_port):
             if bridge.wg_enabled:
                 modes.append(f"wireguard@{bridge.wg_port}")
             print(f"[INFO] Starting Mitmproxy on port {proxy_port}, modes={modes}...")
+            print(f"[INFO] OpenProxy version: {APP_VERSION}")
             opts = options.Options(listen_host='', listen_port=proxy_port)
             opts.update(mode=modes)
             master = DumpMaster(opts, with_termlog=False, with_dumper=False)

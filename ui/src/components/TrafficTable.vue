@@ -1,11 +1,36 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import { nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { 
   filteredRequests, requests, selectedRequest, isFocusMode, pinnedSources, 
   formatUrl, contextMenu, searchQuery, searchScope, searchMatchType,
   sortKey, sortOrder, toggleSort, formatTime, formatBytes 
 } from '../store.js'
+
+// ── Virtual scrolling ────────────────────────────────────────────────────────
+const ROW_HEIGHT = 26   // px — matches td padding (4px top + 4px bottom) + 12px font ~18px line = 26px
+const BUFFER     = 12   // extra rows rendered above and below the visible window
+
+const containerRef   = ref(null)
+const scrollTop      = ref(0)
+const containerHeight = ref(600)
+
+const onScroll = () => { scrollTop.value = containerRef.value?.scrollTop ?? 0 }
+
+const totalRows   = computed(() => filteredRequests.value.length)
+const startIdx    = computed(() => Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - BUFFER))
+const endIdx      = computed(() => Math.min(totalRows.value, startIdx.value + Math.ceil(containerHeight.value / ROW_HEIGHT) + BUFFER * 2))
+const visibleRows = computed(() => filteredRequests.value.slice(startIdx.value, endIdx.value))
+const topPad      = computed(() => startIdx.value * ROW_HEIGHT)
+const bottomPad   = computed(() => Math.max(0, (totalRows.value - endIdx.value) * ROW_HEIGHT))
+
+// When new items are prepended and the user is scrolled down, compensate so
+// the visible rows don't jump (keeps the current view stable).
+watch(totalRows, (newLen, oldLen) => {
+  const added = newLen - oldLen
+  if (added > 0 && containerRef.value && containerRef.value.scrollTop > 0) {
+    containerRef.value.scrollTop += added * ROW_HEIGHT
+  }
+})
 
 // Grouped: null = separator
 const SCOPES = [
@@ -118,17 +143,33 @@ const handleKeyDown = async (e) => {
     else if (e.key === 'ArrowUp' && idx > 0)
       selectedRequest.value = filteredRequests.value[idx - 1]
     await nextTick()
-    document.querySelector('tr.selected')?.scrollIntoView({ block: 'nearest' })
+    // Scroll the virtual container so the selected row is visible
+    const selIdx = filteredRequests.value.findIndex(r => r.id === selectedRequest.value?.id)
+    if (selIdx !== -1 && containerRef.value) {
+      const rowTop = selIdx * ROW_HEIGHT
+      const rowBot = rowTop + ROW_HEIGHT
+      const viewTop = containerRef.value.scrollTop
+      const viewBot = viewTop + containerHeight.value
+      if (rowTop < viewTop) containerRef.value.scrollTop = rowTop
+      else if (rowBot > viewBot) containerRef.value.scrollTop = rowBot - containerHeight.value
+    }
   }
 }
 
+let _resizeObserver = null
 onMounted(() => {
   window.addEventListener('keydown', handleKeyDown)
   document.addEventListener('click', closeAllMenus)
+  if (containerRef.value) {
+    containerHeight.value = containerRef.value.clientHeight
+    _resizeObserver = new ResizeObserver(([e]) => { containerHeight.value = e.contentRect.height })
+    _resizeObserver.observe(containerRef.value)
+  }
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   document.removeEventListener('click', closeAllMenus)
+  _resizeObserver?.disconnect()
 })
 </script>
 
@@ -219,7 +260,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="table-container">
+    <div class="table-container" ref="containerRef" @scroll.passive="onScroll">
       <table class="traffic-table">
         <thead>
           <tr>
@@ -235,8 +276,10 @@ onUnmounted(() => {
           </tr>
         </thead>
         <tbody>
+          <!-- top spacer keeps scroll position correct for virtual window -->
+          <tr v-if="topPad > 0" :style="{ height: topPad + 'px' }" aria-hidden="true"><td colspan="9" style="padding:0;border:none;"></td></tr>
           <tr 
-            v-for="req in filteredRequests" 
+            v-for="req in visibleRows" 
             :key="req.id" 
             @click="selectedRequest = req" 
             @contextmenu.prevent="openContextMenu($event, req)" 
@@ -261,6 +304,8 @@ onUnmounted(() => {
             <td class="text-muted">{{ formatBytes(req.res_bytes) }}</td>
             <td></td>
           </tr>
+          <!-- bottom spacer -->
+          <tr v-if="bottomPad > 0" :style="{ height: bottomPad + 'px' }" aria-hidden="true"><td colspan="9" style="padding:0;border:none;"></td></tr>
         </tbody>
       </table>
       <div v-if="filteredRequests.length === 0" class="global-empty">

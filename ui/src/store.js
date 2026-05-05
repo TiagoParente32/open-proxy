@@ -575,22 +575,24 @@ export const filteredRequests = computed(() => {
         const scope = searchScope.value
         const matchType = searchMatchType.value
 
+        // Compile regex once outside the per-item loop
+        let compiledRegex = null
+        if (matchType === 'Match Regex' || matchType === 'Not Match Regex') {
+            try { compiledRegex = new RegExp(rawQuery, 'i') } catch { compiledRegex = null }
+        }
+
         const matchValue = (raw) => {
             const val = String(raw ?? '').toLowerCase()
             switch (matchType) {
-                case 'Contains':      return val.includes(query)
-                case 'Not Contains':  return !val.includes(query)
-                case 'Starts With':   return val.startsWith(query)
-                case 'Ends With':     return val.endsWith(query)
-                case 'Equals':        return val === query
-                case 'Not Equals':    return val !== query
-                case 'Match Regex': {
-                    try { return new RegExp(rawQuery, 'i').test(String(raw ?? '')) } catch { return false }
-                }
-                case 'Not Match Regex': {
-                    try { return !new RegExp(rawQuery, 'i').test(String(raw ?? '')) } catch { return true }
-                }
-                default: return val.includes(query)
+                case 'Contains':        return val.includes(query)
+                case 'Not Contains':    return !val.includes(query)
+                case 'Starts With':     return val.startsWith(query)
+                case 'Ends With':       return val.endsWith(query)
+                case 'Equals':          return val === query
+                case 'Not Equals':      return val !== query
+                case 'Match Regex':     return compiledRegex ? compiledRegex.test(String(raw ?? '')) : false
+                case 'Not Match Regex': return compiledRegex ? !compiledRegex.test(String(raw ?? '')) : true
+                default:                return val.includes(query)
             }
         }
 
@@ -714,7 +716,15 @@ export const filteredRequests = computed(() => {
 // ============================================================================
 // 6. WATCHERS (Auto-Saving & Python Syncing)
 // ============================================================================
-watch(requests, (newVals) => saveState('requests', newVals.slice(0, MAX_SAVED_REQUESTS)), { deep: true })
+
+// Debounced: don't serialize up to 2000 requests on every tiny property change
+let _saveRequestsTimer = null
+watch(requests, () => {
+    clearTimeout(_saveRequestsTimer)
+    _saveRequestsTimer = setTimeout(() => {
+        saveState('requests', requests.value.slice(0, MAX_SAVED_REQUESTS))
+    }, 1500)
+}, { deep: true })
 watch(pinnedSources, (newVals) => saveState('pinnedSources', newVals), { deep: true })
 watch(isFocusMode, (newVal) => saveState('isFocusMode', newVal))
 watch(activeChips, (newVals) => saveState('activeChips', newVals), { deep: true })
@@ -842,6 +852,36 @@ export const applyUpdate = (downloadUrl) => {
     wsConnection.send(JSON.stringify({ type: "APPLY_UPDATE", download_url: downloadUrl }))
 }
 
+// ── Batched WS update flusher ─────────────────────────────────────────────────
+// Collects NEW_REQUEST / UPDATE_REQUEST messages and applies them in one batch
+// every 50ms max — reduces filteredRequests recomputes under heavy traffic.
+let _pendingNew = []
+let _pendingUpdate = []
+let _batchTimer = null
+
+function _flushBatch() {
+    _batchTimer = null
+    if (_pendingNew.length) {
+        const toAdd = _pendingNew.reverse()   // newest-first
+        _pendingNew = []
+        toAdd.forEach(r => applyHighlightRules(r))
+        requests.value.unshift(...toAdd)
+        if (requests.value.length > MAX_LIVE_REQUESTS) requests.value.splice(MAX_LIVE_REQUESTS)
+    }
+    if (_pendingUpdate.length) {
+        const updates = _pendingUpdate
+        _pendingUpdate = []
+        updates.forEach(data => {
+            const idx = requests.value.findIndex(r => r.id === data.id)
+            if (idx !== -1) Object.assign(requests.value[idx], data)
+        })
+    }
+}
+
+function _scheduleBatchFlush() {
+    if (!_batchTimer) _batchTimer = setTimeout(_flushBatch, 50)
+}
+
 export const initWebSocket = () => {
     if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
@@ -876,13 +916,12 @@ export const initWebSocket = () => {
             alert(payload.message)
         }
         else if (payload.type === "NEW_REQUEST") {
-            applyHighlightRules(payload.data)
-            requests.value.unshift(payload.data)
-            if (requests.value.length > MAX_LIVE_REQUESTS) requests.value.pop()
+            _pendingNew.push(payload.data)
+            _scheduleBatchFlush()
         }
         else if (payload.type === "UPDATE_REQUEST") {
-            const reqIndex = requests.value.findIndex(r => r.id === payload.data.id)
-            if (reqIndex !== -1) Object.assign(requests.value[reqIndex], payload.data)
+            _pendingUpdate.push(payload.data)
+            _scheduleBatchFlush()
         }
         else if (payload.type === "BREAKPOINT_HIT") {
             const newFlow = payload.data
