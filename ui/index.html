@@ -2,6 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+  (function() {
+    var saved = localStorage.getItem('openproxy-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme-init', saved);
+    document.documentElement.style.colorScheme = saved === 'light' ? 'light' : 'dark';
+  })()
+</script>
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ui</title>

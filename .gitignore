@@ -36,6 +36,7 @@ dist/
 # =========================
 # Vue.js & Node (Frontend)
 # =========================
+node_modules/
 ui/node_modules/
 ui/dist/
 ui/dist-ssr/
@@ -45,6 +46,13 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# =========================
+# Electron build output
+# =========================
+dist-electron/
+backend-dist/
+out/
 
 # =========================
 # OS & IDE Files

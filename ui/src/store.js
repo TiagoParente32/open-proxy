@@ -62,11 +62,8 @@ export const exportRules = (rules, filename) => {
     const data = rules.value !== undefined ? rules.value : rules;
     const jsonString = JSON.stringify(data, null, 2);
 
-    if (window.pywebview && window.pywebview.api) {
-        window.pywebview.api.save_file(filename + '.json', jsonString)
-            .then((success) => {
-                if (!success) console.log("Export canceled by user.");
-            })
+    if (window.electronAPI) {
+        window.electronAPI.saveFile(filename + '.json', jsonString)
             .catch(err => console.error("Export failed:", err));
     } else {
         alert("System API not ready yet. Please wait a moment and try again.");
@@ -103,6 +100,7 @@ export const importRules = (event, rulesRef) => {
 // ============================================================================
 export const requests = ref(loadState('requests', []))
 export const connectionStatus = ref('Connecting...')
+export const platform = ref('')  // 'darwin' | 'win32' | 'linux'
 export const isRecording = ref(true)
 export const proxyHost = ref('Detecting...')
 
@@ -143,27 +141,27 @@ export const disableCache = ref(loadState('disableCache', false))
 
 // Map Local
 export const showMapModal = ref(false)
-export const enableMapLocal = ref(loadState('enableMapLocal', true))
 export const mapLocalRules = ref(loadState('mapLocalRules', []))
+export const enableMapLocal = ref(mapLocalRules.value.length > 0 ? loadState('enableMapLocal', true) : false)
 export const selectedRuleId = ref(null)
 
 // Map Remote
 export const showMapRemoteModal = ref(false)
-export const enableMapRemote = ref(loadState('enableMapRemote', true))
 export const mapRemoteRules = ref(loadState('mapRemoteRules', []))
+export const enableMapRemote = ref(mapRemoteRules.value.length > 0 ? loadState('enableMapRemote', true) : false)
 export const selectedMapRemoteId = ref(null)
 
 // Breakpoints
 export const showBreakpointModal = ref(false)
-export const breakpointsEnabled = ref(loadState('breakpointsEnabled', true))
 export const breakpointRules = ref(loadState('breakpointRules', []))
+export const breakpointsEnabled = ref(breakpointRules.value.length > 0 ? loadState('breakpointsEnabled', true) : false)
 export const trappedFlows = ref([])
 export const selectedBreakpointId = ref(null)
 
 // Auto-Highlights
 export const showHighlightModal = ref(false)
-export const highlightsEnabled = ref(loadState('highlightsEnabled', true))
 export const highlightRules = ref(loadState('highlightRules', []))
+export const highlightsEnabled = ref(highlightRules.value.length > 0 ? loadState('highlightsEnabled', true) : false)
 
 // Compose
 export const showComposeModal = ref(false)
@@ -179,6 +177,45 @@ export const wgPort = ref(51820)
 export const wgStatus = ref('disabled')   // 'disabled' | 'starting' | 'ready' | 'error'
 export const wgClientConf = ref('')
 export const wgError = ref('')
+
+// ── User Scripting ────────────────────────────────────────────────────────────
+export const showScriptingModal  = ref(false)
+export const scripts             = ref([])   // [{ id, name, content, enabled, error }]
+export const selectedScriptId    = ref(null)
+export const anyScriptEnabled    = computed(() => scripts.value.some(s => s.enabled))
+
+// Toolbar active-state computeds for rule-based features
+export const anyMapLocalActive    = computed(() => enableMapLocal.value    && mapLocalRules.value.length > 0)
+export const anyMapRemoteActive   = computed(() => enableMapRemote.value   && mapRemoteRules.value.length > 0)
+export const anyBreakpointActive  = computed(() => breakpointsEnabled.value && breakpointRules.value.length > 0)
+export const anyHighlightActive   = computed(() => highlightsEnabled.value && highlightRules.value.length > 0)
+
+// ── Toolbar visibility preferences ───────────────────────────────────────────
+export const toolbarVisibility = ref((() => {
+  const defaults = {
+    vpnMode:      true,
+    breakpoints:  true,
+    mapLocal:     true,
+    mapRemote:    true,
+    highlights:   true,
+    scripts:      false,
+    certificates: true,
+    throttle:     true,
+    bustCache:    true,
+  }
+  return { ...defaults, ...loadState('toolbarVisibility', {}) }
+})())
+
+// Show button if user wants it OR the feature is actively on (so you can't lose an active rule)
+export const showVpnModeBtn     = computed(() => toolbarVisibility.value.vpnMode      || (wgEnabled.value && wgStatus.value === 'ready'))
+export const showBreakpointsBtn = computed(() => toolbarVisibility.value.breakpoints  || anyBreakpointActive.value)
+export const showMapLocalBtn    = computed(() => toolbarVisibility.value.mapLocal     || anyMapLocalActive.value)
+export const showMapRemoteBtn   = computed(() => toolbarVisibility.value.mapRemote    || anyMapRemoteActive.value)
+export const showHighlightBtn   = computed(() => toolbarVisibility.value.highlights   || anyHighlightActive.value)
+export const showScriptBtn      = computed(() => toolbarVisibility.value.scripts      || anyScriptEnabled.value)
+export const showCertificatesBtn = computed(() => toolbarVisibility.value.certificates)
+export const showThrottleBtn    = computed(() => toolbarVisibility.value.throttle)
+export const showBustCacheBtn   = computed(() => toolbarVisibility.value.bustCache)
 
 // Opens DeviceSetupModal directly on the VPN Mode view
 export const openVpnMode = () => {
@@ -538,22 +575,24 @@ export const filteredRequests = computed(() => {
         const scope = searchScope.value
         const matchType = searchMatchType.value
 
+        // Compile regex once outside the per-item loop
+        let compiledRegex = null
+        if (matchType === 'Match Regex' || matchType === 'Not Match Regex') {
+            try { compiledRegex = new RegExp(rawQuery, 'i') } catch { compiledRegex = null }
+        }
+
         const matchValue = (raw) => {
             const val = String(raw ?? '').toLowerCase()
             switch (matchType) {
-                case 'Contains':      return val.includes(query)
-                case 'Not Contains':  return !val.includes(query)
-                case 'Starts With':   return val.startsWith(query)
-                case 'Ends With':     return val.endsWith(query)
-                case 'Equals':        return val === query
-                case 'Not Equals':    return val !== query
-                case 'Match Regex': {
-                    try { return new RegExp(rawQuery, 'i').test(String(raw ?? '')) } catch { return false }
-                }
-                case 'Not Match Regex': {
-                    try { return !new RegExp(rawQuery, 'i').test(String(raw ?? '')) } catch { return true }
-                }
-                default: return val.includes(query)
+                case 'Contains':        return val.includes(query)
+                case 'Not Contains':    return !val.includes(query)
+                case 'Starts With':     return val.startsWith(query)
+                case 'Ends With':       return val.endsWith(query)
+                case 'Equals':          return val === query
+                case 'Not Equals':      return val !== query
+                case 'Match Regex':     return compiledRegex ? compiledRegex.test(String(raw ?? '')) : false
+                case 'Not Match Regex': return compiledRegex ? !compiledRegex.test(String(raw ?? '')) : true
+                default:                return val.includes(query)
             }
         }
 
@@ -677,12 +716,24 @@ export const filteredRequests = computed(() => {
 // ============================================================================
 // 6. WATCHERS (Auto-Saving & Python Syncing)
 // ============================================================================
-watch(requests, (newVals) => saveState('requests', newVals.slice(0, MAX_SAVED_REQUESTS)), { deep: true })
+
+// Debounced: don't serialize up to 2000 requests on every tiny property change
+let _saveRequestsTimer = null
+watch(requests, () => {
+    clearTimeout(_saveRequestsTimer)
+    _saveRequestsTimer = setTimeout(() => {
+        saveState('requests', requests.value.slice(0, MAX_SAVED_REQUESTS))
+    }, 1500)
+}, { deep: true })
 watch(pinnedSources, (newVals) => saveState('pinnedSources', newVals), { deep: true })
 watch(isFocusMode, (newVal) => saveState('isFocusMode', newVal))
 watch(activeChips, (newVals) => saveState('activeChips', newVals), { deep: true })
 watch(highlightRules, (val) => { saveState('highlightRules', val); applyAllHighlightRules() }, { deep: true })
 watch(highlightsEnabled, (val) => { saveState('highlightsEnabled', val); applyAllHighlightRules() })
+watch(() => highlightRules.value.length, (n, o) => {
+    if (n === 1 && o === 0) highlightsEnabled.value = true
+    else if (n === 0) highlightsEnabled.value = false
+})
 
 watch(wsMessages, (newVal) => {
     if (wsSaveTimeout) clearTimeout(wsSaveTimeout);
@@ -702,6 +753,11 @@ watch(enableMapLocal, (val) => {
     }
 })
 
+watch(() => mapLocalRules.value.length, (n, o) => {
+    if (n === 1 && o === 0) enableMapLocal.value = true
+    else if (n === 0) enableMapLocal.value = false
+})
+
 watch(mapLocalRules, (newVals) => {
     saveState('mapLocalRules', newVals)
     syncMapLocalRules()
@@ -714,6 +770,11 @@ watch(enableMapRemote, (val) => {
     }
 })
 
+watch(() => mapRemoteRules.value.length, (n, o) => {
+    if (n === 1 && o === 0) enableMapRemote.value = true
+    else if (n === 0) enableMapRemote.value = false
+})
+
 watch(mapRemoteRules, (newVals) => {
     saveState('mapRemoteRules', newVals)
     syncMapRemoteRules()
@@ -724,6 +785,11 @@ watch(breakpointsEnabled, (newVal) => {
     if (wsConnection?.readyState === WebSocket.OPEN) {
         wsConnection.send(JSON.stringify({ type: "TOGGLE_BREAKPOINTS", enabled: newVal }))
     }
+})
+
+watch(() => breakpointRules.value.length, (n, o) => {
+    if (n === 1 && o === 0) breakpointsEnabled.value = true
+    else if (n === 0) breakpointsEnabled.value = false
 })
 
 watch(breakpointRules, (newVals) => {
@@ -745,6 +811,11 @@ watch(disableCache, (newVal) => {
     }
 })
 
+watch(toolbarVisibility, (val) => {
+    saveState('toolbarVisibility', { ...val })
+    window.electronAPI?.toolbarSyncToMain?.({ ...val })
+}, { deep: true })
+
 
 // ============================================================================
 // 7. WEBSOCKET CONNECTION
@@ -762,6 +833,53 @@ export const toggleWgMode = (enabled, port) => {
 export const requestWgConf = () => {
     if (wsConnection?.readyState !== WebSocket.OPEN) return
     wsConnection.send(JSON.stringify({ type: "GET_WG_CLIENT_CONF" }))
+}
+
+// Auto-update state
+export const updateInfo     = ref(null)   // { version, current, download_url, release_url }
+export const updateProgress = ref(null)   // 0-100 during download, null otherwise
+export const updateError    = ref(null)
+
+export const checkForUpdates = () => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    updateError.value = null
+    wsConnection.send(JSON.stringify({ type: "CHECK_FOR_UPDATES" }))
+}
+
+export const applyUpdate = (downloadUrl) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    updateProgress.value = 0
+    wsConnection.send(JSON.stringify({ type: "APPLY_UPDATE", download_url: downloadUrl }))
+}
+
+// ── Batched WS update flusher ─────────────────────────────────────────────────
+// Collects NEW_REQUEST / UPDATE_REQUEST messages and applies them in one batch
+// every 50ms max — reduces filteredRequests recomputes under heavy traffic.
+let _pendingNew = []
+let _pendingUpdate = []
+let _batchTimer = null
+
+function _flushBatch() {
+    _batchTimer = null
+    if (_pendingNew.length) {
+        const toAdd = _pendingNew.reverse()   // newest-first
+        _pendingNew = []
+        toAdd.forEach(r => applyHighlightRules(r))
+        requests.value.unshift(...toAdd)
+        if (requests.value.length > MAX_LIVE_REQUESTS) requests.value.splice(MAX_LIVE_REQUESTS)
+    }
+    if (_pendingUpdate.length) {
+        const updates = _pendingUpdate
+        _pendingUpdate = []
+        updates.forEach(data => {
+            const idx = requests.value.findIndex(r => r.id === data.id)
+            if (idx !== -1) Object.assign(requests.value[idx], data)
+        })
+    }
+}
+
+function _scheduleBatchFlush() {
+    if (!_batchTimer) _batchTimer = setTimeout(_flushBatch, 50)
 }
 
 export const initWebSocket = () => {
@@ -792,18 +910,18 @@ export const initWebSocket = () => {
 
         if (payload.type === "SYSTEM_INFO") {
             proxyHost.value = `${payload.data.ip}:${payload.data.port}`
+            if (payload.data.platform) platform.value = payload.data.platform
         }
         else if (payload.type === "ALERT") {
             alert(payload.message)
         }
         else if (payload.type === "NEW_REQUEST") {
-            applyHighlightRules(payload.data)
-            requests.value.unshift(payload.data)
-            if (requests.value.length > MAX_LIVE_REQUESTS) requests.value.pop()
+            _pendingNew.push(payload.data)
+            _scheduleBatchFlush()
         }
         else if (payload.type === "UPDATE_REQUEST") {
-            const reqIndex = requests.value.findIndex(r => r.id === payload.data.id)
-            if (reqIndex !== -1) Object.assign(requests.value[reqIndex], payload.data)
+            _pendingUpdate.push(payload.data)
+            _scheduleBatchFlush()
         }
         else if (payload.type === "BREAKPOINT_HIT") {
             const newFlow = payload.data
@@ -999,6 +1117,30 @@ export const initWebSocket = () => {
             else if (d.status === 'disabled' || d.status === 'error') wgClientConf.value = ''
             if (d.port) wgPort.value = d.port
             wgError.value = d.error || ''
+        }
+        else if (payload.type === 'UPDATE_AVAILABLE') {
+            updateInfo.value = payload.data
+            updateError.value = null
+        }
+        else if (payload.type === 'UPDATE_PROGRESS') {
+            updateProgress.value = payload.data.pct
+        }
+        else if (payload.type === 'UPDATE_READY') {
+            updateProgress.value = null
+            // Give the helper script a moment to start, then fully quit so it can replace the app
+            setTimeout(() => window.electronAPI?.quit(), 500)
+        }
+        else if (payload.type === 'UPDATE_ERROR') {
+            updateProgress.value = null
+            updateError.value = payload.data.error
+        }
+        else if (payload.type === 'SCRIPTS_LIST') {
+            scripts.value = payload.data.scripts ?? []
+            // Auto-select first if selection is stale or empty
+            const ids = scripts.value.map(s => s.id)
+            if (!selectedScriptId.value || !ids.includes(selectedScriptId.value)) {
+                selectedScriptId.value = ids[0] ?? null
+            }
         }
     }
 

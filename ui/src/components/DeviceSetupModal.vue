@@ -282,11 +282,11 @@ const modalTitle = () => {
       <div class="modal-header">
         <div class="header-left">
           <!-- VPN icon for vpn_mode, Android robot icon otherwise -->
-          <svg v-if="deviceSetupType === 'vpn_mode'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.8">
+          <svg v-if="deviceSetupType === 'vpn_mode'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--setup-success)" stroke-width="1.8">
             <rect x="3" y="11" width="18" height="11" rx="2"/>
             <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
           </svg>
-          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.8">
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8">
             <rect x="5" y="11" width="14" height="10" rx="2"/>
             <path d="M9 11V7a3 3 0 0 1 6 0v4"/>
             <line x1="9" y1="15" x2="9" y2="17"/>
@@ -396,7 +396,7 @@ const modalTitle = () => {
           <!-- Empty state -->
           <div v-else-if="!adbDevicesLoading && adbDevices.length === 0 && !adbDevicesError"
                class="empty-state">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="1.5">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="1.5">
               <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
             </svg>
             <p class="empty-title">No devices detected</p>
@@ -446,7 +446,7 @@ const modalTitle = () => {
           </div>
 
           <div class="prereq-note">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" style="flex-shrink:0;margin-top:1px">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--method-put)" stroke-width="2" style="flex-shrink:0;margin-top:1px">
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
               <line x1="12" y1="9" x2="12" y2="13"/>
               <line x1="12" y1="17" x2="12.01" y2="17"/>
@@ -493,9 +493,9 @@ const modalTitle = () => {
           <!-- Empty state -->
           <div v-else-if="!iosSimulatorsLoading && iosSimulators.length === 0 && !iosSimulatorsError"
                class="empty-state">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="1.5">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="1.5">
               <rect x="5" y="2" width="14" height="20" rx="2"/>
-              <circle cx="12" cy="17" r="1" fill="#333"/>
+              <circle cx="12" cy="17" r="1" fill="var(--border)"/>
             </svg>
             <p class="empty-title">No iOS Simulators found</p>
             <p class="empty-sub">Open Xcode → Window → Devices and Simulators to create one.</p>
@@ -543,7 +543,7 @@ const modalTitle = () => {
         <!-- Install progress pane -->
         <template v-if="activePane === 'progress'">
           <div class="progress-header">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.8" style="flex-shrink:0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" style="flex-shrink:0">
               <rect x="2" y="3" width="20" height="14" rx="2"/>
               <polyline points="8 21 12 17 16 21"/>
               <line x1="12" y1="17" x2="12" y2="21"/>
@@ -560,11 +560,11 @@ const modalTitle = () => {
             <div v-for="step in currentSetupProgress.steps" :key="step.id"
                  class="progress-step" :class="step.status">
               <div class="step-icon">
-                <svg v-if="step.status === 'loading'" class="spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                <svg v-else-if="step.status === 'success'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
-                <svg v-else-if="step.status === 'error'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                <svg v-else-if="step.status === 'skip'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3a3d40" stroke-width="2" stroke-linecap="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
-                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2e3133" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>
+                <svg v-if="step.status === 'loading'" class="spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                <svg v-else-if="step.status === 'success'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--setup-success)" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg v-else-if="step.status === 'error'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--setup-error)" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <svg v-else-if="step.status === 'skip'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="2" stroke-linecap="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>
               </div>
               <span class="step-label">{{ step.label }}</span>
             </div>
@@ -587,7 +587,7 @@ const modalTitle = () => {
         <!-- Revert progress pane -->
         <template v-if="activePane === 'revert'">
           <div class="progress-header">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="1.8" style="flex-shrink:0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--setup-error)" stroke-width="1.8" style="flex-shrink:0">
               <polyline points="1 4 1 10 7 10"/>
               <path d="M3.51 15a9 9 0 1 0 .49-4.95"/>
             </svg>
@@ -603,10 +603,10 @@ const modalTitle = () => {
             <div v-for="step in currentRevertProgress.steps" :key="step.id"
                  class="progress-step" :class="step.status">
               <div class="step-icon">
-                <svg v-if="step.status === 'loading'" class="spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                <svg v-else-if="step.status === 'success'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
-                <svg v-else-if="step.status === 'error'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2e3133" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>
+                <svg v-if="step.status === 'loading'" class="spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                <svg v-else-if="step.status === 'success'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--setup-success)" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg v-else-if="step.status === 'error'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--setup-error)" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>
               </div>
               <span class="step-label">{{ step.label }}</span>
             </div>
@@ -642,7 +642,13 @@ const modalTitle = () => {
                 <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'and_dev_port' }" @click="copyInfo(proxyPort, 'and_dev_port')">{{ proxyPort }}</code></div>
               </div>
             </li>
+            <li>Open the browser on your phone and navigate to <code class="ic">http://mitm.it</code> — tap the <strong>Android</strong> button to download the certificate.</li>
+            <li>Go to <strong>Settings › Security › Encryption &amp; Credentials › Install a certificate › CA Certificate</strong> and install the downloaded file.</li>
           </ol>
+          <div class="alert warning" style="margin-top:14px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            The <code class="ic">mitm.it</code> page only loads when the proxy is running and your phone is routing through it. Make sure OpenProxy is recording before visiting it.
+          </div>
         </div>
 
         <div v-if="deviceSetupType === 'ios_device'">
@@ -656,12 +662,13 @@ const modalTitle = () => {
                 <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'ios_dev_port' }" @click="copyInfo(proxyPort, 'ios_dev_port')">{{ proxyPort }}</code></div>
               </div>
             </li>
-            <li>Go to <strong>Settings › General › VPN &amp; Device Management</strong> and install the profile.</li>
+            <li>Open Safari on your iPhone and go to <code class="ic">http://mitm.it</code> — tap the <strong>iOS</strong> button to download the profile.</li>
+            <li>Go to <strong>Settings › General › VPN &amp; Device Management</strong> and install the downloaded profile.</li>
             <li><strong>Crucial:</strong> <strong>Settings › General › About › Certificate Trust Settings</strong> — toggle mitmproxy <strong>ON</strong>.</li>
           </ol>
           <div class="alert warning" style="margin-top:14px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            Skipping Step 6 causes SSL errors on all HTTPS traffic.
+            Skipping Step 6 causes SSL errors on all HTTPS traffic — the cert must be explicitly trusted after installing.
           </div>
         </div>
 
@@ -705,7 +712,7 @@ const modalTitle = () => {
 
         <!-- Starting spinner -->
         <div v-if="wgStatus === 'starting'" class="wg-starting">
-          <svg class="spinning" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round">
+          <svg class="spinning" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round">
             <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
           </svg>
           <span>Starting WireGuard…</span>
@@ -725,7 +732,7 @@ const modalTitle = () => {
                 <rect x="9" y="9" width="13" height="13" rx="2"/>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
               </svg>
-              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round">
+              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--setup-success)" stroke-width="2.5" stroke-linecap="round">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
               {{ wgCopied ? 'Copied!' : 'Copy' }}
@@ -776,7 +783,7 @@ const modalTitle = () => {
                 <rect x="9" y="9" width="13" height="13" rx="2"/>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
               </svg>
-              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round">
+              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--setup-success)" stroke-width="2.5" stroke-linecap="round">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
               {{ copiedKey === 'nsc' ? 'Copied!' : 'Copy' }}
@@ -801,7 +808,7 @@ const modalTitle = () => {
                 <rect x="9" y="9" width="13" height="13" rx="2"/>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
               </svg>
-              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round">
+              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--setup-success)" stroke-width="2.5" stroke-linecap="round">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
               {{ copiedKey === 'manifest' ? 'Copied!' : 'Copy' }}
@@ -865,7 +872,7 @@ const modalTitle = () => {
                 <div class="info-row"><span class="info-label">Hostname</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'emu_ip' }" @click="copyInfo('10.0.2.2', 'emu_ip')">10.0.2.2</code></div>
                 <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'emu_port' }" @click="copyInfo(proxyPort, 'emu_port')">{{ proxyPort }}</code></div>
               </div>
-              <em style="font-size:11px;color:#555;">The special address <code class="ic">10.0.2.2</code> routes from the emulator to your Mac's localhost.</em>
+              <em style="font-size:11px;color:var(--fg-placeholder);">The special address <code class="ic">10.0.2.2</code> routes from the emulator to your Mac's localhost.</em>
             </li>
             <li>Open the emulator browser and go to <code class="ic">http://mitm.it</code>, then tap the Android certificate download.</li>
             <li>Go to <strong>Settings → Security → Encryption &amp; Credentials → Install a certificate → CA Certificate</strong> and install the downloaded file.</li>
@@ -964,7 +971,7 @@ const modalTitle = () => {
               <button class="copy-btn" :class="{ copied: copiedKey === 'env' }"
                       @click="copyToClipboard(`export http_proxy=http://${proxyIP}:${proxyPort}\nexport https_proxy=http://${proxyIP}:${proxyPort}`, 'env')">
                 <svg v-if="copiedKey !== 'env'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--setup-success)" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
                 {{ copiedKey === 'env' ? 'Copied!' : 'Copy' }}
               </button>
             </div>
@@ -981,7 +988,7 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
               <button class="copy-btn" :class="{ copied: copiedKey === 'curl' }"
                       @click="copyToClipboard(`curl -x http://${proxyIP}:${proxyPort} --cacert ~/.mitmproxy/mitmproxy-ca-cert.pem https://example.com`, 'curl')">
                 <svg v-if="copiedKey !== 'curl'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--setup-success)" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
                 {{ copiedKey === 'curl' ? 'Copied!' : 'Copy' }}
               </button>
             </div>
@@ -1040,14 +1047,14 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
   background: var(--bg-sidebar); flex-shrink: 0;
 }
 .header-left { display: flex; align-items: center; gap: 8px; }
-.modal-header strong { color: #f0f0f0; font-size: 13px; font-weight: 600; }
+.modal-header strong { color: var(--fg-secondary); font-size: 13px; font-weight: 600; }
 .close-btn {
   display: flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; border-radius: 5px;
-  background: none; border: none; color: #555; cursor: pointer;
+  background: none; border: none; color: var(--fg-placeholder); cursor: pointer;
   transition: all 0.15s;
 }
-.close-btn:hover { background: rgba(255,255,255,0.07); color: #aaa; }
+.close-btn:hover { background: rgba(255,255,255,0.07); color: var(--fg-muted); }
 
 /* ── Tab bar ──────────────────────────────────────── */
 .tab-bar {
@@ -1058,42 +1065,42 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .tab-btn {
   display: flex; align-items: center; gap: 6px;
   padding: 5px 10px; font-size: 12px; font-weight: 500;
-  color: #555; background: none; border: none; border-radius: 6px;
+  color: var(--fg-muted); background: none; border: none; border-radius: 6px;
   cursor: pointer; transition: all 0.15s; white-space: nowrap;
 }
 .tab-btn svg { opacity: 0.6; transition: opacity 0.15s; }
-.tab-btn:hover { color: #999; background: rgba(255,255,255,0.04); }
+.tab-btn:hover { color: var(--fg-secondary); background: rgba(255,255,255,0.04); }
 .tab-btn:hover svg { opacity: 0.9; }
-.tab-btn.active { color: #e5e7eb; background: rgba(255,255,255,0.09); }
+.tab-btn.active { color: var(--fg-primary); background: rgba(255,255,255,0.09); }
 .tab-btn.active svg { opacity: 1; }
 
 /* ── Scrollable body ──────────────────────────────── */
 .modal-body {
-  padding: 16px; font-size: 13px; color: #bbb;
+  padding: 16px; font-size: 13px; color: var(--fg-secondary);
   line-height: 1.55; overflow-y: auto; flex: 1;
   text-align: left;
   /* Custom scrollbar */
-  scrollbar-width: thin; scrollbar-color: #2e3133 transparent;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
 }
 .modal-body::-webkit-scrollbar { width: 5px; }
 .modal-body::-webkit-scrollbar-track { background: transparent; }
-.modal-body::-webkit-scrollbar-thumb { background: #2e3133; border-radius: 3px; }
+.modal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
 /* ── Picker ───────────────────────────────────────── */
 .picker-top {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; margin-bottom: 12px;
 }
-.hint { color: #666; font-size: 12px; margin: 0; text-align: left; }
+.hint { color: var(--fg-muted); font-size: 12px; margin: 0; text-align: left; }
 
 .refresh-btn {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 5px 11px; border-radius: 6px; font-size: 12px; font-weight: 500;
-  background: #1e2124; border: 1px solid #2e3133; color: #888;
+  background: var(--bg-card); border: 1px solid var(--border); color: var(--fg-muted);
   cursor: pointer; transition: all 0.15s; flex-shrink: 0;
   white-space: nowrap;
 }
-.refresh-btn:hover:not(:disabled) { background: #252829; color: #ccc; border-color: #3a3d40; }
+.refresh-btn:hover:not(:disabled) { background: var(--bg-active); color: var(--fg-secondary); border-color: var(--border); }
 .refresh-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* ── Device list ──────────────────────────────────── */
@@ -1109,20 +1116,20 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 
 .device-thumb {
   width: 34px; height: 34px; border-radius: 7px;
-  background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.15);
+  background: var(--accent-muted); border: 1px solid rgba(59,130,246,0.15);
   display: flex; align-items: center; justify-content: center;
-  color: #60a5fa; flex-shrink: 0;
+  color: var(--accent); flex-shrink: 0;
 }
 
 .device-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; text-align: left; }
-.device-model { color: #e5e7eb; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.device-serial { color: #4a4e52; font-size: 11px; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.device-model { color: var(--fg-secondary); font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.device-serial { color: var(--fg-muted); font-size: 11px; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .type-badge {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.05em; padding: 2px 7px; border-radius: 10px; flex-shrink: 0;
 }
-.type-badge.emulator { background: rgba(59,130,246,0.1); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2); }
+.type-badge.emulator { background: var(--accent-muted); color: var(--accent); border: 1px solid rgba(59,130,246,0.2); }
 .type-badge.device   { background: rgba(52,211,153,0.08); color: #34d399; border: 1px solid rgba(52,211,153,0.18); }
 .type-badge.offline  { background: rgba(100,100,110,0.12); color: #6b7280; border: 1px solid rgba(100,100,110,0.25); }
 
@@ -1133,65 +1140,65 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
   padding: 4px 9px; border-radius: 5px; font-size: 11px; font-weight: 600;
   cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
 }
-.pill.install { background: rgba(59,130,246,0.13); color: #60a5fa; border-color: rgba(59,130,246,0.22); }
+.pill.install { background: rgba(59,130,246,0.13); color: var(--accent); border-color: rgba(59,130,246,0.22); }
 .pill.install:hover { background: rgba(59,130,246,0.25); }
 .pill.install:disabled { opacity: 0.35; cursor: not-allowed; }
-.pill.revert  { background: rgba(239,68,68,0.09);  color: #f87171; border-color: rgba(239,68,68,0.18); }
+.pill.revert  { background: rgba(239,68,68,0.09);  color: var(--setup-error); border-color: rgba(239,68,68,0.18); }
 .pill.revert:hover  { background: rgba(239,68,68,0.2); }
 
 /* ── Skeleton ─────────────────────────────────────── */
 @keyframes shimmer { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
 .sk {
-  background: linear-gradient(90deg, #1a1c1e 25%, #242729 50%, #1a1c1e 75%);
+  background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-active) 50%, var(--bg-card) 75%);
   background-size: 800px 100%; animation: shimmer 1.4s infinite linear;
 }
 
 /* ── Empty state ──────────────────────────────────── */
-.empty-state { text-align: center; padding: 24px 0; color: #3a3d40; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.empty-title { color: #555; font-size: 13px; font-weight: 500; margin: 6px 0 0; }
-.empty-sub   { font-size: 11.5px; color: #3a3e42; margin: 0; }
-.empty-sub code { color: #4e5256; background: #1a1c1e; padding: 1px 4px; border-radius: 3px; }
+.empty-state { text-align: center; padding: 24px 0; color: var(--fg-placeholder); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.empty-title { color: var(--fg-placeholder); font-size: 13px; font-weight: 500; margin: 6px 0 0; }
+.empty-sub   { font-size: 11.5px; color: var(--fg-placeholder); margin: 0; }
+.empty-sub code { color: var(--fg-muted); background: var(--bg-card); padding: 1px 4px; border-radius: 3px; }
 
 /* ── Prereq note ──────────────────────────────────── */
 .prereq-note {
   display: flex; align-items: flex-start; gap: 7px;
-  font-size: 11.5px; color: #4a4e52; line-height: 1.5;
-  border-top: 1px solid #1a1c1e; padding-top: 10px; margin-top: 6px;
+  font-size: 11.5px; color: var(--fg-muted); line-height: 1.5;
+  border-top: 1px solid var(--border-subtle); padding-top: 10px; margin-top: 6px;
   text-align: left;
 }
-.prereq-note strong { color: #666; }
+.prereq-note strong { color: var(--fg-muted); }
 
 /* macOS proxy toggle row */
 .proxy-toggle-row {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  border-top: 1px solid #1a1c1e; padding-top: 10px; margin-top: 6px;
+  border-top: 1px solid var(--border-subtle); padding-top: 10px; margin-top: 6px;
 }
 .proxy-toggle-info {
   display: flex; align-items: flex-start; gap: 7px;
-  font-size: 11.5px; color: #4a4e52; line-height: 1.5; flex: 1;
+  font-size: 11.5px; color: var(--fg-muted); line-height: 1.5; flex: 1;
 }
 .proxy-toggle-actions { display: flex; gap: 6px; flex-shrink: 0; }
-.proxy-on  { color: #4ade80; }
-.proxy-off { color: #6b7280; }
-.proxy-services { color: #6b7280; font-size: 10.5px; }
+.proxy-on  { color: var(--setup-success); }
+.proxy-off { color: var(--fg-muted); }
+.proxy-services { color: var(--fg-muted); font-size: 10.5px; }
 
 /* ── Progress ─────────────────────────────────────── */
 .progress-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.progress-title  { color: #f0f0f0; font-size: 14px; font-weight: 600; text-align: left; }
-.progress-sub    { color: #555; font-size: 11px; margin-top: 2px; text-align: left; }
-.progress-sub code { color: #666; font-family: monospace; }
+.progress-title  { color: var(--fg-secondary); font-size: 14px; font-weight: 600; text-align: left; }
+.progress-sub    { color: var(--fg-placeholder); font-size: 11px; margin-top: 2px; text-align: left; }
+.progress-sub code { color: var(--fg-muted); font-family: monospace; }
 
 .progress-steps { display: flex; flex-direction: column; gap: 5px; }
 
 .progress-step {
   display: flex; align-items: center; gap: 10px;
   padding: 9px 12px; border-radius: 7px;
-  border: 1px solid #1a1c1e; font-size: 13px; color: #555;
+  border: 1px solid var(--border-subtle); font-size: 13px; color: var(--fg-placeholder);
   transition: all 0.22s; text-align: left;
 }
-.progress-step.loading { border-color: rgba(59,130,246,0.3); color: #e5e7eb; background: rgba(59,130,246,0.06); }
+.progress-step.loading { border-color: var(--accent-border); color: #e5e7eb; background: rgba(59,130,246,0.06); }
 .progress-step.success { border-color: rgba(52,211,153,0.22); color: #34d399; background: rgba(52,211,153,0.05); }
-.progress-step.error   { border-color: rgba(239,68,68,0.28);  color: #f87171; background: rgba(239,68,68,0.06); }
+.progress-step.error   { border-color: rgba(239,68,68,0.28);  color: var(--setup-error); background: rgba(239,68,68,0.06); }
 .progress-step.skip    { opacity: 0.32; }
 
 .step-icon  { width: 18px; display: flex; justify-content: center; flex-shrink: 0; }
@@ -1210,20 +1217,20 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 /* ── Manual instructions ──────────────────────────── */
 .instruction-list {
   padding-left: 20px; display: flex; flex-direction: column;
-  gap: 10px; color: #999; margin: 0; text-align: left;
+  gap: 10px; color: var(--fg-muted); margin: 0; text-align: left;
 }
 .instruction-list li { padding-left: 4px; }
-.instruction-list strong { color: #c0c0c0; }
+.instruction-list strong { color: var(--fg-secondary); }
 
 .info-box {
   margin-top: 8px; padding: 9px 12px; background: rgba(0,0,0,0.2);
-  border-radius: 6px; border: 1px solid #222528;
+  border-radius: 6px; border: 1px solid var(--border);
   display: flex; flex-direction: column; gap: 6px;
 }
 .info-row { display: flex; align-items: center; gap: 8px; }
-.info-label { color: #4a4e52; font-size: 11px; width: 60px; flex-shrink: 0; text-align: left; }
+.info-label { color: var(--fg-muted); font-size: 11px; width: 60px; flex-shrink: 0; text-align: left; }
 .info-val {
-  background: rgba(59,130,246,0.1); color: #60a5fa;
+  background: var(--accent-muted); color: var(--accent);
   border: 1px solid rgba(59,130,246,0.2);
   padding: 2px 8px; border-radius: 4px; font-size: 13px;
   font-weight: 700; font-family: monospace;
@@ -1232,22 +1239,22 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .info-val.copyable:hover { background: rgba(59,130,246,0.2); }
 .info-val.copied { background: rgba(52,211,153,0.12) !important; color: #34d399 !important; border-color: rgba(52,211,153,0.3) !important; }
 .ic {
-  background: #1a1c1e; color: #7a8088; padding: 1px 5px;
+  background: var(--bg-card); color: var(--fg-muted); padding: 1px 5px;
   border-radius: 3px; font-family: monospace; font-size: 11.5px;
-  border: 1px solid #252729;
+  border: 1px solid var(--border-subtle);
 }
 
 /* ── Config tab ───────────────────────────────────── */
 .config-body { gap: 0; }
 
 .config-intro {
-  font-size: 12.5px; color: #777; line-height: 1.65;
+  font-size: 12.5px; color: var(--fg-muted); line-height: 1.65;
   margin: 0 0 16px; text-align: left;
 }
-.config-intro strong { color: #aaa; }
+.config-intro strong { color: var(--fg-muted); }
 
 .code-card {
-  border: 1px solid #1e2124; border-radius: 8px;
+  border: 1px solid var(--border); border-radius: 8px;
   overflow: hidden; margin-bottom: 14px;
 }
 
@@ -1255,48 +1262,48 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
   display: flex; align-items: flex-start; gap: 10px;
   padding: 10px 13px;
   background: rgba(255,255,255,0.02);
-  border-bottom: 1px solid #1e2124;
+  border-bottom: 1px solid var(--border);
 }
 
 .step-num {
   width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
-  background: rgba(59,130,246,0.16); color: #60a5fa;
+  background: rgba(59,130,246,0.16); color: var(--accent);
   font-size: 11px; font-weight: 700; margin-top: 1px;
   display: flex; align-items: center; justify-content: center;
 }
 
 .code-card-meta { flex: 1; min-width: 0; text-align: left; }
-.code-card-title { color: #ddd; font-size: 12.5px; font-weight: 600; margin-bottom: 2px; }
-.code-card-sub   { color: #555; font-size: 11px; }
+.code-card-title { color: var(--fg-secondary); font-size: 12.5px; font-weight: 600; margin-bottom: 2px; }
+.code-card-sub   { color: var(--fg-placeholder); font-size: 11px; }
 
 .filepath {
   font-family: monospace; font-size: 11.5px;
   background: rgba(255,255,255,0.06); padding: 1px 5px;
-  border-radius: 3px; color: #9ca3af;
+  border-radius: 3px; color: var(--fg-muted);
 }
 
 .copy-btn {
   display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
   padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600;
   cursor: pointer; transition: all 0.15s; white-space: nowrap;
-  background: rgba(255,255,255,0.04); border: 1px solid #2a2d30; color: #777;
+  background: rgba(255,255,255,0.04); border: 1px solid #2a2d30; color: var(--fg-muted);
 }
-.copy-btn:hover { background: rgba(255,255,255,0.08); color: #bbb; }
+.copy-btn:hover { background: var(--surface-hover-strong); color: var(--fg-secondary); }
 .copy-btn.copied { color: #34d399; border-color: rgba(52,211,153,0.28); background: rgba(52,211,153,0.06); }
 
 /* Scrollable code block */
 .code-scroll {
   overflow-x: auto; overflow-y: auto;
   max-height: 260px;
-  scrollbar-width: thin; scrollbar-color: #2a2d30 transparent;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
 }
 .code-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
 .code-scroll::-webkit-scrollbar-track { background: transparent; }
-.code-scroll::-webkit-scrollbar-thumb { background: #2a2d30; border-radius: 3px; }
+.code-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
 .code-pre {
   margin: 0; padding: 13px 15px;
-  background: #0c0e0f;
+  background: var(--bg-deepest);
   font-family: 'SF Mono', 'Fira Code', ui-monospace, 'Cascadia Code', Consolas, monospace;
   font-size: 12px; line-height: 1.7;
   white-space: pre; tab-size: 4;
@@ -1306,22 +1313,22 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 }
 
 /* XML syntax token colours */
-:deep(.xt-comment) { color: #4e6a4e; font-style: italic; }
-:deep(.xt-tag)     { color: #7dd3fc; }   /* light blue — tag names */
-:deep(.xt-attr)    { color: #93c5fd; }   /* softer blue — attribute names */
-:deep(.xt-attrval) { color: #86efac; }   /* green — attribute values */
-:deep(.xt-punct)   { color: #6b7280; }   /* grey — < > / */
-:deep(.xt-decl)    { color: #a78bfa; }   /* purple — <?xml */
+:deep(.xt-comment) { color: var(--syntax-green); font-style: italic; }
+:deep(.xt-tag)     { color: var(--syntax-cyan); }   /* light blue — tag names */
+:deep(.xt-attr)    { color: var(--accent); }   /* softer blue — attribute names */
+:deep(.xt-attrval) { color: var(--syntax-green); }   /* green — attribute values */
+:deep(.xt-punct)   { color: var(--fg-muted); }   /* grey — < > / */
+:deep(.xt-decl)    { color: var(--syntax-purple); }   /* purple — <?xml */
 
 /* ── Note cards ───────────────────────────────────── */
 .note-card {
-  font-size: 12px; color: #4a4e52; line-height: 1.6; text-align: left;
+  font-size: 12px; color: var(--fg-muted); line-height: 1.6; text-align: left;
   padding: 9px 12px; background: rgba(255,255,255,0.015);
-  border: 1px solid #1a1c1e; border-radius: 6px;
+  border: 1px solid var(--border-subtle); border-radius: 6px;
 }
-.note-label { font-size: 11px; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px; }
+.note-label { font-size: 11px; font-weight: 700; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px; }
 .note-card p { margin: 0; }
-.note-card .ic { color: #5a6068; }
+.note-card .ic { color: var(--fg-muted); }
 
 /* ── Footer ───────────────────────────────────────── */
 .modal-footer {
@@ -1331,13 +1338,13 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 }
 .footer-btn {
   display: inline-flex; align-items: center; gap: 5px;
-  background: #252829; border: 1px solid #333638; color: #bbb;
+  background: var(--bg-active); border: 1px solid var(--border); color: var(--fg-secondary);
   border-radius: 5px; padding: 5px 14px; font-size: 12px;
   cursor: pointer; transition: all 0.15s;
 }
-.footer-btn:hover { background: #2e3133; color: #e0e0e0; }
-.footer-btn.ghost { background: transparent; border-color: #252829; color: #777; }
-.footer-btn.ghost:hover { background: rgba(255,255,255,0.04); color: #aaa; }
+.footer-btn:hover { background: var(--border); color: var(--fg-secondary); }
+.footer-btn.ghost { background: transparent; border-color: var(--bg-active); color: var(--fg-muted); }
+.footer-btn.ghost:hover { background: rgba(255,255,255,0.04); color: var(--fg-muted); }
 
 /* ── Spinner ──────────────────────────────────────── */
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -1352,13 +1359,13 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
   padding: 2px 7px; border-radius: 10px; margin-left: 8px;
 }
 .wg-status-pill.pill-ready   { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.25); }
-.wg-status-pill.pill-starting { background: rgba(96,165,250,0.12); color: #60a5fa; border: 1px solid rgba(96,165,250,0.25); }
+.wg-status-pill.pill-starting { background: rgba(96,165,250,0.12); color: var(--accent); border: 1px solid rgba(96,165,250,0.25); }
 .wg-status-pill.pill-off     { background: rgba(100,110,115,0.12); color: #6b7280; border: 1px solid #2a2d30; }
-.wg-status-pill.pill-error   { background: rgba(248,113,113,0.12); color: #f87171; border: 1px solid rgba(248,113,113,0.25); }
+.wg-status-pill.pill-error   { background: rgba(248,113,113,0.12); color: var(--setup-error); border: 1px solid rgba(248,113,113,0.25); }
 
 .tab-vpn-dot {
   display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-  background: #34d399; margin-left: 5px; flex-shrink: 0;
+  background: var(--setup-success); margin-left: 5px; flex-shrink: 0;
 }
 
 .wg-toggle-row {
@@ -1367,8 +1374,8 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
   border-radius: 7px; padding: 10px 13px;
 }
 .wg-toggle-info { display: flex; flex-direction: column; gap: 2px; }
-.wg-toggle-title { font-size: 13px; font-weight: 600; color: #d0d4d8; }
-.wg-toggle-sub   { font-size: 11px; color: #5a6068; }
+.wg-toggle-title { font-size: 13px; font-weight: 600; color: var(--fg-secondary); }
+.wg-toggle-sub   { font-size: 11px; color: var(--fg-muted); }
 
 .wg-toggle-btn {
   display: flex; align-items: center; gap: 7px;
@@ -1377,61 +1384,61 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .wg-toggle-btn:disabled { opacity: 0.5; cursor: default; }
 .wg-toggle-track {
   width: 34px; height: 18px; border-radius: 9px;
-  background: #2a2d30; border: 1px solid #333638;
+  background: var(--bg-active); border: 1px solid var(--border);
   position: relative; transition: background 0.2s;
   display: flex; align-items: center; padding: 2px;
 }
-.wg-toggle-btn.active .wg-toggle-track  { background: #2a5c44; border-color: #34d399; }
-.wg-toggle-btn.loading .wg-toggle-track { background: #1e3357; border-color: #60a5fa; }
+.wg-toggle-btn.active .wg-toggle-track  { background: var(--success-muted); border-color: var(--setup-success); }
+.wg-toggle-btn.loading .wg-toggle-track { background: var(--accent-muted); border-color: var(--accent); }
 .wg-toggle-thumb {
   width: 12px; height: 12px; border-radius: 50%;
-  background: #555; transition: transform 0.2s, background 0.2s;
+  background: var(--fg-muted); transition: transform 0.2s, background 0.2s;
 }
-.wg-toggle-btn.active  .wg-toggle-thumb { transform: translateX(16px); background: #34d399; }
-.wg-toggle-btn.loading .wg-toggle-thumb { transform: translateX(8px);  background: #60a5fa; }
-.wg-toggle-label { font-size: 12px; color: #777; min-width: 22px; }
-.wg-toggle-btn.active .wg-toggle-label { color: #34d399; }
+.wg-toggle-btn.active  .wg-toggle-thumb { transform: translateX(16px); background: var(--setup-success); }
+.wg-toggle-btn.loading .wg-toggle-thumb { transform: translateX(8px);  background: var(--accent); }
+.wg-toggle-label { font-size: 12px; color: var(--fg-muted); min-width: 22px; }
+.wg-toggle-btn.active .wg-toggle-label { color: var(--setup-success); }
 
 .wg-port-row {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 13px; background: rgba(255,255,255,0.02);
-  border: 1px solid #1e2124; border-radius: 7px;
+  border: 1px solid var(--border); border-radius: 7px;
 }
-.wg-port-label { font-size: 12px; color: #6b7280; flex: 1; }
+.wg-port-label { font-size: 12px; color: var(--fg-muted); flex: 1; }
 .wg-port-input {
-  width: 80px; background: #1a1c1e; border: 1px solid #2e3133;
-  color: #ccc; font-size: 12px; padding: 4px 8px; border-radius: 5px;
+  width: 80px; background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--fg-secondary); font-size: 12px; padding: 4px 8px; border-radius: 5px;
   text-align: center;
 }
-.wg-port-input:focus { outline: none; border-color: #3d4147; }
+.wg-port-input:focus { outline: none; border-color: var(--accent); }
 
 .wg-starting {
   display: flex; align-items: center; gap: 9px;
-  font-size: 13px; color: #60a5fa; padding: 8px 0;
+  font-size: 13px; color: var(--accent); padding: 8px 0;
 }
 
 .wg-qr-section {
   display: flex; flex-direction: column; align-items: center; gap: 8px;
-  padding: 16px; background: rgba(255,255,255,0.025); border: 1px solid #1e2124; border-radius: 8px;
+  padding: 16px; background: rgba(255,255,255,0.025); border: 1px solid var(--border); border-radius: 8px;
 }
 .wg-qr-canvas { width: 180px; height: 180px; image-rendering: pixelated; }
-.wg-qr-hint   { font-size: 11px; color: #5a6068; }
+.wg-qr-hint   { font-size: 11px; color: var(--fg-muted); }
 
 .wg-conf-header {
   display: flex; align-items: center; justify-content: space-between;
-  font-size: 11px; color: #6b7280; font-family: monospace;
+  font-size: 11px; color: var(--fg-muted); font-family: monospace;
   padding: 0 2px;
 }
 .wg-conf-pre {
-  background: #0f1011; border: 1px solid #1e2124; border-radius: 6px;
-  padding: 10px 12px; font-size: 11px; color: #a0c4a8; font-family: monospace;
+  background: var(--bg-deepest); border: 1px solid var(--border); border-radius: 6px;
+  padding: 10px 12px; font-size: 11px; color: var(--setup-success); font-family: monospace;
   white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow-y: auto;
   margin: 0;
 }
 
 /* ── Alert variants ───────────────────────────────── */
 .alert.info {
-  background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.2); color: #93c5fd;
+  background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.2); color: var(--accent);
 }
 
 </style>

@@ -1,0 +1,28 @@
+{
+  "id": "crimson",
+  "name": "Crimson",
+  "dark": true,
+  "variables": {
+    "--bg-deepest": "#0d0507",
+    "--bg-deep": "#110609",
+    "--bg-input": "#180a0d",
+    "--bg-modal": "#1e0d11",
+    "--bg-main": "#1a0c10",
+    "--bg-sidebar": "#200f13",
+    "--bg-active": "#2b141a",
+    "--bg-card": "#1d0e12",
+    "--border": "#3a1520",
+    "--border-subtle": "rgba(255,100,100,0.08)",
+    "--accent": "#e11d48",
+    "--accent-hover": "#be123c",
+    "--accent-muted": "rgba(225,29,72,0.15)",
+    "--accent-border": "rgba(225,29,72,0.35)",
+    "--fg-muted": "#a07080",
+    "--row-selected": "#38101c",
+    "--focus-ring": "0 0 0 2px rgba(225,29,72,0.25)",
+    "--selection-bg": "rgba(225,29,72,0.2)",
+    "--scrollbar-thumb": "rgba(255,100,100,0.15)",
+    "--surface-hover": "rgba(255,255,255,0.04)",
+    "--surface-hover-strong": "rgba(255,255,255,0.08)"
+  }
+}

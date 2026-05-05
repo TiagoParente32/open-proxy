@@ -6,7 +6,7 @@ import { python } from '@codemirror/lang-python'
 import { javascript } from '@codemirror/lang-javascript'
 import { go } from '@codemirror/lang-go'
 import { rust } from '@codemirror/lang-rust'
-import { oneDark } from '@codemirror/theme-one-dark'
+import { cmTheme } from '../composables/useTheme'
 import { EditorView, keymap } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 
@@ -22,12 +22,12 @@ const isWebSocket = computed(() => {
              selectedRequest.value.url.startsWith('ws://') || 
              selectedRequest.value.url.startsWith('wss://');
     })
-const extensions = [
+const extensions = computed(() => [
   json(), 
-  oneDark, 
+  ...cmTheme.value, 
   EditorView.lineWrapping, 
   EditorState.readOnly.of(true)
-]
+])
 
 const formatJson = (str) => {
   if (!str) return '// No body data'
@@ -35,8 +35,8 @@ const formatJson = (str) => {
 }
 
 const getMethodColor = (method) => {
-  const colors = { GET: '#3b82f6', POST: '#10b981', PUT: '#f59e0b', DELETE: '#ef4444', OPTIONS: '#8b5cf6' }
-  return colors[method] || '#8b949e'
+  const colors = { GET: 'var(--method-get)', POST: 'var(--method-post)', PUT: 'var(--method-put)', DELETE: 'var(--method-delete)', OPTIONS: 'var(--method-other)' }
+  return colors[method] || 'var(--fg-muted)'
 }
 
 // --- CODE GENERATION ENGINE ---
@@ -46,7 +46,7 @@ const copyLabel = ref('Copy')
 
 const dynamicCodeExtensions = computed(() => {
   const base = [
-    oneDark, 
+    ...cmTheme.value, 
     EditorView.lineWrapping, 
     EditorState.readOnly.of(true)
   ]
@@ -220,7 +220,7 @@ const getHexRows = (req, type) => {
               <div class="inspector-content">
                 <table v-if="activeReqTab === 'Header'" class="kv-table"><tr v-for="(value, key) in selectedRequest.req_headers" :key="key"><td class="kv-key">{{ key }}</td><td class="kv-value">{{ value }}</td></tr></table>
                 
-                <div v-if="activeReqTab === 'Body'" style="height: 100%; display: flex; justify-content: center; align-items: center; background: #111;">
+                <div v-if="activeReqTab === 'Body'" style="height: 100%; display: flex; justify-content: center; align-items: center; background: var(--bg-deepest);">
                   <img v-if="selectedRequest.req_is_image" :src="selectedRequest.req_body" style="max-width: 100%; max-height: 100%; object-fit: contain; padding: 16px; box-sizing: border-box;" />
                   <CodeMirrorEditor v-else :model-value="formatJson(selectedRequest.req_body)" :extensions="extensions" :readonly="true" style="height: 100%; width: 100%;" />
                 </div>
@@ -238,7 +238,7 @@ const getHexRows = (req, type) => {
                     </div>
                     <button class="copy-btn" @click="copyCode">{{ copyLabel }}</button>
                   </div>
-                  <div style="flex: 1; overflow: hidden; background: #111;">
+                  <div style="flex: 1; overflow: hidden; background: var(--bg-deepest);">
                      <CodeMirrorEditor :model-value="generatedCode" :extensions="dynamicCodeExtensions" :readonly="true" style="height: 100%; width: 100%;" />
                   </div>
                 </div>
@@ -279,7 +279,7 @@ const getHexRows = (req, type) => {
               <div class="inspector-content">
                 <table v-if="activeResTab === 'Header'" class="kv-table"><tr v-for="(value, key) in selectedRequest.res_headers" :key="key"><td class="kv-key">{{ key }}</td><td class="kv-value">{{ value }}</td></tr></table>
                 
-                <div v-if="activeResTab === 'Body'" style="height: 100%; display: flex; justify-content: center; align-items: center; background: #111;">
+                <div v-if="activeResTab === 'Body'" style="height: 100%; display: flex; justify-content: center; align-items: center; background: var(--bg-deepest);">
                   <img v-if="selectedRequest.res_is_image" :src="selectedRequest.res_body" style="max-width: 100%; max-height: 100%; object-fit: contain; padding: 16px; box-sizing: border-box;" />
                   <CodeMirrorEditor v-else :model-value="formatJson(selectedRequest.res_body)" :extensions="extensions" :readonly="true" style="height: 100%; width: 100%;" />
                 </div>
@@ -324,18 +324,18 @@ const getHexRows = (req, type) => {
 .detail-container { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 .inspector-panel { display: flex; flex-direction: column; height: 100%; background: var(--bg-main); }
 .inspector-toolbar { display: flex; align-items: center; gap: 16px; padding: 0 12px; background-color: var(--bg-sidebar); border-bottom: 1px solid var(--border); height: 32px; flex-shrink: 0; }
-.panel-title { font-size: 12px; font-weight: 700; color: #ccc; }
-.panel-tabs { display: flex; gap: 12px; font-size: 11px; font-weight: 500; color: #888; height: 100%; }
+.panel-title { font-size: 12px; font-weight: 700; color: var(--fg-secondary); }
+.panel-tabs { display: flex; gap: 12px; font-size: 11px; font-weight: 500; color: var(--fg-muted); height: 100%; }
 .panel-tab { cursor: pointer; display: flex; align-items: center; border-bottom: 2px solid transparent; transition: color 0.2s; }
-.panel-tab:hover { color: #ccc; }
-.panel-tab.active { color: #3b82f6; border-bottom-color: #3b82f6; }
+.panel-tab:hover { color: var(--fg-secondary); }
+.panel-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
 .inspector-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
 .kv-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
-.kv-table tr { border-bottom: 1px solid #222; }
+.kv-table tr { border-bottom: 1px solid var(--border-subtle); }
 .kv-table td { padding: 8px 16px !important; vertical-align: top; word-wrap: break-word; }
-.kv-key { width: 30%; color: #8b949e; font-weight: 500; text-align: left; border-right: 1px solid var(--border); }
-.kv-value { width: 70%; color: #e1e4e8; font-family: 'Consolas', monospace; text-align: left; }
+.kv-key { width: 30%; color: var(--fg-muted); font-weight: 500; text-align: left; border-right: 1px solid var(--border); }
+.kv-value { width: 70%; color: var(--fg-secondary); font-family: 'Consolas', monospace; text-align: left; }
 
 .inspector-url-bar {
   display: flex; align-items: center; gap: 12px;
@@ -345,7 +345,7 @@ const getHexRows = (req, type) => {
 .url-text { 
   font-family: monospace; 
   font-size: 12px; 
-  color: #ccc; 
+  color: var(--fg-secondary); 
   user-select: text;
   white-space: nowrap;
   overflow: hidden;
@@ -358,14 +358,14 @@ const getHexRows = (req, type) => {
 
 /* --- Code Tab Styles --- */
 .code-tab-container { height: 100%; display: flex; flex-direction: column; }
-.code-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: #1e1e1f; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.code-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: var(--bg-main); border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .lang-pills { display: flex; gap: 6px; overflow-x: auto; }
 .lang-pills::-webkit-scrollbar { display: none; }
-.lang-pill { background: transparent; border: 1px solid transparent; color: #8b949e; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.2s; white-space: nowrap;}
-.lang-pill:hover { color: #ccc; background: rgba(255, 255, 255, 0.05); }
-.lang-pill.active { background: #2a2d2e; color: #fff; border-color: #444; }
-.copy-btn { background: #3b82f6; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.2s; min-width: 60px; text-align: center; flex-shrink: 0; }
-.copy-btn:hover { background: #2563eb; }
+.lang-pill { background: transparent; border: 1px solid transparent; color: var(--fg-muted); padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.2s; white-space: nowrap;}
+.lang-pill:hover { color: var(--fg-secondary); background: var(--surface-hover); }
+.lang-pill.active { background: var(--bg-active); color: var(--fg-primary); border-color: var(--border); }
+.copy-btn { background: var(--accent); color: var(--fg-primary); border: none; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.2s; min-width: 60px; text-align: center; flex-shrink: 0; }
+.copy-btn:hover { background: var(--accent-hover); }
 
 
 
@@ -376,7 +376,7 @@ const getHexRows = (req, type) => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background-color: #0d0d0e;
+  background-color: var(--bg-deepest);
   font-family: 'Consolas', monospace;
   font-size: 11px;
 }
@@ -384,9 +384,9 @@ const getHexRows = (req, type) => {
 .hex-header {
   display: flex;
   padding: 6px 16px;
-  background-color: #1a1a1b;
-  border-bottom: 1px solid #333;
-  color: #8b949e;
+  background-color: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-muted);
   font-weight: bold;
   position: sticky;
   top: 0;
@@ -405,13 +405,13 @@ const getHexRows = (req, type) => {
   cursor: crosshair;
 }
 .hex-row:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--surface-hover);
 }
 
 /* Column 1: Offset */
 .hex-offset {
   width: 70px;
-  color: #6e7681;
+  color: var(--fg-muted);
   flex-shrink: 0;
 }
 
@@ -420,14 +420,14 @@ const getHexRows = (req, type) => {
   display: flex;
   gap: 6px;
   flex: 1;
-  color: #e1e4e8;
+  color: var(--fg-secondary);
 }
 .hex-bytes span {
   width: 16px;
   text-align: center;
 }
 .hex-bytes span.empty {
-  color: #333; /* Faded out dashed lines for empty bytes */
+  color: var(--border); /* Faded out dashed lines for empty bytes */
 }
 /* Creates the classic 8-byte visual gap in the middle */
 .hex-bytes span:nth-child(8) {
@@ -437,7 +437,7 @@ const getHexRows = (req, type) => {
 /* Column 3: Decoded ASCII */
 .hex-ascii {
   width: 130px;
-  color: #a1aab3;
+  color: var(--fg-muted);
   white-space: pre;
   flex-shrink: 0;
   text-align: right;
@@ -446,10 +446,10 @@ const getHexRows = (req, type) => {
 
 /* Truncation Warning Banner */
 .hex-warning {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
+  background: var(--warning-muted);
+  color: var(--method-put);
   padding: 6px 16px;
-  border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+  border-bottom: 1px solid rgba(245,158,11,0.2);
   margin-bottom: 8px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 11px;
@@ -471,14 +471,14 @@ const getHexRows = (req, type) => {
   gap: 8px !important;
   font-family: inherit !important;
   flex-wrap: nowrap !important;
-  color: #ccc !important;
+  color: var(--fg-secondary) !important;
 }
 
 /* The Search Input Field */
 :deep(.cm-panel.cm-search .cm-textfield) {
-  background-color: #111 !important;
+  background-color: var(--bg-deepest) !important;
   border: 1px solid var(--border) !important;
-  color: #fff !important;
+  color: var(--fg-primary) !important;
   border-radius: 4px !important;
   padding: 0 8px !important;
   height: 22px !important; /* Exact same height as your toolbar pills! */
@@ -490,8 +490,8 @@ const getHexRows = (req, type) => {
   transition: all 0.2s ease !important;
 }
 :deep(.cm-panel.cm-search .cm-textfield:focus) {
-  border-color: #3b82f6 !important;
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3), inset 0 1px 2px rgba(0,0,0,0.3) !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px rgba(59,130,246,0.3), inset 0 1px 2px rgba(0,0,0,0.3) !important;
 }
 
 /* The Next / Prev / All Buttons (Mimicking .secondary-pill) */
@@ -501,9 +501,9 @@ const getHexRows = (req, type) => {
   justify-content: center !important;
   height: 22px !important;
   padding: 0 10px !important;
-  background: #212324 !important;
-  border: 1px solid #303335 !important;
-  color: #a1aab3 !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--fg-muted) !important;
   border-radius: 4px !important;
   cursor: pointer !important;
   font-size: 10px !important;
@@ -513,12 +513,12 @@ const getHexRows = (req, type) => {
   background-image: none !important; /* Kills default CM6 gradient */
 }
 :deep(.cm-panel.cm-search .cm-button:hover) {
-  background: #2a2d2e !important;
-  color: #fff !important;
-  border-color: #404446 !important;
+  background: var(--bg-active) !important;
+  color: var(--fg-primary) !important;
+  border-color: var(--border) !important;
 }
 :deep(.cm-panel.cm-search .cm-button:active) {
-  background: #1a1c1d !important;
+  background: var(--bg-card) !important;
 }
 
 /* The Checkboxes (Match Case, Regex) */
@@ -527,16 +527,16 @@ const getHexRows = (req, type) => {
   align-items: center !important;
   gap: 4px !important;
   font-size: 10px !important;
-  color: #888 !important;
+  color: var(--fg-muted) !important;
   cursor: pointer !important;
   margin-left: 4px !important;
 }
 :deep(.cm-panel.cm-search label:hover) {
-  color: #ccc !important;
+  color: var(--fg-secondary) !important;
 }
 :deep(.cm-panel.cm-search input[type="checkbox"]) {
   margin: 0 !important;
-  accent-color: #3b82f6 !important;
+  accent-color: var(--accent) !important;
   cursor: pointer !important;
   width: 12px !important;
   height: 12px !important;
@@ -547,7 +547,7 @@ const getHexRows = (req, type) => {
   margin-left: auto !important; /* Pushes it completely to the right */
   background: transparent !important;
   border: none !important;
-  color: #666 !important;
+  color: var(--fg-muted) !important;
   font-size: 16px !important;
   padding: 0 4px !important;
   cursor: pointer !important;
@@ -556,7 +556,7 @@ const getHexRows = (req, type) => {
   justify-content: center !important;
 }
 :deep(.cm-panel.cm-search button[name="close"]:hover) {
-  color: #ef4444 !important;
+  color: var(--error) !important;
   background: transparent !important;
   border-color: transparent !important;
 }

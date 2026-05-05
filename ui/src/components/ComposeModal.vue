@@ -1,13 +1,13 @@
 <script setup>
 import { Codemirror } from 'vue-codemirror'
 import { json } from '@codemirror/lang-json'
-import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView } from '@codemirror/view'
 import { showComposeModal, composeData, sendComposedRequest, isComposeEditMode } from '../store.js'
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import CodeMirrorEditor from './CodeMirrorEditor.vue'
+import { cmTheme } from '../composables/useTheme'
 
-const extensions = [json(), oneDark, EditorView.lineWrapping]
+const extensions = computed(() => [json(), ...cmTheme.value, EditorView.lineWrapping])
 
 const activeTab = ref('Body')
 const showMethodMenu = ref(false)
@@ -176,7 +176,7 @@ const removeParamRow = (index) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--overlay-light);
   z-index: 99999;
   display: flex;
   justify-content: center;
@@ -185,14 +185,14 @@ const removeParamRow = (index) => {
 }
 
 .pm-modal {
-  background: #1e1e1e;
+  background: var(--bg-main);
   border-radius: 8px;
-  border: 1px solid #333;
+  border: 1px solid var(--border);
   width: 850px;
   height: 650px;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 
@@ -202,13 +202,13 @@ const removeParamRow = (index) => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 20px;
-  background: #252525;
-  border-bottom: 1px solid #333;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .pm-title {
-  color: #e0e0e0;
+  color: var(--fg-secondary);
   font-size: 13px;
   font-weight: 600;
 }
@@ -216,14 +216,14 @@ const removeParamRow = (index) => {
 .pm-close-btn {
   background: transparent;
   border: none;
-  color: #888;
+  color: var(--fg-muted);
   font-size: 16px;
   cursor: pointer;
   transition: color 0.2s;
 }
 
 .pm-close-btn:hover {
-  color: #ef4444;
+  color: var(--error);
 }
 
 /* OMNIBAR */
@@ -238,27 +238,27 @@ const removeParamRow = (index) => {
   display: flex;
   flex: 1;
   align-items: center;
-  background: #121212;
-  border: 1px solid #444;
+  background: var(--bg-deepest);
+  border: 1px solid var(--border);
   border-radius: 6px;
   transition: border-color 0.2s;
 }
 
 .pm-omnibar:focus-within {
-  border-color: #3b82f6;
+  border-color: var(--accent);
 }
 
 .pm-divider {
   width: 1px;
   height: 24px;
-  background: #333;
+  background: var(--border);
 }
 
 .pm-url-input {
   flex: 1;
   background: transparent;
   border: none;
-  color: #e0e0e0;
+  color: var(--fg-secondary);
   padding: 10px 12px;
   font-size: 13px;
   outline: none;
@@ -266,7 +266,7 @@ const removeParamRow = (index) => {
 }
 
 .pm-send-btn {
-  background: #3b82f6;
+  background: var(--accent);
   color: white;
   border: none;
   border-radius: 6px;
@@ -278,7 +278,7 @@ const removeParamRow = (index) => {
 }
 
 .pm-send-btn:hover {
-  background: #2563eb;
+  background: var(--accent-hover);
 }
 
 /* CUSTOM METHOD DROPDOWN */
@@ -302,7 +302,7 @@ const removeParamRow = (index) => {
 }
 
 .pm-method-display:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-hover);
 }
 
 .pm-chevron {
@@ -328,10 +328,10 @@ const removeParamRow = (index) => {
   top: 100%;
   left: 0;
   margin-top: 4px;
-  background: #252525;
-  border: 1px solid #444;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
   z-index: 100;
   min-width: 120px;
   padding: 4px 0;
@@ -346,33 +346,33 @@ const removeParamRow = (index) => {
 }
 
 .pm-method-option:hover {
-  background: #333;
+  background: var(--surface-hover-strong);
 }
 
 /* Method Colors */
 .get {
-  color: #3b82f6;
+  color: var(--method-get);
 }
 
 .post {
-  color: #10b981;
+  color: var(--method-post);
 }
 
 .put {
-  color: #f59e0b;
+  color: var(--method-put);
 }
 
 .delete {
-  color: #ef4444;
+  color: var(--method-delete);
 }
 
 .patch {
-  color: #eab308;
+  color: var(--method-patch);
 }
 
 .options,
 .head {
-  color: #8b5cf6;
+  color: var(--method-other);
 }
 
 /* TABS */
@@ -380,13 +380,13 @@ const removeParamRow = (index) => {
   display: flex;
   gap: 24px;
   padding: 0 24px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   margin-top: 8px;
 }
 
 .pm-tab {
-  color: #888;
+  color: var(--fg-muted);
   font-size: 13px;
   font-weight: 500;
   padding: 10px 0;
@@ -396,12 +396,12 @@ const removeParamRow = (index) => {
 }
 
 .pm-tab:hover {
-  color: #e0e0e0;
+  color: var(--fg-secondary);
 }
 
 .pm-tab.active {
-  color: #e0e0e0;
-  border-bottom-color: #f59e0b;
+  color: var(--fg-secondary);
+  border-bottom-color: var(--accent);
 }
 
 /* EDITOR AREA */
@@ -409,7 +409,7 @@ const removeParamRow = (index) => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #111;
+  background: var(--bg-input);
   overflow: hidden;
 }
 
@@ -421,10 +421,10 @@ const removeParamRow = (index) => {
 
 .pm-helper-text {
   font-size: 11px;
-  color: #666;
+  color: var(--fg-muted);
   padding: 8px 24px;
-  border-bottom: 1px solid #222;
-  background: #181818;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-card);
 }
 
 .pm-codemirror {
@@ -447,10 +447,10 @@ const removeParamRow = (index) => {
 .pm-param-header {
   display: flex;
   font-size: 11px;
-  color: #888;
+  color: var(--fg-muted);
   font-weight: 600;
   padding-bottom: 8px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--border);
   margin-bottom: 8px;
 }
 
@@ -473,8 +473,8 @@ const removeParamRow = (index) => {
 .pm-param-input {
   flex: 1;
   background: transparent;
-  border: 1px solid #333;
-  color: #ccc;
+  border: 1px solid var(--border);
+  color: var(--fg-secondary);
   padding: 6px 10px;
   font-size: 13px;
   font-family: 'Consolas', monospace;
@@ -484,14 +484,14 @@ const removeParamRow = (index) => {
 }
 
 .pm-param-input:focus {
-  border-color: #3b82f6;
-  background: #1a1a1b;
+  border-color: var(--accent);
+  background: var(--bg-sidebar);
 }
 
 .pm-param-del {
   background: transparent;
   border: none;
-  color: #555;
+  color: var(--fg-placeholder);
   cursor: pointer;
   width: 32px;
   font-size: 14px;
@@ -503,6 +503,6 @@ const removeParamRow = (index) => {
 }
 
 .pm-param-del:hover {
-  color: #ef4444;
+  color: var(--error);
 }
 </style>

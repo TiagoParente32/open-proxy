@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-echo "Building UI..."
-cd ui && npm run build && cd ..
+cd "$(dirname "$0")"
 
-echo "Starting app..."
-python main.py
+# Electron handles the UI build and Python backend startup automatically
+echo "Launching Electron..."
+npm start
