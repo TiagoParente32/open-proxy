@@ -90,11 +90,21 @@ The build is a **3-step pipeline**: Vue UI → Python binary (PyInstaller) → E
 ### macOS
 
 ```bash
-./build.sh          # → DMG + ZIP (arm64 + x64) in dist-electron/
+./build.sh          # → DMG (arm64 + x64) in dist-electron/
 ./build.sh --dir    # unpackaged app only (faster, for testing)
 ```
 
 > Must be run on a Mac. Produces both Apple Silicon and Intel builds in one run.
+
+#### ⚠️ "OpenProxy is damaged and can't be opened"
+
+macOS Gatekeeper blocks apps that aren't signed with an Apple Developer certificate. If you see this error, run the following in Terminal — it removes the quarantine flag macOS sets on downloaded files:
+
+```bash
+xattr -cr /Applications/OpenProxy.app
+```
+
+Then open the app normally. You only need to do this once.
 
 ### Windows
 
