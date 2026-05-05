@@ -41,6 +41,9 @@ chmod +x backend-dist/OpenProxy-server/OpenProxy-server
 # ── 3. Electron packaging ─────────────────────────────────────────
 echo ""
 echo "→ [3/3] Packaging with electron-builder..."
+# Disable certificate auto-discovery so electron-builder uses the ad hoc
+# identity ("-") declared in package.json instead of looking for a Developer ID.
+export CSC_IDENTITY_AUTO_DISCOVERY=false
 if [ "$MODE" = "--dir" ]; then
   npx electron-builder --dir
 else

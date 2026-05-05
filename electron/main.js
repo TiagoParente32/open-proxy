@@ -7,6 +7,30 @@ const fs    = require('fs')
 const { spawn } = require('child_process')
 
 let win, tray, pythonProcess, isQuitting = false
+
+// ── Quarantine helper ─────────────────────────────────────────────────────────
+// Ad hoc signed / zip-distributed builds are quarantined by macOS Gatekeeper.
+// Call this on the app bundle itself at startup and on any freshly-extracted
+// update bundle before relaunching — otherwise Electron helpers and the Python
+// backend will be blocked by Gatekeeper at runtime.
+function clearQuarantine (targetPath) {
+  if (process.platform !== 'darwin') return
+  try {
+    require('child_process').execSync(`xattr -cr "${targetPath}"`, { stdio: 'ignore' })
+    console.log(`[xattr] Cleared quarantine: ${targetPath}`)
+  } catch (e) {
+    console.warn('[xattr] Failed to clear quarantine:', e.message)
+  }
+}
+
+// Derive the .app bundle root from the running executable path.
+// e.g. …/OpenProxy.app/Contents/MacOS/OpenProxy → …/OpenProxy.app
+function getAppBundlePath () {
+  const exe = app.getPath('exe')
+  const idx = exe.indexOf('.app/')
+  return idx !== -1 ? exe.slice(0, idx + 4) : null
+}
+
 let bustCacheEnabled = false
 let currentTheme = 'dark'
 let toolbarVisibility = {
@@ -70,19 +94,6 @@ function startPython () {
       cwd  = path.join(__dirname, '..')
     }
 
-    // On macOS, strip quarantine xattr from the backend before spawning.
-    // The Electron app itself launches fine, but the Python binary (downloaded
-    // via DMG) is still flagged by Gatekeeper until we clear it.
-    if (process.platform === 'darwin' && app.isPackaged) {
-      const backendDir = path.join(process.resourcesPath, 'backend')
-      try {
-        require('child_process').execSync(`xattr -cr "${backendDir}"`)
-        console.log('[xattr] Cleared quarantine from backend')
-      } catch (e) {
-        console.warn('[xattr] Failed to clear quarantine:', e.message)
-      }
-    }
-    
     console.log(`[Python] ${exe} ${args.join(' ')}`)
     pythonProcess = spawn(exe, args, { cwd })
 
@@ -184,6 +195,12 @@ function setupIPC () {
       filters: [{ name: 'JSON', extensions: ['json'] }],
     })
     if (!canceled && filePath) fs.writeFileSync(filePath, content, 'utf8')
+  })
+
+  // Updater calls this with the path of the freshly-extracted .app before
+  // relaunching, so Gatekeeper doesn't block the new bundle on macOS.
+  ipcMain.on('update:clearQuarantine', (_e, newAppPath) => {
+    clearQuarantine(newAppPath)
   })
 }
 
@@ -364,6 +381,13 @@ function quitApp () {
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
+  // Clear quarantine from the entire .app bundle on first launch after zip
+  // extraction. Must run before any Electron helper or Python process spawns.
+  if (app.isPackaged) {
+    const bundle = getAppBundlePath()
+    if (bundle) clearQuarantine(bundle)
+  }
+
   setupIPC()
   setupTray()
   setupMenu()
