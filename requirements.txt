@@ -2,3 +2,4 @@ mitmproxy
 websockets
 psutil
 Pillow
+pyinstaller

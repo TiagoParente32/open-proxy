@@ -70,6 +70,19 @@ function startPython () {
       cwd  = path.join(__dirname, '..')
     }
 
+    // On macOS, strip quarantine xattr from the backend before spawning.
+    // The Electron app itself launches fine, but the Python binary (downloaded
+    // via DMG) is still flagged by Gatekeeper until we clear it.
+    if (process.platform === 'darwin' && app.isPackaged) {
+      const backendDir = path.join(process.resourcesPath, 'backend')
+      try {
+        require('child_process').execSync(`xattr -cr "${backendDir}"`)
+        console.log('[xattr] Cleared quarantine from backend')
+      } catch (e) {
+        console.warn('[xattr] Failed to clear quarantine:', e.message)
+      }
+    }
+    
     console.log(`[Python] ${exe} ${args.join(' ')}`)
     pythonProcess = spawn(exe, args, { cwd })
 
