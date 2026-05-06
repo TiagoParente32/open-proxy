@@ -46,6 +46,7 @@ import {
   openComposeNew,
   openVpnMode,
   showHighlightModal,
+  showScriptingModal,
   deviceSetupType,
   showDeviceSetupModal,
   throttleProfile,

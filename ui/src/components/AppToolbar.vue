@@ -171,9 +171,9 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         class="secondary-pill"
         :class="{ 'script-active': anyScriptEnabled }"
         @click="showScriptingModal = true"
-        title="User Script"
+        title="Scripts"
       >
-        Script
+        Scripts
       </button>
 
       <div v-if="showCertificatesBtn" class="cert-wrapper">
