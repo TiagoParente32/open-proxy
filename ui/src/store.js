@@ -419,6 +419,23 @@ export const revertIosSimulator = (udid) => {
     wsConnection.send(JSON.stringify({ type: "REVERT_IOS_SIMULATOR", udid }))
 }
 
+/**
+ * Toggle the macOS system proxy. The backend prompts for the admin password
+ * via osascript, so the user will see a native dialog before this resolves.
+ */
+export const toggleMacProxy = () => {
+    if (macosProxyLoading.value) return
+    if (wsConnection?.readyState !== WebSocket.OPEN) {
+        macosProxyError.value = 'Backend not connected.'
+        return
+    }
+    macosProxyLoading.value = true
+    macosProxyError.value = null
+    wsConnection.send(JSON.stringify({
+        type: macosProxyActive.value ? "UNSET_MAC_PROXY" : "SET_MAC_PROXY"
+    }))
+}
+
 export const applyAllHighlightRules = () => {
     requests.value.forEach(req => applyHighlightRules(req));
     requests.value = [...requests.value];
@@ -911,6 +928,9 @@ export const initWebSocket = () => {
         if (payload.type === "SYSTEM_INFO") {
             proxyHost.value = `${payload.data.ip}:${payload.data.port}`
             if (payload.data.platform) platform.value = payload.data.platform
+            if (typeof payload.data.mac_proxy_active === 'boolean') {
+                macosProxyActive.value = payload.data.mac_proxy_active
+            }
         }
         else if (payload.type === "ALERT") {
             alert(payload.message)
@@ -1057,12 +1077,13 @@ export const initWebSocket = () => {
         }
 
         else if (payload.type === "MACOS_PROXY_STATUS") {
+            const d = payload.data ?? payload
             macosProxyLoading.value = false
-            macosProxyActive.value = payload.active ?? false
-            macosProxyServices.value = payload.services ?? []
-            if (payload.error && payload.error !== 'cancelled') {
-                macosProxyError.value = payload.error
-            } else if (!payload.error) {
+            macosProxyActive.value = d.active ?? false
+            macosProxyServices.value = d.services ?? []
+            if (d.error && d.error !== 'cancelled') {
+                macosProxyError.value = d.error
+            } else if (!d.error) {
                 macosProxyError.value = null
             }
         }

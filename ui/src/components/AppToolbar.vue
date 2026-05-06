@@ -33,6 +33,9 @@ import {
   showCertificatesBtn,
   showThrottleBtn,
   showBustCacheBtn,
+  macosProxyActive,
+  macosProxyLoading,
+  toggleMacProxy,
 } from '../store.js'
 
 const isMac = () => window.electronAPI?.platform === 'darwin'
@@ -137,6 +140,18 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         title="VPN Mode — connect without proxy setup"
       >
         VPN Mode
+      </button>
+      <button
+        v-if="isMac()"
+        class="secondary-pill"
+        :class="{ 'wg-active': macosProxyActive, 'wg-loading': macosProxyLoading }"
+        :disabled="macosProxyLoading"
+        @click="toggleMacProxy()"
+        :title="macosProxyActive
+          ? 'macOS system proxy is ON — click to disable (will prompt for admin password)'
+          : 'Set macOS system proxy (Web + Secure Web) to this proxy. Will prompt for admin password.'"
+      >
+        {{ macosProxyActive ? 'System Proxy: ON' : 'System Proxy' }}
       </button>
       <button
         v-if="showBreakpointsBtn"

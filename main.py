@@ -9,6 +9,7 @@ import re
 import base64
 import subprocess
 import threading
+import signal
 import ssl
 import sqlite3
 import hashlib
@@ -573,7 +574,11 @@ def set_macos_proxy(port: int) -> dict:
         cmds.append(f'networksetup -setproxybypassdomains "{s}" {bypass}')
 
     shell_cmd = " && ".join(cmds)
-    script = f'do shell script "{shell_cmd}" with administrator privileges'
+    # `do shell script "..."` is itself a quoted AppleScript string — every
+    # backslash and double-quote inside shell_cmd must be escaped or AppleScript
+    # bails with -2740 on service names like "USB 10/100/1000 LAN".
+    as_string = shell_cmd.replace('\\', '\\\\').replace('"', '\\"')
+    script = f'do shell script "{as_string}" with administrator privileges'
     try:
         result = subprocess.run(
             ["osascript", "-e", script],
@@ -608,7 +613,8 @@ def unset_macos_proxy() -> dict:
         cmds.append(f'networksetup -setsecurewebproxystate "{s}" off')
 
     shell_cmd = " && ".join(cmds)
-    script = f'do shell script "{shell_cmd}" with administrator privileges'
+    as_string = shell_cmd.replace('\\', '\\\\').replace('"', '\\"')
+    script = f'do shell script "{as_string}" with administrator privileges'
     try:
         result = subprocess.run(
             ["osascript", "-e", script],
@@ -815,6 +821,10 @@ class ProxyUIBridge:
         self._master = None     # set by run_proxy_forever; used for WG restart + inject
         self._last_startup_error = ""   # captured from mitmproxy's log on startup failure
         self.pending_update_info = None  # cached until a client connects
+
+        # macOS system proxy state — tracked so the SIGTERM handler can auto-unset on quit
+        self.is_mac_proxy_set = False
+        self.mac_proxy_services = []
 
         # User scripting
         self.scripts_manager = ScriptsManager()
@@ -1477,7 +1487,12 @@ class ProxyUIBridge:
         try:
             await websocket.send(json.dumps({
                 "type": "SYSTEM_INFO",
-                "data": {"ip": LOCAL_IP, "port": self.proxy_port, "platform": sys.platform}
+                "data": {
+                    "ip": LOCAL_IP,
+                    "port": self.proxy_port,
+                    "platform": sys.platform,
+                    "mac_proxy_active": self.is_mac_proxy_set,
+                }
             }))
 
             if self.pending_update_info:
@@ -1695,6 +1710,50 @@ class ProxyUIBridge:
                                 "error": "WireGuard server is not running." if self.wg_enabled else "",
                             },
                         }))
+
+                elif payload.get("type") == "SET_MAC_PROXY":
+                    if sys.platform != "darwin":
+                        await websocket.send(json.dumps({
+                            "type": "MACOS_PROXY_STATUS",
+                            "active": False,
+                            "services": [],
+                            "error": "System proxy toggle is macOS-only.",
+                        }))
+                    else:
+                        # set_macos_proxy() blocks on the admin password dialog
+                        # (osascript), so run it off the asyncio loop.
+                        loop = asyncio.get_running_loop()
+                        result = await loop.run_in_executor(
+                            None, set_macos_proxy, self.proxy_port
+                        )
+                        if result.get("ok"):
+                            self.is_mac_proxy_set = True
+                            self.mac_proxy_services = result.get("services", [])
+                        await self.broadcast_to_ui("MACOS_PROXY_STATUS", {
+                            "active": self.is_mac_proxy_set,
+                            "services": result.get("services", []),
+                            "error": result.get("error"),
+                        })
+
+                elif payload.get("type") == "UNSET_MAC_PROXY":
+                    if sys.platform != "darwin":
+                        await websocket.send(json.dumps({
+                            "type": "MACOS_PROXY_STATUS",
+                            "active": False,
+                            "services": [],
+                            "error": "System proxy toggle is macOS-only.",
+                        }))
+                    else:
+                        loop = asyncio.get_running_loop()
+                        result = await loop.run_in_executor(None, unset_macos_proxy)
+                        if result.get("ok"):
+                            self.is_mac_proxy_set = False
+                            self.mac_proxy_services = []
+                        await self.broadcast_to_ui("MACOS_PROXY_STATUS", {
+                            "active": self.is_mac_proxy_set,
+                            "services": result.get("services", []),
+                            "error": result.get("error"),
+                        })
 
                 elif payload.get("type") == "SCRIPT_SAVE":
                     self.scripts_manager.save_script(
@@ -2014,7 +2073,23 @@ if __name__ == "__main__":
     t = threading.Thread(target=run_async_loop, args=(bridge, ACTIVE_PROXY_PORT), daemon=True)
     t.start()
 
+    def _shutdown(*_args):
+        # If the user set the macOS system proxy this session, unset it on quit
+        # — otherwise their entire Mac keeps routing through OpenProxy after we
+        # exit. This will pop the admin password dialog one more time.
+        if sys.platform == "darwin" and bridge.is_mac_proxy_set:
+            try:
+                unset_macos_proxy()
+            except Exception as e:
+                print(f"[QUIT] Failed to unset macOS proxy: {e}", flush=True)
+        os._exit(0)
+
+    # Electron sends SIGTERM via pythonProcess.kill() on before-quit; SIGINT
+    # covers Ctrl-C in dev. Both must run cleanup before we exit.
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT,  _shutdown)
+
     try:
         t.join()
     except KeyboardInterrupt:
-        pass
+        _shutdown()
