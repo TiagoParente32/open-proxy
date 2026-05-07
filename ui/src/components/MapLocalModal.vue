@@ -129,7 +129,9 @@ const addNewRule = () => {
     pattern: 'api.example.com/*',
     status: 200,
     headers: '{\n  "Content-Type": "application/json"\n}',
-    body: ''
+    body: '',
+    body_source: 'inline',
+    file_path: '',
   }
   mapLocalRules.value.unshift(newRule)
   selectedRuleId.value = newRule.id
@@ -145,6 +147,15 @@ const deleteRule = (id) => {
 const saveAndApplyRules = () => {
   syncMapLocalRules()
   showMapModal.value = false
+}
+
+const browseFile = async () => {
+  if (!activeRule.value) return
+  const filePath = await window.electronAPI?.selectFile()
+  if (filePath) {
+    activeRule.value.file_path = filePath
+    activeRule.value.body_source = 'file'
+  }
 }
 </script>
 
@@ -255,8 +266,45 @@ const saveAndApplyRules = () => {
 
             <div class="pm-editor-area">
               <div v-if="activeTab === 'Body'" class="pm-editor-wrapper">
-                <div class="pm-helper-text">Response Payload (Returned to client)</div>
-                <CodeMirrorEditor v-model="activeRule.body" :extensions="extensions" class="pm-codemirror" />
+                <div class="pm-body-source-bar">
+                  <span class="pm-helper-text" style="margin: 0;">Response Body</span>
+                  <div class="pm-source-toggle">
+                    <button
+                      class="pm-source-btn"
+                      :class="{ active: (activeRule.body_source || 'inline') === 'inline' }"
+                      @click="activeRule.body_source = 'inline'; activeRule.file_path = ''"
+                    >Inline</button>
+                    <button
+                      class="pm-source-btn"
+                      :class="{ active: activeRule.body_source === 'file' }"
+                      @click="activeRule.body_source = 'file'"
+                    >File</button>
+                  </div>
+                </div>
+
+                <div v-if="(activeRule.body_source || 'inline') === 'inline'" style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+                  <CodeMirrorEditor v-model="activeRule.body" :extensions="extensions" class="pm-codemirror" />
+                </div>
+
+                <div v-else class="pm-file-picker">
+                  <div class="pm-file-row">
+                    <input
+                      type="text"
+                      class="pm-file-input"
+                      v-model="activeRule.file_path"
+                      placeholder="No file selected…"
+                      readonly
+                    />
+                    <button class="pm-browse-btn" @click="browseFile">Browse…</button>
+                  </div>
+                  <p class="pm-file-hint">
+                    Select any file on disk (.json, .png, .jpg, .html, …). The Content-Type will be
+                    detected automatically from the file extension unless you override it in the Headers tab.
+                  </p>
+                  <p v-if="activeRule.file_path" class="pm-file-path-display">
+                    {{ activeRule.file_path }}
+                  </p>
+                </div>
               </div>
               <div v-if="activeTab === 'Params'" class="pm-editor-wrapper">
                 <div class="pm-helper-text">Query Parameters</div>
@@ -432,4 +480,36 @@ const saveAndApplyRules = () => {
 .pm-param-input:focus { border-color: var(--accent); background: var(--bg-sidebar); }
 .pm-param-del { background: transparent; border: none; color: var(--fg-placeholder); cursor: pointer; width: 32px; font-size: 14px; }
 .pm-param-del:hover { color: var(--error); }
+
+/* Body source toggle */
+.pm-body-source-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 24px; background: var(--bg-card); border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.pm-source-toggle { display: flex; background: var(--bg-deepest); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.pm-source-btn { background: transparent; border: none; color: var(--fg-muted); padding: 4px 14px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.pm-source-btn.active { background: var(--accent); color: #fff; }
+
+/* File picker */
+.pm-file-picker { display: flex; flex-direction: column; gap: 12px; padding: 20px 24px; }
+.pm-file-row { display: flex; gap: 8px; align-items: center; }
+.pm-file-input {
+  flex: 1; background: var(--bg-deepest); border: 1px solid var(--border);
+  color: var(--fg-secondary); padding: 8px 12px; border-radius: 6px;
+  font-size: 12px; font-family: 'Consolas', monospace; outline: none;
+  cursor: default;
+}
+.pm-browse-btn {
+  background: var(--accent-muted); color: var(--accent); border: 1px solid var(--accent-border);
+  padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: all 0.15s; flex-shrink: 0;
+}
+.pm-browse-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.pm-file-hint { font-size: 11px; color: var(--fg-muted); line-height: 1.5; margin: 0; }
+.pm-file-path-display {
+  font-size: 11px; color: var(--fg-secondary); font-family: 'Consolas', monospace;
+  word-break: break-all; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 4px; padding: 8px 12px; margin: 0;
+}
 </style>

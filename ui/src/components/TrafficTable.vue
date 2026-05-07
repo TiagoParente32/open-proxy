@@ -143,15 +143,13 @@ const handleKeyDown = async (e) => {
     else if (e.key === 'ArrowUp' && idx > 0)
       selectedRequest.value = filteredRequests.value[idx - 1]
     await nextTick()
-    // Scroll the virtual container so the selected row is visible
-    const selIdx = filteredRequests.value.findIndex(r => r.id === selectedRequest.value?.id)
-    if (selIdx !== -1 && containerRef.value) {
-      const rowTop = selIdx * ROW_HEIGHT
-      const rowBot = rowTop + ROW_HEIGHT
-      const viewTop = containerRef.value.scrollTop
-      const viewBot = viewTop + containerHeight.value
-      if (rowTop < viewTop) containerRef.value.scrollTop = rowTop
-      else if (rowBot > viewBot) containerRef.value.scrollTop = rowBot - containerHeight.value
+    // Let the browser handle scroll-into-view; scroll-margin-top: 30px on
+    // tbody tr already accounts for the sticky thead height.
+    const selId = selectedRequest.value?.id
+    if (selId && containerRef.value) {
+      containerRef.value
+        .querySelector(`[data-row-id="${selId}"]`)
+        ?.scrollIntoView({ block: 'nearest', behavior: 'auto' })
     }
   }
 }
@@ -280,7 +278,8 @@ onUnmounted(() => {
           <tr v-if="topPad > 0" :style="{ height: topPad + 'px' }" aria-hidden="true"><td colspan="9" style="padding:0;border:none;"></td></tr>
           <tr 
             v-for="req in visibleRows" 
-            :key="req.id" 
+            :key="req.id"
+            :data-row-id="req.id"
             @click="selectedRequest = req" 
             @contextmenu.prevent="openContextMenu($event, req)" 
             :class="[

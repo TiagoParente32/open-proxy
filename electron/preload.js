@@ -16,4 +16,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMaximizeChange: (cb)         => ipcRenderer.on('window:maximized', (_e, v) => cb(v)),
   toolbarSyncToMain: (vis)       => ipcRenderer.send('toolbar:syncToMain', vis),
   onToolbarSet:     (cb)         => ipcRenderer.on('toolbar:set', (_e, vis) => cb(vis)),
+  selectFile:       (opts)       => ipcRenderer.invoke('dialog:selectFile', opts),
 })
