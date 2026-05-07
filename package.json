@@ -4,12 +4,12 @@
   "description": "OpenProxy — HTTP intercept proxy with a native desktop UI",
   "main": "electron/main.js",
   "scripts": {
-    "start":     "electron .",
-    "build:ui":  "cd ui && npm run build",
-    "pack":      "npm run build:ui && electron-builder --dir",
-    "dist:mac":  "npm run build:ui && electron-builder --mac",
-    "dist:win":  "npm run build:ui && electron-builder --win",
-    "dist:linux":"npm run build:ui && electron-builder --linux"
+    "start": "electron .",
+    "build:ui": "cd ui && npm run build",
+    "pack": "npm run build:ui && electron-builder --dir",
+    "dist:mac": "npm run build:ui && electron-builder --mac",
+    "dist:win": "npm run build:ui && electron-builder --win",
+    "dist:linux": "npm run build:ui && electron-builder --linux"
   },
   "build": {
     "appId": "com.openproxy.app",
@@ -18,11 +18,26 @@
       "electron/**/*"
     ],
     "extraResources": [
-      { "from": "ui/dist",       "to": "ui/dist" },
-      { "from": "backend-dist/", "to": "backend/" },
-      { "from": "icon.png",      "to": "icon.png" },
-      { "from": "icon.icns",     "to": "icon.icns" },
-      { "from": "icon.ico",      "to": "icon.ico" }
+      {
+        "from": "ui/dist",
+        "to": "ui/dist"
+      },
+      {
+        "from": "backend-dist/",
+        "to": "backend/"
+      },
+      {
+        "from": "icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "icon.icns",
+        "to": "icon.icns"
+      },
+      {
+        "from": "icon.ico",
+        "to": "icon.ico"
+      }
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
@@ -31,27 +46,57 @@
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] },
-        { "target": "zip", "arch": ["arm64", "x64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ]
     },
     "win": {
       "icon": "icon.ico",
-      "target": ["nsis", "zip"]
+      "target": [
+        "nsis",
+        "zip"
+      ]
     },
     "linux": {
       "icon": "icon.icns",
       "category": "Development",
       "target": [
-        { "target": "deb",      "arch": ["x64"] },
-        { "target": "AppImage", "arch": ["x64"] },
-        { "target": "tar.gz",   "arch": ["x64"] }
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     }
   },
   "devDependencies": {
-    "electron": "^30.0.0",
-    "electron-builder": "^24.0.0"
+    "electron": "^42.0.0",
+    "electron-builder": "^26.8.1"
   },
   "author": {
     "name": "Tiago",

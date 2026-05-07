@@ -119,7 +119,107 @@ watch(showMapModal, (isOpen) => {
   }
 })
 
-// --- 4. RULE MANAGEMENT ---
+// --- 4. STATUS AUTOCOMPLETE ---
+
+const HTTP_STATUS_CODES = [
+  { code: 100, label: 'Continue' },
+  { code: 101, label: 'Switching Protocols' },
+  { code: 200, label: 'OK' },
+  { code: 201, label: 'Created' },
+  { code: 202, label: 'Accepted' },
+  { code: 204, label: 'No Content' },
+  { code: 206, label: 'Partial Content' },
+  { code: 301, label: 'Moved Permanently' },
+  { code: 302, label: 'Found' },
+  { code: 304, label: 'Not Modified' },
+  { code: 307, label: 'Temporary Redirect' },
+  { code: 308, label: 'Permanent Redirect' },
+  { code: 400, label: 'Bad Request' },
+  { code: 401, label: 'Unauthorized' },
+  { code: 403, label: 'Forbidden' },
+  { code: 404, label: 'Not Found' },
+  { code: 405, label: 'Method Not Allowed' },
+  { code: 408, label: 'Request Timeout' },
+  { code: 409, label: 'Conflict' },
+  { code: 410, label: 'Gone' },
+  { code: 422, label: 'Unprocessable Entity' },
+  { code: 429, label: 'Too Many Requests' },
+  { code: 500, label: 'Internal Server Error' },
+  { code: 501, label: 'Not Implemented' },
+  { code: 502, label: 'Bad Gateway' },
+  { code: 503, label: 'Service Unavailable' },
+  { code: 504, label: 'Gateway Timeout' },
+]
+
+const statusInputValue = ref('')
+const statusDropdownOpen = ref(false)
+const statusHighlightIndex = ref(-1)
+
+const statusSuggestions = computed(() => {
+  const q = statusInputValue.value.trim()
+  if (!q) return HTTP_STATUS_CODES
+  return HTTP_STATUS_CODES.filter(s =>
+    String(s.code).startsWith(q) || s.label.toLowerCase().includes(q.toLowerCase())
+  )
+})
+
+const onStatusInput = (e) => {
+  statusInputValue.value = e.target.value
+  statusDropdownOpen.value = true
+  statusHighlightIndex.value = -1
+  const num = parseInt(e.target.value)
+  if (!isNaN(num) && activeRule.value) activeRule.value.status = num
+}
+
+const onStatusFocus = () => {
+  statusInputValue.value = String(activeRule.value?.status ?? 200)
+  statusDropdownOpen.value = true
+  statusHighlightIndex.value = -1
+}
+
+const onStatusBlur = () => {
+  setTimeout(() => { statusDropdownOpen.value = false }, 150)
+}
+
+const selectStatus = (code) => {
+  if (activeRule.value) activeRule.value.status = code
+  statusInputValue.value = String(code)
+  statusDropdownOpen.value = false
+}
+
+const getStatusClass = (code) => {
+  if (code >= 100 && code < 200) return 'status-1xx'
+  if (code >= 200 && code < 300) return 'status-2xx'
+  if (code >= 300 && code < 400) return 'status-3xx'
+  if (code >= 400 && code < 500) return 'status-4xx'
+  if (code >= 500 && code < 600) return 'status-5xx'
+  return ''
+}
+
+const statusInputClass = computed(() => getStatusClass(activeRule.value?.status ?? 200))
+
+const onStatusKeydown = (e) => {
+  if (!statusDropdownOpen.value) return
+  const list = statusSuggestions.value
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    statusHighlightIndex.value = Math.min(statusHighlightIndex.value + 1, list.length - 1)
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    statusHighlightIndex.value = Math.max(statusHighlightIndex.value - 1, 0)
+  } else if (e.key === 'Enter' && statusHighlightIndex.value >= 0) {
+    e.preventDefault()
+    selectStatus(list[statusHighlightIndex.value].code)
+  } else if (e.key === 'Escape') {
+    statusDropdownOpen.value = false
+  }
+}
+
+watch(activeRule, (rule) => {
+  if (rule) statusInputValue.value = String(rule.status ?? 200)
+}, { immediate: true })
+
+// --- 5. RULE MANAGEMENT ---
 
 const addNewRule = () => {
   const newRule = {
@@ -248,9 +348,31 @@ const browseFile = async () => {
                 <input type="text" v-model="activeRule.pattern" class="pm-url-input"
                   placeholder="e.g., api.example.com/*" @input="syncPatternToParams" />
                 <div class="pm-divider"></div>
-                <div class="pm-status-wrapper">
+                <div class="pm-status-wrapper" style="position: relative;">
                   <span class="pm-status-label">Status</span>
-                  <input type="number" v-model.number="activeRule.status" class="pm-status-input" />
+                  <input
+                    type="text"
+                    class="pm-status-input"
+                    :class="statusInputClass"
+                    :value="statusInputValue"
+                    @input="onStatusInput"
+                    @focus="onStatusFocus"
+                    @blur="onStatusBlur"
+                    @keydown="onStatusKeydown"
+                    autocomplete="off"
+                  />
+                  <div v-if="statusDropdownOpen && statusSuggestions.length" class="pm-status-dropdown">
+                    <div
+                      v-for="(s, i) in statusSuggestions"
+                      :key="s.code"
+                      class="pm-status-option"
+                      :class="{ highlighted: i === statusHighlightIndex }"
+                      @mousedown.prevent="selectStatus(s.code)"
+                    >
+                      <span class="pm-status-code" :class="getStatusClass(s.code)">{{ s.code }}</span>
+                      <span class="pm-status-desc">{{ s.label }}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -453,7 +575,17 @@ const browseFile = async () => {
 .pm-divider { width: 1px; height: 24px; background: var(--border); }
 .pm-method-display.read-only { padding: 10px 16px; font-weight: 700; font-size: 11px; color: var(--fg-muted); }
 .pm-status-wrapper { display: flex; align-items: center; padding: 0 12px; gap: 8px; }
-.pm-status-input { background: var(--bg-deepest); border: 1px solid var(--border); color: var(--success); padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; width: 60px; text-align: center; }
+.pm-status-input { background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-secondary); padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; width: 60px; text-align: center; }
+.pm-status-dropdown { position: absolute; top: calc(100% + 4px); right: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); z-index: 9999; min-width: 200px; max-height: 220px; overflow-y: auto; }
+.pm-status-option { display: flex; align-items: center; gap: 10px; padding: 6px 12px; cursor: pointer; font-size: 12px; }
+.pm-status-option:hover, .pm-status-option.highlighted { background: var(--surface-hover-strong); }
+.pm-status-code { font-weight: 700; font-family: 'Consolas', monospace; min-width: 32px; }
+.pm-status-desc { color: var(--fg-muted); }
+.status-1xx { color: var(--accent); }
+.status-2xx { color: var(--success); }
+.status-3xx { color: var(--warning); }
+.status-4xx { color: var(--color-orange); }
+.status-5xx { color: var(--error); }
 
 .pm-tabs { display: flex; gap: 24px; padding: 0 24px; border-bottom: 1px solid var(--border); }
 .pm-tab { color: var(--fg-muted); font-size: 13px; padding: 10px 0; cursor: pointer; border-bottom: 2px solid transparent; }
