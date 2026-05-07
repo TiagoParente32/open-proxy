@@ -187,6 +187,17 @@ const selectStatus = (code) => {
   statusDropdownOpen.value = false
 }
 
+const getStatusClass = (code) => {
+  if (code >= 100 && code < 200) return 'status-1xx'
+  if (code >= 200 && code < 300) return 'status-2xx'
+  if (code >= 300 && code < 400) return 'status-3xx'
+  if (code >= 400 && code < 500) return 'status-4xx'
+  if (code >= 500 && code < 600) return 'status-5xx'
+  return ''
+}
+
+const statusInputClass = computed(() => getStatusClass(activeRule.value?.status ?? 200))
+
 const onStatusKeydown = (e) => {
   if (!statusDropdownOpen.value) return
   const list = statusSuggestions.value
@@ -342,6 +353,7 @@ const browseFile = async () => {
                   <input
                     type="text"
                     class="pm-status-input"
+                    :class="statusInputClass"
                     :value="statusInputValue"
                     @input="onStatusInput"
                     @focus="onStatusFocus"
@@ -357,7 +369,7 @@ const browseFile = async () => {
                       :class="{ highlighted: i === statusHighlightIndex }"
                       @mousedown.prevent="selectStatus(s.code)"
                     >
-                      <span class="pm-status-code">{{ s.code }}</span>
+                      <span class="pm-status-code" :class="getStatusClass(s.code)">{{ s.code }}</span>
                       <span class="pm-status-desc">{{ s.label }}</span>
                     </div>
                   </div>
@@ -563,12 +575,17 @@ const browseFile = async () => {
 .pm-divider { width: 1px; height: 24px; background: var(--border); }
 .pm-method-display.read-only { padding: 10px 16px; font-weight: 700; font-size: 11px; color: var(--fg-muted); }
 .pm-status-wrapper { display: flex; align-items: center; padding: 0 12px; gap: 8px; }
-.pm-status-input { background: var(--bg-deepest); border: 1px solid var(--border); color: var(--success); padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; width: 60px; text-align: center; }
+.pm-status-input { background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-secondary); padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; width: 60px; text-align: center; }
 .pm-status-dropdown { position: absolute; top: calc(100% + 4px); right: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); z-index: 9999; min-width: 200px; max-height: 220px; overflow-y: auto; }
 .pm-status-option { display: flex; align-items: center; gap: 10px; padding: 6px 12px; cursor: pointer; font-size: 12px; }
 .pm-status-option:hover, .pm-status-option.highlighted { background: var(--surface-hover-strong); }
-.pm-status-code { color: var(--success); font-weight: 700; font-family: 'Consolas', monospace; min-width: 32px; }
+.pm-status-code { font-weight: 700; font-family: 'Consolas', monospace; min-width: 32px; }
 .pm-status-desc { color: var(--fg-muted); }
+.status-1xx { color: var(--accent); }
+.status-2xx { color: var(--success); }
+.status-3xx { color: var(--warning); }
+.status-4xx { color: var(--color-orange); }
+.status-5xx { color: var(--error); }
 
 .pm-tabs { display: flex; gap: 24px; padding: 0 24px; border-bottom: 1px solid var(--border); }
 .pm-tab { color: var(--fg-muted); font-size: 13px; padding: 10px 0; cursor: pointer; border-bottom: 2px solid transparent; }
