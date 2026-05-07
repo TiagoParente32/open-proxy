@@ -202,6 +202,7 @@ export const toolbarVisibility = ref((() => {
     certificates: true,
     throttle:     true,
     bustCache:    true,
+    osProxy:      true,
   }
   return { ...defaults, ...loadState('toolbarVisibility', {}) }
 })())
@@ -216,6 +217,8 @@ export const showScriptBtn      = computed(() => toolbarVisibility.value.scripts
 export const showCertificatesBtn = computed(() => toolbarVisibility.value.certificates)
 export const showThrottleBtn    = computed(() => toolbarVisibility.value.throttle)
 export const showBustCacheBtn   = computed(() => toolbarVisibility.value.bustCache)
+// OS Proxy toggle is darwin-only today; visibility flag still respected so it can be hidden when irrelevant
+export const showOsProxyBtn     = computed(() => toolbarVisibility.value.osProxy && platform.value === 'darwin')
 
 // Opens DeviceSetupModal directly on the VPN Mode view
 export const openVpnMode = () => {
@@ -417,6 +420,23 @@ export const revertIosSimulator = (udid) => {
     iosRevertProgress.value.error = null
     iosRevertProgress.value.steps.forEach(s => s.status = 'pending')
     wsConnection.send(JSON.stringify({ type: "REVERT_IOS_SIMULATOR", udid }))
+}
+
+/**
+ * Toggle the macOS system proxy. The backend prompts for the admin password
+ * via osascript, so the user will see a native dialog before this resolves.
+ */
+export const toggleMacProxy = () => {
+    if (macosProxyLoading.value) return
+    if (wsConnection?.readyState !== WebSocket.OPEN) {
+        macosProxyError.value = 'Backend not connected.'
+        return
+    }
+    macosProxyLoading.value = true
+    macosProxyError.value = null
+    wsConnection.send(JSON.stringify({
+        type: macosProxyActive.value ? "UNSET_MAC_PROXY" : "SET_MAC_PROXY"
+    }))
 }
 
 export const applyAllHighlightRules = () => {
@@ -911,6 +931,9 @@ export const initWebSocket = () => {
         if (payload.type === "SYSTEM_INFO") {
             proxyHost.value = `${payload.data.ip}:${payload.data.port}`
             if (payload.data.platform) platform.value = payload.data.platform
+            if (typeof payload.data.mac_proxy_active === 'boolean') {
+                macosProxyActive.value = payload.data.mac_proxy_active
+            }
         }
         else if (payload.type === "ALERT") {
             alert(payload.message)
@@ -1057,12 +1080,13 @@ export const initWebSocket = () => {
         }
 
         else if (payload.type === "MACOS_PROXY_STATUS") {
+            const status = payload.data ?? payload
             macosProxyLoading.value = false
-            macosProxyActive.value = payload.active ?? false
-            macosProxyServices.value = payload.services ?? []
-            if (payload.error && payload.error !== 'cancelled') {
-                macosProxyError.value = payload.error
-            } else if (!payload.error) {
+            macosProxyActive.value = status.active ?? false
+            macosProxyServices.value = status.services ?? []
+            if (status.error && status.error !== 'cancelled') {
+                macosProxyError.value = status.error
+            } else if (!status.error) {
                 macosProxyError.value = null
             }
         }

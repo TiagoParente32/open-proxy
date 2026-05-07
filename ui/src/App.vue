@@ -57,6 +57,8 @@ import {
   checkForUpdates,
   applyUpdate,
   toolbarVisibility,
+  macosProxyActive,
+  toggleMacProxy,
 } from './store.js'
 
 onMounted(() => {
@@ -66,6 +68,10 @@ onMounted(() => {
   // Sync bust cache state with the native macOS menu (keeps checkmark accurate)
   window.electronAPI?.bustCacheSync(disableCache.value)
   watch(disableCache, val => window.electronAPI?.bustCacheSync(val))
+
+  // Same dance for the macOS system proxy toggle so the Tools menu checkmark tracks state
+  window.electronAPI?.macosProxySync?.(macosProxyActive.value)
+  watch(macosProxyActive, val => window.electronAPI?.macosProxySync?.(val))
 
   // Sync toolbar visibility with native menu on startup (main process always starts fresh)
   window.electronAPI?.toolbarSyncToMain?.({ ...toolbarVisibility.value })
@@ -88,6 +94,7 @@ onMounted(() => {
     openCertSetup:    (type) => { deviceSetupType.value = type; showDeviceSetupModal.value = true },
     setThrottle:      (profile) => { throttleProfile.value = profile },
     bustCache:        () => { disableCache.value = !disableCache.value },
+    toggleMacProxy:   () => toggleMacProxy(),
     checkForUpdates:  () => checkForUpdates(),
     toggleToolbarVisibility: (tool) => { toolbarVisibility.value[tool] = !toolbarVisibility.value[tool] },
   }

@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal:     url          => ipcRenderer.send('shell:openExternal', url),
   saveFile:         (name, data) => ipcRenderer.invoke('dialog:saveFile', { filename: name, content: data }),
   bustCacheSync:    (val)        => ipcRenderer.send('menu:bustCacheSync', val),
+  macosProxySync:   (val)        => ipcRenderer.send('menu:macosProxySync', val),
   themeChanged:     (id)         => ipcRenderer.send('theme:changed', id),
   onSetTheme:       (cb)         => ipcRenderer.on('theme:set', (_e, id) => cb(id)),
   onMaximizeChange: (cb)         => ipcRenderer.on('window:maximized', (_e, v) => cb(v)),

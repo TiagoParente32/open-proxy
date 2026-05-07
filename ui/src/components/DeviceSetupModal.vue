@@ -27,6 +27,9 @@ import {
     wgError,
     toggleWgMode,
     requestWgConf,
+    macosProxyActive,
+    macosProxyLoading,
+    toggleMacProxy,
 } from '../store.js'
 import { ref, watch, computed, nextTick } from 'vue'
 import QRCode from 'qrcode'
@@ -457,6 +460,23 @@ const modalTitle = () => {
 
         <!-- iOS Simulator picker pane -->
         <template v-if="activePane === 'pick' && deviceSetupType === 'ios_simulator'">
+
+          <div class="os-proxy-banner" :class="{ active: macosProxyActive }">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+              <circle v-if="macosProxyActive" cx="12" cy="12" r="10"/>
+              <polyline v-if="macosProxyActive" points="8 12 11 15 16 9"/>
+              <path v-else d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line v-if="!macosProxyActive" x1="12" y1="9" x2="12" y2="13"/>
+              <line v-if="!macosProxyActive" x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span class="banner-text">
+              <template v-if="macosProxyActive">macOS system proxy is on — simulator traffic is routed through OpenProxy.</template>
+              <template v-else>macOS system proxy is off. iOS Simulators share the Mac's network, so traffic won't be intercepted until you enable it.</template>
+            </span>
+            <button v-if="!macosProxyActive" class="banner-action" :disabled="macosProxyLoading" @click="toggleMacProxy()">
+              {{ macosProxyLoading ? 'Enabling…' : 'Enable' }}
+            </button>
+          </div>
 
           <div class="picker-top">
             <p class="hint">Select a simulator to install the certificate. The simulator must be <strong>Booted</strong> to install.</p>
@@ -1213,6 +1233,28 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .alert.error   { color: #fca5a5; background: rgba(239,68,68,0.07);  border-color: rgba(239,68,68,0.16); }
 .alert.success { color: #6ee7b7; background: rgba(52,211,153,0.06); border-color: rgba(52,211,153,0.15); }
 .alert.warning { color: #fcd34d; background: rgba(245,158,11,0.06); border-color: rgba(245,158,11,0.15); }
+
+/* ── OS Proxy banner (iOS Simulator picker) ───────── */
+.os-proxy-banner {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 12px; padding: 9px 12px; border-radius: 6px;
+  border: 1px solid rgba(245,158,11,0.18); background: rgba(245,158,11,0.07);
+  color: #fcd34d; line-height: 1.45;
+  margin-bottom: 12px;
+}
+.os-proxy-banner.active {
+  border-color: rgba(52,211,153,0.18); background: rgba(52,211,153,0.06); color: #6ee7b7;
+}
+.os-proxy-banner .banner-text { flex: 1; }
+.os-proxy-banner .banner-action {
+  flex-shrink: 0;
+  font-size: 11px; font-weight: 600;
+  padding: 4px 10px; border-radius: 4px;
+  background: rgba(245,158,11,0.18); border: 1px solid rgba(245,158,11,0.28);
+  color: #fcd34d; cursor: pointer; transition: background 0.15s;
+}
+.os-proxy-banner .banner-action:hover:not(:disabled) { background: rgba(245,158,11,0.28); }
+.os-proxy-banner .banner-action:disabled { opacity: 0.6; cursor: progress; }
 
 /* ── Manual instructions ──────────────────────────── */
 .instruction-list {

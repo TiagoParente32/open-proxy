@@ -32,11 +32,13 @@ function getAppBundlePath () {
 }
 
 let bustCacheEnabled = false
+let macosProxyActive = false
 let currentTheme = 'dark'
 let toolbarVisibility = {
   vpnMode: true, breakpoints: true, mapLocal: true,
   mapRemote: true, highlights: true, scripts: false,
   certificates: true, throttle: true, bustCache: true,
+  osProxy: true,
 }
 
 // Windows titleBarOverlay colors per theme (bg = --bg-sidebar, symbol = --fg-muted)
@@ -175,6 +177,11 @@ function setupIPC () {
     setupMenu()
   })
 
+  ipcMain.on('menu:macosProxySync', (_e, val) => {
+    macosProxyActive = !!val
+    setupMenu()
+  })
+
   ipcMain.on('theme:changed', (_e, id) => {
     currentTheme = id
     if (process.platform === 'win32' && win) {
@@ -276,6 +283,12 @@ function setupMenu () {
     {
       label: 'Tools',
       submenu: [
+        ...(process.platform === 'darwin' ? [{
+          label:   'OS Proxy',
+          type:    'checkbox',
+          checked: macosProxyActive,
+          click:   () => js('toggleMacProxy()'),
+        }, { type: 'separator' }] : []),
         { label: 'VPN Mode',     click: () => js('openVpnMode()') },
         { label: 'Breakpoints',  click: () => js('openBreakpoints()') },
         { type: 'separator' },
@@ -338,8 +351,13 @@ function setupMenu () {
             },
           ]).concat([
             { type: 'separator' },
-            ...['certificates', 'throttle', 'bustCache'].map((key) => ({
-              label: { certificates: 'Certificates', throttle: 'Throttle', bustCache: 'Bust Cache' }[key],
+            ...[
+              'certificates',
+              'throttle',
+              'bustCache',
+              ...(process.platform === 'darwin' ? ['osProxy'] : []),
+            ].map((key) => ({
+              label: { certificates: 'Certificates', throttle: 'Throttle', bustCache: 'Bust Cache', osProxy: 'OS Proxy' }[key],
               type: 'checkbox', checked: toolbarVisibility[key],
               click: () => {
                 toolbarVisibility[key] = !toolbarVisibility[key]

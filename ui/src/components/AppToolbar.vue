@@ -33,6 +33,10 @@ import {
   showCertificatesBtn,
   showThrottleBtn,
   showBustCacheBtn,
+  showOsProxyBtn,
+  macosProxyActive,
+  macosProxyLoading,
+  toggleMacProxy,
 } from '../store.js'
 
 const isMac = () => window.electronAPI?.platform === 'darwin'
@@ -231,7 +235,20 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         </div>
       </div>
 
-      <div v-if="showBustCacheBtn" class="divider"></div>
+      <div v-if="showBustCacheBtn || showOsProxyBtn" class="divider"></div>
+
+      <div
+        v-if="showOsProxyBtn"
+        class="toggle"
+        @click="toggleMacProxy()"
+        :class="{ active: macosProxyActive, loading: macosProxyLoading }"
+        :title="macosProxyActive
+          ? 'macOS system proxy is ON — click to disable (will prompt for admin password)'
+          : 'Route all macOS traffic through this proxy. Will prompt for admin password.'"
+      >
+        <span class="toggle-label">OS Proxy</span>
+        <div class="switch"></div>
+      </div>
 
       <div
         v-if="showBustCacheBtn"
@@ -457,4 +474,5 @@ button,
 }
 .toggle.active .switch { background: rgba(245,158,11,.15); border-color: #f59e0b; }
 .toggle.active .switch::after { transform: translateX(10px); background: var(--method-put); }
+.toggle.loading { pointer-events: none; animation: wg-pulse 1s ease-in-out infinite; }
 </style>
