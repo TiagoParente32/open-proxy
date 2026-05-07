@@ -34,7 +34,7 @@ def _read_app_version():
         with open(os.path.join(root, 'package.json')) as _f:
             return json.load(_f)['version']
     except Exception:
-        return "1.0.4"   # fallback — keep in sync if auto-read ever fails
+        return "1.0.5"   # fallback — keep in sync if auto-read ever fails
 
 APP_VERSION = _read_app_version()
 GITHUB_REPO = "TiagoParente32/open-proxy"
