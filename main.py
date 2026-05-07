@@ -35,7 +35,7 @@ def _read_app_version():
         with open(os.path.join(root, 'package.json')) as _f:
             return json.load(_f)['version']
     except Exception:
-        return "1.0.5"   # fallback — keep in sync if auto-read ever fails
+        return "1.0.6"   # fallback — keep in sync if auto-read ever fails
 
 APP_VERSION = _read_app_version()
 GITHUB_REPO = "TiagoParente32/open-proxy"
@@ -385,15 +385,17 @@ xattr -r -d com.apple.quarantine "{old_support_dir}" 2>/dev/null || true"""
 
             f.write(f"""#!/bin/bash
 exec >"{log}" 2>&1
+set -e
 set -x
-sleep 2
+sleep 4
 rm -rf "{install_path}"
+if [ -e "{install_path}" ]; then
+  echo "ERROR: could not remove old bundle at {install_path}" >&2
+  exit 1
+fi
 mv -f "{new_app}" "{install_path}"
 xattr -r -d com.apple.quarantine "{install_path}" 2>/dev/null || true{support_lines}
-bin=$(defaults read "{install_path}/Contents/Info" CFBundleExecutable 2>/dev/null)
-if [ -z "$bin" ]; then bin=$(ls "{install_path}/Contents/MacOS/" | head -1); fi
-chmod +x "{install_path}/Contents/MacOS/$bin"
-nohup "{install_path}/Contents/MacOS/$bin" &
+open "{install_path}"
 """)
         os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
         subprocess.Popen(['bash', script], close_fds=True,
