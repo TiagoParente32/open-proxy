@@ -960,10 +960,10 @@ class ProxyUIBridge:
                             headers_dict = {"Content-Type": "text/plain"}
 
                         file_path = rule.get("file_path", "")
-                        if file_path and os.path.isfile(file_path):
+                        body_source = rule.get("body_source", "inline")
+                        if body_source == "file" and file_path and os.path.isfile(file_path):
                             import mimetypes
-                            with open(file_path, "rb") as f:
-                                body_bytes = f.read()
+                            body_bytes = await asyncio.to_thread(lambda p=file_path: open(p, "rb").read())
                             if "Content-Type" not in headers_dict:
                                 mime, _ = mimetypes.guess_type(file_path)
                                 headers_dict["Content-Type"] = mime or "application/octet-stream"

@@ -272,7 +272,7 @@ const browseFile = async () => {
                     <button
                       class="pm-source-btn"
                       :class="{ active: (activeRule.body_source || 'inline') === 'inline' }"
-                      @click="activeRule.body_source = 'inline'"
+                      @click="activeRule.body_source = 'inline'; activeRule.file_path = ''"
                     >Inline</button>
                     <button
                       class="pm-source-btn"

@@ -149,7 +149,7 @@ const handleKeyDown = async (e) => {
     if (selId && containerRef.value) {
       containerRef.value
         .querySelector(`[data-row-id="${selId}"]`)
-        ?.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+        ?.scrollIntoView({ block: 'nearest', behavior: 'auto' })
     }
   }
 }
