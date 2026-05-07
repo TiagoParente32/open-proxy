@@ -433,22 +433,31 @@ open "{install_path}"
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     elif sys.platform == 'win32':
-        new_dir = next(
-            (os.path.join(extract_dir, f) for f in os.listdir(extract_dir)
-             if os.path.isdir(os.path.join(extract_dir, f))),
-            extract_dir
-        )
         exe_name = APP_PRODUCT_NAME + '.exe'
+        # electron-builder Windows zips are flat (exe at root, no wrapper folder).
+        # Only look for a subdirectory wrapper if the exe isn't directly in extract_dir.
+        if os.path.isfile(os.path.join(extract_dir, exe_name)):
+            new_dir = extract_dir
+        else:
+            new_dir = next(
+                (os.path.join(extract_dir, f) for f in os.listdir(extract_dir)
+                 if os.path.isdir(os.path.join(extract_dir, f))),
+                extract_dir
+            )
         log = os.path.join(tmp_dir, 'update.log')
-        script = os.path.join(tmp_dir, 'do_update.bat')
+        script = os.path.join(tmp_dir, 'do_update.ps1')
+        exe_path = os.path.join(install_path, exe_name)
         with open(script, 'w') as f:
-            f.write(f"""@echo off
-timeout /t 4 /nobreak >nul
-robocopy "{new_dir}" "{install_path}" /E /IS /IT /IM >"{log}" 2>&1
-start "" "{os.path.join(install_path, exe_name)}"
+            f.write(f"""Start-Sleep -Seconds 4
+Start-Transcript -Path "{log}" -Append
+robocopy "{new_dir}" "{install_path}" /E /IS /IT /IM
+Start-Process "{exe_path}"
 """)
-        subprocess.Popen(['cmd', '/c', script], close_fds=True,
-                         creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+        subprocess.Popen(
+            ['powershell', '-WindowStyle', 'Hidden', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script],
+            close_fds=True,
+            creationflags=subprocess.DETACHED_PROCESS,
+        )
 
     else:
         new_dir = next(
