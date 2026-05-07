@@ -37,8 +37,9 @@ def _read_app_version():
     except Exception:
         return "1.0.5"   # fallback — keep in sync if auto-read ever fails
 
-APP_VERSION = _read_app_version()
-GITHUB_REPO = "TiagoParente32/open-proxy"
+APP_VERSION      = _read_app_version()
+APP_PRODUCT_NAME = "OpenProxy"   # must match build.productName in package.json
+GITHUB_REPO      = "TiagoParente32/open-proxy"
 
 OPENPROXY_DATA_DIR = os.path.join(os.path.expanduser("~"), ".openproxy")
 SCRIPTS_DIR        = os.path.join(OPENPROXY_DATA_DIR, "scripts")
@@ -186,7 +187,11 @@ LOCAL_IP = get_local_ip()
 # AUTO-UPDATE HELPERS
 # ============================================================================
 def _get_app_install_path():
-    """Return the Electron app root (the .app bundle on macOS, exe folder on Windows/Linux)."""
+    """Return the Electron app root (the .app bundle on macOS, AppImage on Linux, exe folder on Windows/Linux tar)."""
+    # Linux AppImage: $APPIMAGE is set by the AppImage runtime and points to the
+    # actual .AppImage file on disk (not the read-only squashfs mount point).
+    if sys.platform not in ('darwin', 'win32') and os.environ.get('APPIMAGE'):
+        return os.environ['APPIMAGE']
     exe = os.path.abspath(sys.executable)
     if sys.platform == 'darwin' and '.app/Contents/' in exe:
         return exe.split('/Contents/')[0]   # /path/to/OpenProxy.app
@@ -273,8 +278,10 @@ def check_for_updates():
                 download_url = asset['browser_download_url']
                 break
 
-        else:  # Linux — prefer AppImage, fall back to tar.gz
-            for ext in ('.appimage', '.tar.gz', '.zip'):
+        else:  # Linux — prefer AppImage when running from AppImage, tar.gz otherwise (e.g. deb/tar installs)
+            is_appimage_install = bool(os.environ.get('APPIMAGE'))
+            preferred = ['.appimage', '.tar.gz', '.zip'] if is_appimage_install else ['.tar.gz', '.zip', '.appimage']
+            for ext in preferred:
                 for asset in assets:
                     name = asset.get('name', '').lower()
                     if name.endswith(ext) and any(kw in name for kw in ['linux', 'appimage']):
@@ -299,6 +306,24 @@ def check_for_updates():
         return None
 
 
+def _launch_linux_script(script, needs_elevation):
+    """Launch a bash update script, escalating via pkexec if the install path needs root."""
+    if needs_elevation:
+        pkexec = subprocess.run(['which', 'pkexec'], capture_output=True, text=True).stdout.strip()
+        if not pkexec:
+            raise PermissionError(
+                "The install location requires elevated privileges but pkexec was not found. "
+                "Please download the new version manually from GitHub and reinstall."
+            )
+        # pkexec shows a graphical password prompt while the app is still open.
+        # The script itself sleeps before acting, giving the app time to quit.
+        subprocess.Popen([pkexec, 'bash', script], close_fds=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        subprocess.Popen(['bash', script], close_fds=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def apply_update(download_url, progress_cb=None):
     """
     Download the release zip, extract it, then launch a helper script that
@@ -309,6 +334,12 @@ def apply_update(download_url, progress_cb=None):
     import tempfile, zipfile, shutil, stat
 
     install_path = _get_app_install_path()
+
+    # Check write access early; on Linux we can escalate via pkexec if needed.
+    # macOS checks the parent dir (we need to replace the .app bundle itself).
+    check_path = os.path.dirname(install_path) if sys.platform == 'darwin' else install_path
+    needs_elevation = sys.platform not in ('darwin', 'win32') and not os.access(check_path, os.W_OK)
+
     tmp_dir = tempfile.mkdtemp(prefix='openproxy_update_')
 
     zip_path = os.path.join(tmp_dir, 'update.zip')
@@ -333,15 +364,15 @@ def apply_update(download_url, progress_cb=None):
         with open(script, 'w') as f:
             f.write(f"""#!/bin/bash
 exec >"{log}" 2>&1
+set -e
 set -x
-sleep 2
+sleep 4
 cp -f "{dl_path}" "{install_path}"
 chmod +x "{install_path}"
 nohup "{install_path}" &
 """)
         os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
-        subprocess.Popen(['bash', script], close_fds=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        _launch_linux_script(script, needs_elevation)
         return
 
     # ── All other formats: extract the archive first ─────────────────────────
@@ -407,12 +438,12 @@ open "{install_path}"
              if os.path.isdir(os.path.join(extract_dir, f))),
             extract_dir
         )
-        exe_name = os.path.basename(sys.executable)
+        exe_name = APP_PRODUCT_NAME + '.exe'
         log = os.path.join(tmp_dir, 'update.log')
         script = os.path.join(tmp_dir, 'do_update.bat')
         with open(script, 'w') as f:
             f.write(f"""@echo off
-timeout /t 2 /nobreak >nul
+timeout /t 4 /nobreak >nul
 robocopy "{new_dir}" "{install_path}" /E /IS /IT /IM >"{log}" 2>&1
 start "" "{os.path.join(install_path, exe_name)}"
 """)
@@ -425,21 +456,21 @@ start "" "{os.path.join(install_path, exe_name)}"
              if os.path.isdir(os.path.join(extract_dir, f))),
             extract_dir
         )
-        exe_name = os.path.basename(sys.executable)
+        exe_name = APP_PRODUCT_NAME
         log = os.path.join(tmp_dir, 'update.log')
         script = os.path.join(tmp_dir, 'do_update.sh')
         with open(script, 'w') as f:
             f.write(f"""#!/bin/bash
 exec >"{log}" 2>&1
+set -e
 set -x
-sleep 2
+sleep 4
 cp -rf "{new_dir}/." "{install_path}/"
 chmod +x "{os.path.join(install_path, exe_name)}"
 nohup "{os.path.join(install_path, exe_name)}" &
 """)
         os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
-        subprocess.Popen(['bash', script], close_fds=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        _launch_linux_script(script, needs_elevation)
 
 
 # ============================================================================
