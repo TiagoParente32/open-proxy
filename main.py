@@ -952,7 +952,6 @@ class ProxyUIBridge:
                 if rule.get("active") and re.search(strict_regex, flow.request.pretty_url):
                     try:
                         status_code = int(rule.get("status", 200))
-                        body_text = rule.get("body", "").encode('utf-8')
                         headers_dict = {}
                         try:
                             if rule.get("headers"):
@@ -960,8 +959,19 @@ class ProxyUIBridge:
                         except json.JSONDecodeError:
                             headers_dict = {"Content-Type": "text/plain"}
 
+                        file_path = rule.get("file_path", "")
+                        if file_path and os.path.isfile(file_path):
+                            import mimetypes
+                            with open(file_path, "rb") as f:
+                                body_bytes = f.read()
+                            if "Content-Type" not in headers_dict:
+                                mime, _ = mimetypes.guess_type(file_path)
+                                headers_dict["Content-Type"] = mime or "application/octet-stream"
+                        else:
+                            body_bytes = rule.get("body", "").encode("utf-8")
+
                         headers_dict["X-Map-Local"] = "Active"
-                        flow.response = http.Response.make(status_code, body_text, headers_dict)
+                        flow.response = http.Response.make(status_code, body_bytes, headers_dict)
                         return
                     except Exception as e:
                         flow.response = http.Response.make(500, f"Editor Error: {e}".encode())

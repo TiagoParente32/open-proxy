@@ -197,6 +197,20 @@ function setupIPC () {
     if (!canceled && filePath) fs.writeFileSync(filePath, content, 'utf8')
   })
 
+  ipcMain.handle('dialog:selectFile', async (_e, opts = {}) => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title:      opts.title || 'Select File',
+      properties: ['openFile'],
+      filters:    opts.filters || [
+        { name: 'All Files', extensions: ['*'] },
+        { name: 'JSON',      extensions: ['json'] },
+        { name: 'Images',    extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] },
+        { name: 'Text',      extensions: ['txt', 'html', 'xml', 'csv'] },
+      ],
+    })
+    return canceled ? null : filePaths[0]
+  })
+
   // Updater calls this with the path of the freshly-extracted .app before
   // relaunching, so Gatekeeper doesn't block the new bundle on macOS.
   ipcMain.on('update:clearQuarantine', (_e, newAppPath) => {
