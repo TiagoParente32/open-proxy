@@ -1482,6 +1482,34 @@ class ProxyUIBridge:
         message = json.dumps({"type": msg_type, "data": data})
         await asyncio.gather(*(client.send(message) for client in self.connected_clients), return_exceptions=True)
 
+    async def _toggle_macos_proxy(self, websocket, enable: bool):
+        if sys.platform != "darwin":
+            await websocket.send(json.dumps({
+                "type": "MACOS_PROXY_STATUS",
+                "active": False,
+                "services": [],
+                "error": "System proxy toggle is macOS-only.",
+            }))
+            return
+
+        # set/unset_macos_proxy() block on the admin password dialog
+        # (osascript), so run them off the asyncio loop.
+        loop = asyncio.get_running_loop()
+        if enable:
+            result = await loop.run_in_executor(None, set_macos_proxy, self.proxy_port)
+        else:
+            result = await loop.run_in_executor(None, unset_macos_proxy)
+
+        if result.get("ok"):
+            self.is_mac_proxy_set = enable
+            self.mac_proxy_services = result.get("services", []) if enable else []
+
+        await self.broadcast_to_ui("MACOS_PROXY_STATUS", {
+            "active": self.is_mac_proxy_set,
+            "services": result.get("services", []),
+            "error": result.get("error"),
+        })
+
     async def websocket_handler(self, websocket):
         self.connected_clients.add(websocket)
         try:
@@ -1712,48 +1740,10 @@ class ProxyUIBridge:
                         }))
 
                 elif payload.get("type") == "SET_MAC_PROXY":
-                    if sys.platform != "darwin":
-                        await websocket.send(json.dumps({
-                            "type": "MACOS_PROXY_STATUS",
-                            "active": False,
-                            "services": [],
-                            "error": "System proxy toggle is macOS-only.",
-                        }))
-                    else:
-                        # set_macos_proxy() blocks on the admin password dialog
-                        # (osascript), so run it off the asyncio loop.
-                        loop = asyncio.get_running_loop()
-                        result = await loop.run_in_executor(
-                            None, set_macos_proxy, self.proxy_port
-                        )
-                        if result.get("ok"):
-                            self.is_mac_proxy_set = True
-                            self.mac_proxy_services = result.get("services", [])
-                        await self.broadcast_to_ui("MACOS_PROXY_STATUS", {
-                            "active": self.is_mac_proxy_set,
-                            "services": result.get("services", []),
-                            "error": result.get("error"),
-                        })
+                    await self._toggle_macos_proxy(websocket, enable=True)
 
                 elif payload.get("type") == "UNSET_MAC_PROXY":
-                    if sys.platform != "darwin":
-                        await websocket.send(json.dumps({
-                            "type": "MACOS_PROXY_STATUS",
-                            "active": False,
-                            "services": [],
-                            "error": "System proxy toggle is macOS-only.",
-                        }))
-                    else:
-                        loop = asyncio.get_running_loop()
-                        result = await loop.run_in_executor(None, unset_macos_proxy)
-                        if result.get("ok"):
-                            self.is_mac_proxy_set = False
-                            self.mac_proxy_services = []
-                        await self.broadcast_to_ui("MACOS_PROXY_STATUS", {
-                            "active": self.is_mac_proxy_set,
-                            "services": result.get("services", []),
-                            "error": result.get("error"),
-                        })
+                    await self._toggle_macos_proxy(websocket, enable=False)
 
                 elif payload.get("type") == "SCRIPT_SAVE":
                     self.scripts_manager.save_script(

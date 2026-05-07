@@ -1077,13 +1077,13 @@ export const initWebSocket = () => {
         }
 
         else if (payload.type === "MACOS_PROXY_STATUS") {
-            const d = payload.data ?? payload
+            const status = payload.data ?? payload
             macosProxyLoading.value = false
-            macosProxyActive.value = d.active ?? false
-            macosProxyServices.value = d.services ?? []
-            if (d.error && d.error !== 'cancelled') {
-                macosProxyError.value = d.error
-            } else if (!d.error) {
+            macosProxyActive.value = status.active ?? false
+            macosProxyServices.value = status.services ?? []
+            if (status.error && status.error !== 'cancelled') {
+                macosProxyError.value = status.error
+            } else if (!status.error) {
                 macosProxyError.value = null
             }
         }
