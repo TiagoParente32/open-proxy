@@ -358,22 +358,181 @@ def apply_update(download_url, progress_cb=None):
         progress_cb(100)
 
     # ── Linux AppImage: single executable, no extraction needed ─────────────
-    if sys.platform not in ('darwin', 'win32') and dl_path.lower().endswith('.appimage'):
-        log    = os.path.join(tmp_dir, 'update.log')
+    elif sys.platform not in ('darwin', 'win32'):
+        log = os.path.join(tmp_dir, 'update.log')
         script = os.path.join(tmp_dir, 'do_update.sh')
-        with open(script, 'w') as f:
-            f.write(f"""#!/bin/bash
-exec >"{log}" 2>&1
-set -e
-set -x
-sleep 4
-cp -f "{dl_path}" "{install_path}"
-chmod +x "{install_path}"
-nohup "{install_path}" &
-""")
-        os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
-        _launch_linux_script(script, needs_elevation)
-        return
+
+        # ============================================================
+        # APPIMAGE UPDATES
+        # ============================================================
+
+        if dl_path.lower().endswith('.appimage'):
+
+            needs_elevation = not os.access(
+                os.path.dirname(install_path),
+                os.W_OK
+            )
+
+            with open(script, 'w') as f:
+                f.write(f"""#!/bin/bash
+    exec > "{log}" 2>&1
+
+    set -e
+    set -x
+
+    sleep 4
+
+    APP="{install_path}"
+    NEW_APP="{dl_path}"
+
+    echo "Replacing AppImage..."
+
+    chmod +x "$NEW_APP"
+
+    mv -f "$NEW_APP" "$APP"
+
+    chmod +x "$APP"
+
+    echo "Launching updated app..."
+
+    nohup "$APP" >/dev/null 2>&1 &
+
+    exit 0
+    """)
+
+            os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
+
+            _launch_linux_script(script, needs_elevation)
+            return
+
+        # ============================================================
+        # DEB PACKAGE UPDATES
+        # ============================================================
+
+        elif dl_path.lower().endswith('.deb'):
+
+            # .deb ALWAYS requires elevation
+            needs_elevation = True
+
+            executable_name = APP_PRODUCT_NAME.lower()
+
+            with open(script, 'w') as f:
+                f.write(f"""#!/bin/bash
+    exec > "{log}" 2>&1
+
+    set -e
+    set -x
+
+    sleep 4
+
+    DEB="{dl_path}"
+
+    echo "Installing DEB package..."
+
+    dpkg -i "$DEB" || apt-get install -f -y
+
+    echo "Waiting a moment before relaunch..."
+    sleep 2
+
+    echo "Launching updated app..."
+
+    nohup "{install_path}" >/dev/null 2>&1 &
+
+    exit 0
+    """)
+
+            os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
+
+            _launch_linux_script(script, needs_elevation)
+            return
+
+        # ============================================================
+        # ARCHIVE UPDATES (.tar.gz / .zip)
+        # ============================================================
+
+        else:
+
+            # --------------------------------------------------------
+            # Extract archive
+            # --------------------------------------------------------
+
+            if dl_path.endswith('.tar.gz'):
+                subprocess.run(
+                    ['tar', '-xzf', dl_path, '-C', extract_dir],
+                    check=True
+                )
+
+            elif dl_path.endswith('.zip'):
+                result = subprocess.run(
+                    ['unzip', '-q', dl_path, '-d', extract_dir]
+                )
+
+                if result.returncode != 0:
+                    with zipfile.ZipFile(dl_path, 'r') as zf:
+                        zf.extractall(extract_dir)
+
+            else:
+                raise RuntimeError(
+                    f"Unsupported Linux update format: {dl_path}"
+                )
+
+            # --------------------------------------------------------
+            # Find extracted app dir
+            # --------------------------------------------------------
+
+            extracted_items = [
+                os.path.join(extract_dir, f)
+                for f in os.listdir(extract_dir)
+            ]
+
+            new_dir = next(
+                (p for p in extracted_items if os.path.isdir(p)),
+                extract_dir
+            )
+
+            executable_path = os.path.join(
+                install_path,
+                APP_PRODUCT_NAME
+            )
+
+            needs_elevation = not os.access(
+                install_path,
+                os.W_OK
+            )
+
+            with open(script, 'w') as f:
+                f.write(f"""#!/bin/bash
+    exec > "{log}" 2>&1
+
+    set -e
+    set -x
+
+    sleep 4
+
+    SRC="{new_dir}"
+    DEST="{install_path}"
+
+    echo "Copying updated files..."
+
+    mkdir -p "$DEST"
+
+    cp -rf "$SRC"/. "$DEST"/
+
+    echo "Fixing executable permissions..."
+
+    chmod +x "{executable_path}"
+
+    echo "Launching updated app..."
+
+    nohup "{executable_path}" >/dev/null 2>&1 &
+
+    exit 0
+    """)
+
+            os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
+
+            _launch_linux_script(script, needs_elevation)
+            return
 
     # ── All other formats: extract the archive first ─────────────────────────
     if sys.platform == 'darwin':
@@ -434,29 +593,58 @@ open "{install_path}"
 
     elif sys.platform == 'win32':
         exe_name = APP_PRODUCT_NAME + '.exe'
-        # electron-builder Windows zips are flat (exe at root, no wrapper folder).
-        # Only look for a subdirectory wrapper if the exe isn't directly in extract_dir.
+
+        # electron-builder zips are usually flat
         if os.path.isfile(os.path.join(extract_dir, exe_name)):
             new_dir = extract_dir
         else:
             new_dir = next(
-                (os.path.join(extract_dir, f) for f in os.listdir(extract_dir)
-                 if os.path.isdir(os.path.join(extract_dir, f))),
+                (
+                    os.path.join(extract_dir, f)
+                    for f in os.listdir(extract_dir)
+                    if os.path.isdir(os.path.join(extract_dir, f))
+                ),
                 extract_dir
             )
+
         log = os.path.join(tmp_dir, 'update.log')
         script = os.path.join(tmp_dir, 'do_update.ps1')
+
         exe_path = os.path.join(install_path, exe_name)
-        with open(script, 'w') as f:
-            f.write(f"""Start-Sleep -Seconds 4
-Start-Transcript -Path "{log}" -Append
-robocopy "{new_dir}" "{install_path}" /E /IS /IT /IM
-Start-Process "{exe_path}"
-""")
+
+        with open(script, 'w', encoding='utf-8') as f:
+            f.write(f'''
+    $ErrorActionPreference = "Stop"
+
+    Start-Transcript -Path "{log}" -Append
+
+    Write-Host "Waiting for app to close..."
+    Start-Sleep -Seconds 5
+
+    Write-Host "Copying update files..."
+
+    $source = "{new_dir}"
+    $dest = "{install_path}"
+
+    # Copy all files recursively
+    Copy-Item "$source\\*" "$dest" -Recurse -Force
+
+    Write-Host "Launching app..."
+
+    Start-Process "{exe_path}"
+
+    Stop-Transcript
+    ''')
+
         subprocess.Popen(
-            ['powershell', '-WindowStyle', 'Hidden', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script],
-            close_fds=True,
-            creationflags=subprocess.DETACHED_PROCESS,
+            [
+                'powershell',
+                '-NoProfile',
+                '-ExecutionPolicy', 'Bypass',
+                '-File', script
+            ],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            close_fds=True
         )
 
     else:
