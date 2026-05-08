@@ -36,7 +36,7 @@ def _read_app_version():
         with open(os.path.join(root, 'package.json')) as _f:
             return json.load(_f)['version']
     except Exception:
-        return "1.0.6"   # fallback — keep in sync if auto-read ever fails
+        return "1.0.7"   # fallback — keep in sync if auto-read ever fails
 
 APP_VERSION      = _read_app_version()
 APP_PRODUCT_NAME   = "OpenProxy"   # must match build.productName in package.json
@@ -1220,7 +1220,7 @@ class ProxyUIBridge:
                 if rule.get("active") and rule.get("is_request"):
                     try:
                         pattern = rule.get("pattern", "")
-                        strict_regex = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
+                        strict_regex = "^" + pattern.replace("*", ".*") + "$"
 
                         if re.search(strict_regex, flow.request.pretty_url):
                             pause_event = asyncio.Event()
@@ -1237,6 +1237,21 @@ class ProxyUIBridge:
 
                             await self.broadcast_to_ui("BREAKPOINT_HIT", bp_data)
                             await pause_event.wait()
+                            try:
+                                loop = asyncio.get_running_loop()
+                                req_update = {
+                                    "id": flow.id,
+                                    "method": flow.request.method,
+                                    "url": flow.request.pretty_url,
+                                    "req_bytes": len(flow.request.raw_content) if flow.request.raw_content else 0,
+                                    "req_headers": dict(flow.request.headers),
+                                    "req_body": flow.request.get_text(strict=False) or "",
+                                }
+                                task = loop.create_task(self.broadcast_to_ui("UPDATE_REQUEST", req_update))
+                                self.bg_tasks.add(task)
+                                task.add_done_callback(self.bg_tasks.discard)
+                            except RuntimeError:
+                                pass
                             break
                     except re.error:
                         pass
@@ -1286,23 +1301,12 @@ class ProxyUIBridge:
 
         duration_ms = (flow.response.timestamp_end - flow.request.timestamp_start) * 1000 if flow.response.timestamp_end else 0
 
-        update_data = {
-            "id": flow.id,
-            "status": flow.response.status_code,
-            "duration": round(duration_ms),
-            "res_bytes": len(flow.response.raw_content) if flow.response.raw_content else 0,
-            "res_headers": dict(flow.response.headers),
-            "res_body": res_body,
-            "res_is_image": res_is_image,
-            "res_is_binary": res_is_binary
-        }
-
         if self.breakpoints_enabled:
             for rule in self.breakpoint_rules:
                 if rule.get("active") and rule.get("is_response"):
                     try:
                         pattern = rule.get("pattern", "")
-                        strict_regex = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
+                        strict_regex = "^" + pattern.replace("*", ".*") + "$"
 
                         if re.search(strict_regex, flow.request.pretty_url):
                             pause_event = asyncio.Event()
@@ -1320,9 +1324,32 @@ class ProxyUIBridge:
 
                             await self.broadcast_to_ui("BREAKPOINT_HIT", bp_data)
                             await pause_event.wait()
+                            # Rebuild body fields after user may have modified the response
+                            res_body = flow.response.get_text(strict=False) or ""
+                            res_is_image = False
+                            res_is_binary = False
+                            content_type = flow.response.headers.get("Content-Type", "").lower()
+                            if content_type.startswith("image/") and flow.response.raw_content:
+                                try:
+                                    b64_data = base64.b64encode(flow.response.raw_content).decode('utf-8')
+                                    res_body = f"data:{content_type};base64,{b64_data}"
+                                    res_is_image = True
+                                except Exception:
+                                    pass
                             break
                     except re.error:
                         pass
+
+        update_data = {
+            "id": flow.id,
+            "status": flow.response.status_code,
+            "duration": round(duration_ms),
+            "res_bytes": len(flow.response.raw_content) if flow.response.raw_content else 0,
+            "res_headers": dict(flow.response.headers),
+            "res_body": res_body,
+            "res_is_image": res_is_image,
+            "res_is_binary": res_is_binary
+        }
 
         try:
             loop = asyncio.get_running_loop()
