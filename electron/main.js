@@ -392,7 +392,7 @@ function setupMenu () {
       ],
     },
     {
-      label: 'Help',
+      role: 'help',
       submenu: [
         {
           label: 'Check for Updates',
