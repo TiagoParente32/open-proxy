@@ -280,9 +280,21 @@ def check_for_updates():
                 download_url = asset['browser_download_url']
                 break
 
-        else:  # Linux — prefer AppImage when running from AppImage, tar.gz otherwise (e.g. deb/tar installs)
+        else:  # Linux — pick asset format that matches how the app was installed
             is_appimage_install = bool(os.environ.get('APPIMAGE'))
-            preferred = ['.appimage', '.tar.gz', '.zip'] if is_appimage_install else ['.tar.gz', '.zip', '.appimage']
+            is_deb_install = (
+                not is_appimage_install and
+                subprocess.run(
+                    ['dpkg', '-s', APP_LINUX_EXE_NAME],
+                    capture_output=True
+                ).returncode == 0
+            )
+            if is_appimage_install:
+                preferred = ['.appimage', '.tar.gz', '.zip']
+            elif is_deb_install:
+                preferred = ['.deb', '.tar.gz', '.zip']
+            else:
+                preferred = ['.tar.gz', '.zip', '.appimage']
             for ext in preferred:
                 for asset in assets:
                     name = asset.get('name', '').lower()
