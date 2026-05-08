@@ -120,8 +120,8 @@ function startPython () {
 // ── BrowserWindow ────────────────────────────────────────────────────────────
 function createWindow () {
   win = new BrowserWindow({
-    width:    1024,
-    height:   720,
+    width:    1280,
+    height:   800,
     minWidth: 1024,
     minHeight: 720,
     // macOS: traffic lights overlay the content (hiddenInset)
@@ -284,6 +284,12 @@ function setupMenu () {
         { label: 'Compose Request', click: () => js('openComposeNew()') },
         { label: 'Clear Traffic',   click: () => js('clearTraffic()') },
         { type: 'separator' },
+        ...(process.platform === 'darwin' ? [{
+          label:   'OS Proxy',
+          type:    'checkbox',
+          checked: macosProxyActive,
+          click:   () => js('toggleMacProxy()'),
+        }] : []),
         {
           label:   'Bust Cache',
           type:    'checkbox',
@@ -299,12 +305,6 @@ function setupMenu () {
     {
       label: 'Tools',
       submenu: [
-        ...(process.platform === 'darwin' ? [{
-          label:   'OS Proxy',
-          type:    'checkbox',
-          checked: macosProxyActive,
-          click:   () => js('toggleMacProxy()'),
-        }, { type: 'separator' }] : []),
         { label: 'VPN Mode',     click: () => js('openVpnMode()') },
         { label: 'Breakpoints',  click: () => js('openBreakpoints()') },
         { type: 'separator' },
@@ -391,6 +391,30 @@ function setupMenu () {
         {
           label: 'Check for Updates',
           click: () => win?.webContents.executeJavaScript('window.__op?.checkForUpdates()'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Export Settings…',
+          click: () => win?.webContents.executeJavaScript('window.__op?.exportSettings()'),
+        },
+        {
+          label: 'Import Settings…',
+          click: () => win?.webContents.executeJavaScript('window.__op?.importSettings()'),
+        },
+        {
+          label: 'Reset All Preferences…',
+          click: async () => {
+            const { response } = await dialog.showMessageBox(win, {
+              type:    'warning',
+              buttons: ['Reset', 'Cancel'],
+              defaultId: 1,
+              cancelId:  1,
+              title:   'Reset All Preferences',
+              message: 'Reset all preferences to defaults?',
+              detail:  'This will clear all saved settings, rules, and traffic — like a fresh install. This cannot be undone.',
+            })
+            if (response === 0) win?.webContents.send('prefs:reset')
+          },
         },
         { type: 'separator' },
         {

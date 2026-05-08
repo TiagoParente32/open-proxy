@@ -1199,3 +1199,98 @@ export const initWebSocket = () => {
         reconnectDelay = Math.min(reconnectDelay * 2, 10000)
     }
 }
+
+// ============================================================================
+// 8. PREFERENCES RESET
+// ============================================================================
+export const resetPreferences = () => {
+    // Clear all openproxy_* keys
+    Object.keys(localStorage)
+        .filter(k => k.startsWith('openproxy_') || k === 'openproxy-theme')
+        .forEach(k => localStorage.removeItem(k))
+
+    location.reload()
+}
+
+// ============================================================================
+// 9. SETTINGS EXPORT / IMPORT
+// ============================================================================
+
+// Keys to skip — raw traffic data, not user configuration
+const EXPORT_SKIP_KEYS = new Set(['requests', 'wsMessages'])
+
+export const exportSettings = async () => {
+    const settings = {}
+
+    // Collect all openproxy_* keys (skip traffic)
+    for (const storageKey of Object.keys(localStorage)) {
+        if (storageKey === 'openproxy-theme') {
+            settings.theme = localStorage.getItem(storageKey)
+            continue
+        }
+        if (!storageKey.startsWith('openproxy_')) continue
+        const key = storageKey.slice('openproxy_'.length)
+        if (EXPORT_SKIP_KEYS.has(key)) continue
+        try { settings[key] = JSON.parse(localStorage.getItem(storageKey)) }
+        catch { settings[key] = localStorage.getItem(storageKey) }
+    }
+
+    // Include scripts from the backend (already loaded into reactive state)
+    settings.scripts = scripts.value.map(({ id, name, content, enabled }) => ({ id, name, content, enabled }))
+
+    const payload = {
+        exportedAt: new Date().toISOString(),
+        settings,
+    }
+
+    const filename = `openproxy-settings-${new Date().toISOString().slice(0, 10)}.json`
+    await window.electronAPI?.saveFile(filename, JSON.stringify(payload, null, 2))
+}
+
+export const importSettings = async () => {
+    const filePath = await window.electronAPI?.selectFile({
+        title:   'Import Settings',
+        filters: [{ name: 'OpenProxy Settings', extensions: ['json'] }],
+    })
+    if (!filePath) return
+
+    let payload
+    try {
+        const text = await fetch(`file://${filePath}`).then(r => r.text())
+        payload = JSON.parse(text)
+    } catch {
+        alert('Failed to read settings file. Make sure it is a valid OpenProxy JSON export.')
+        return
+    }
+
+    const { settings } = payload
+    if (!settings || typeof settings !== 'object') {
+        alert('Invalid settings file: missing "settings" key.')
+        return
+    }
+
+    // Restore localStorage-backed settings
+    const LS_KEYS = [
+        'theme', 'toolbarVisibility', 'throttleProfile', 'disableCache',
+        'isFocusMode', 'pinnedSources', 'activeChips',
+        'mapLocalRules', 'enableMapLocal',
+        'mapRemoteRules', 'enableMapRemote',
+        'breakpointRules', 'breakpointsEnabled',
+        'highlightRules', 'highlightsEnabled',
+    ]
+    for (const key of LS_KEYS) {
+        if (!(key in settings)) continue
+        if (key === 'theme') {
+            localStorage.setItem('openproxy-theme', settings.theme)
+        } else {
+            localStorage.setItem(`openproxy_${key}`, JSON.stringify(settings[key]))
+        }
+    }
+
+    // Restore scripts via WebSocket so the Python backend persists them
+    if (Array.isArray(settings.scripts) && wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: 'SCRIPTS_IMPORT', scripts: settings.scripts }))
+    }
+
+    location.reload()
+}

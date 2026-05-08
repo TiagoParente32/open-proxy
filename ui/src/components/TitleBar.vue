@@ -22,16 +22,15 @@ const MENUS = [
       { label: 'Compose Request', action: () => op()?.openComposeNew() },
       { label: 'Clear Traffic',   action: () => op()?.clearTraffic() },
       { type: 'separator' },
+      ...(window.electronAPI?.platform === 'darwin' ? [
+        { label: 'OS Proxy',   action: () => op()?.toggleMacProxy(), checked: () => macosProxyActive.value },
+      ] : []),
       { label: 'Bust Cache', action: () => op()?.bustCache(), checked: () => disableCache.value },
     ],
   },
   {
     label: 'Tools',
     items: [
-      ...(window.electronAPI?.platform === 'darwin' ? [
-        { label: 'OS Proxy', action: () => op()?.toggleMacProxy(), checked: () => macosProxyActive.value },
-        { type: 'separator' },
-      ] : []),
       { label: 'VPN Mode',    action: () => op()?.openVpnMode() },
       { label: 'Breakpoints', action: () => op()?.openBreakpoints() },
       { type: 'separator' },
@@ -71,10 +70,10 @@ const MENUS = [
         submenu: [
           { label: 'Dark',     action: () => applyTheme('dark'),     checked: () => currentThemeId.value === 'dark' },
           { label: 'Midnight', action: () => applyTheme('midnight'), checked: () => currentThemeId.value === 'midnight' },
-          { label: 'Ocean',     action: () => applyTheme('ocean'),    checked: () => currentThemeId.value === 'ocean' },
+          { label: 'Ocean',    action: () => applyTheme('ocean'),    checked: () => currentThemeId.value === 'ocean' },
           { label: 'Crimson',  action: () => applyTheme('crimson'),  checked: () => currentThemeId.value === 'crimson' },
-          { label: 'Ember',  action: () => applyTheme('ember'),  checked: () => currentThemeId.value === 'ember' },
-          { label: 'Light',     action: () => applyTheme('light'),    checked: () => currentThemeId.value === 'light' },
+          { label: 'Ember',    action: () => applyTheme('ember'),    checked: () => currentThemeId.value === 'ember' },
+          { label: 'Light',    action: () => applyTheme('light'),    checked: () => currentThemeId.value === 'light' },
         ],
       },
       {
@@ -102,6 +101,10 @@ const MENUS = [
     label: 'Help',
     items: [
       { label: 'Check for Updates', action: () => op()?.checkForUpdates() },
+      { type: 'separator' },
+      { label: 'Export Settings…',  action: () => op()?.exportSettings() },
+      { label: 'Import Settings…',  action: () => op()?.importSettings() },
+      { label: 'Reset All Preferences…', action: () => op()?.resetPreferences() },
       { type: 'separator' },
       { label: `About OpenProxy v${appVersion ?? ''}`, action: () => op()?.showAbout() },
     ],

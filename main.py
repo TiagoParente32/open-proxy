@@ -36,7 +36,7 @@ def _read_app_version():
         with open(os.path.join(root, 'package.json')) as _f:
             return json.load(_f)['version']
     except Exception:
-        return "1.0.7"   # fallback — keep in sync if auto-read ever fails
+        return "1.0.8"   # fallback — keep in sync if auto-read ever fails
 
 APP_VERSION      = _read_app_version()
 APP_PRODUCT_NAME   = "OpenProxy"   # must match build.productName in package.json
@@ -980,6 +980,25 @@ class ScriptsManager:
             os.remove(_script_path(script_id))
         except Exception:
             pass
+        self._save_meta()
+
+    def import_all(self, script_list: list):
+        """Replace all scripts with the provided list (used during settings import)."""
+        # Remove existing script files
+        for s in self._scripts:
+            try:
+                os.remove(_script_path(s['id']))
+            except Exception:
+                pass
+        self._scripts = []
+        for item in script_list:
+            sid     = item.get('id') or str(uuid.uuid4())[:8]
+            name    = item.get('name', 'Script')
+            content = item.get('content', '')
+            enabled = bool(item.get('enabled', False))
+            entry   = _compile_script(sid, name, content, enabled)
+            self._scripts.append(entry)
+            self._save_source(sid, content)
         self._save_meta()
 
     def toggle_script(self, script_id: str, enabled: bool) -> dict | None:
@@ -2041,6 +2060,10 @@ class ProxyUIBridge:
                             s["name"] = payload.get("name", s["name"])
                             self.scripts_manager._save_meta()
                             break
+                    await self._broadcast_scripts_list()
+
+                elif payload.get("type") == "SCRIPTS_IMPORT":
+                    self.scripts_manager.import_all(payload.get("scripts", []))
                     await self._broadcast_scripts_list()
 
                 elif payload.get("type") == "CHECK_FOR_UPDATES":
