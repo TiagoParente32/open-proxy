@@ -282,12 +282,10 @@ def check_for_updates():
 
         else:  # Linux — pick asset format that matches how the app was installed
             is_appimage_install = bool(os.environ.get('APPIMAGE'))
+            _linux_path = _get_app_install_path()
             is_deb_install = (
                 not is_appimage_install and
-                subprocess.run(
-                    ['dpkg', '-s', APP_LINUX_EXE_NAME],
-                    capture_output=True
-                ).returncode == 0
+                (_linux_path.startswith('/opt/') or _linux_path.startswith('/usr/'))
             )
             if is_appimage_install:
                 preferred = ['.appimage', '.tar.gz', '.zip']
