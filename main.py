@@ -982,6 +982,25 @@ class ScriptsManager:
             pass
         self._save_meta()
 
+    def import_all(self, script_list: list):
+        """Replace all scripts with the provided list (used during settings import)."""
+        # Remove existing script files
+        for s in self._scripts:
+            try:
+                os.remove(_script_path(s['id']))
+            except Exception:
+                pass
+        self._scripts = []
+        for item in script_list:
+            sid     = item.get('id') or str(uuid.uuid4())[:8]
+            name    = item.get('name', 'Script')
+            content = item.get('content', '')
+            enabled = bool(item.get('enabled', False))
+            entry   = _compile_script(sid, name, content, enabled)
+            self._scripts.append(entry)
+            self._save_source(sid, content)
+        self._save_meta()
+
     def toggle_script(self, script_id: str, enabled: bool) -> dict | None:
         for s in self._scripts:
             if s['id'] == script_id:
@@ -2041,6 +2060,10 @@ class ProxyUIBridge:
                             s["name"] = payload.get("name", s["name"])
                             self.scripts_manager._save_meta()
                             break
+                    await self._broadcast_scripts_list()
+
+                elif payload.get("type") == "SCRIPTS_IMPORT":
+                    self.scripts_manager.import_all(payload.get("scripts", []))
                     await self._broadcast_scripts_list()
 
                 elif payload.get("type") == "CHECK_FOR_UPDATES":

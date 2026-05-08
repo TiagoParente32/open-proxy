@@ -398,6 +398,10 @@ function setupMenu () {
           click: () => win?.webContents.executeJavaScript('window.__op?.exportSettings()'),
         },
         {
+          label: 'Import Settings…',
+          click: () => win?.webContents.executeJavaScript('window.__op?.importSettings()'),
+        },
+        {
           label: 'Reset All Preferences…',
           click: async () => {
             const { response } = await dialog.showMessageBox(win, {

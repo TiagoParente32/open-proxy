@@ -1213,7 +1213,7 @@ export const resetPreferences = () => {
 }
 
 // ============================================================================
-// 9. SETTINGS EXPORT
+// 9. SETTINGS EXPORT / IMPORT
 // ============================================================================
 
 // Keys to skip — raw traffic data, not user configuration
@@ -1245,4 +1245,52 @@ export const exportSettings = async () => {
 
     const filename = `openproxy-settings-${new Date().toISOString().slice(0, 10)}.json`
     await window.electronAPI?.saveFile(filename, JSON.stringify(payload, null, 2))
+}
+
+export const importSettings = async () => {
+    const filePath = await window.electronAPI?.selectFile({
+        title:   'Import Settings',
+        filters: [{ name: 'OpenProxy Settings', extensions: ['json'] }],
+    })
+    if (!filePath) return
+
+    let payload
+    try {
+        const text = await fetch(`file://${filePath}`).then(r => r.text())
+        payload = JSON.parse(text)
+    } catch {
+        alert('Failed to read settings file. Make sure it is a valid OpenProxy JSON export.')
+        return
+    }
+
+    const { settings } = payload
+    if (!settings || typeof settings !== 'object') {
+        alert('Invalid settings file: missing "settings" key.')
+        return
+    }
+
+    // Restore localStorage-backed settings
+    const LS_KEYS = [
+        'theme', 'toolbarVisibility', 'throttleProfile', 'disableCache',
+        'isFocusMode', 'pinnedSources', 'activeChips',
+        'mapLocalRules', 'enableMapLocal',
+        'mapRemoteRules', 'enableMapRemote',
+        'breakpointRules', 'breakpointsEnabled',
+        'highlightRules', 'highlightsEnabled',
+    ]
+    for (const key of LS_KEYS) {
+        if (!(key in settings)) continue
+        if (key === 'theme') {
+            localStorage.setItem('openproxy-theme', settings.theme)
+        } else {
+            localStorage.setItem(`openproxy_${key}`, JSON.stringify(settings[key]))
+        }
+    }
+
+    // Restore scripts via WebSocket so the Python backend persists them
+    if (Array.isArray(settings.scripts) && wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: 'SCRIPTS_IMPORT', scripts: settings.scripts }))
+    }
+
+    location.reload()
 }

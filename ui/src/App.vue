@@ -63,6 +63,7 @@ import {
   toggleMacProxy,
   resetPreferences,
   exportSettings,
+  importSettings,
 } from './store.js'
 
 onMounted(() => {
@@ -104,6 +105,7 @@ onMounted(() => {
     showAbout:        () => { showAboutModal.value = true },
     resetPreferences: () => resetPreferences(),
     exportSettings:   () => exportSettings(),
+    importSettings:   () => importSettings(),
   }
 
   window.electronAPI?.onResetPreferences?.(() => resetPreferences())
