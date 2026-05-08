@@ -244,9 +244,7 @@ const openBreakpointModalFromContext = () => {
   if (contextMenu.value.request) {
     const req = contextMenu.value.request;
     
-    // Pro-tip: Strip the query parameters (everything after '?') so the regex is cleaner
-    // and escape the dots so 'google.com' doesn't accidentally match 'google-com'
-    let defaultPattern = req.url.split('?')[0].replace(/\./g, '\\.');
+    let defaultPattern = decodeURIComponent(req.url.split('?')[0]);
 
     const newRule = { 
       id: Date.now(), 

@@ -951,6 +951,14 @@ export const initWebSocket = () => {
         else if (payload.type === "BREAKPOINT_HIT") {
             const newFlow = payload.data
             newFlow.headersStr = JSON.stringify(newFlow.headers, null, 2)
+            if (newFlow.url) newFlow.url = newFlow.url.replace(/\\\//g, '/')
+            if (newFlow.body) {
+                try {
+                    newFlow.body = JSON.stringify(JSON.parse(newFlow.body), null, 2)
+                } catch(e) {
+                    newFlow.body = newFlow.body.replace(/\\\//g, '/')
+                }
+            }
             trappedFlows.value.push(newFlow)
         }
 
