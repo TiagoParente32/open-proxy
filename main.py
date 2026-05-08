@@ -7,6 +7,7 @@ import socket
 import asyncio
 import re
 import base64
+import stat
 import subprocess
 import threading
 import signal
@@ -35,10 +36,12 @@ def _read_app_version():
         with open(os.path.join(root, 'package.json')) as _f:
             return json.load(_f)['version']
     except Exception:
-        return "1.0.5"   # fallback — keep in sync if auto-read ever fails
+        return "1.0.6"   # fallback — keep in sync if auto-read ever fails
 
-APP_VERSION = _read_app_version()
-GITHUB_REPO = "TiagoParente32/open-proxy"
+APP_VERSION      = _read_app_version()
+APP_PRODUCT_NAME   = "OpenProxy"   # must match build.productName in package.json
+APP_LINUX_EXE_NAME = "open-proxy"  # must match package.json "name" (electron-builder uses this for the Linux binary)
+GITHUB_REPO      = "TiagoParente32/open-proxy"
 
 OPENPROXY_DATA_DIR = os.path.join(os.path.expanduser("~"), ".openproxy")
 SCRIPTS_DIR        = os.path.join(OPENPROXY_DATA_DIR, "scripts")
@@ -186,7 +189,11 @@ LOCAL_IP = get_local_ip()
 # AUTO-UPDATE HELPERS
 # ============================================================================
 def _get_app_install_path():
-    """Return the Electron app root (the .app bundle on macOS, exe folder on Windows/Linux)."""
+    """Return the Electron app root (the .app bundle on macOS, AppImage on Linux, exe folder on Windows/Linux tar)."""
+    # Linux AppImage: $APPIMAGE is set by the AppImage runtime and points to the
+    # actual .AppImage file on disk (not the read-only squashfs mount point).
+    if sys.platform not in ('darwin', 'win32') and os.environ.get('APPIMAGE'):
+        return os.environ['APPIMAGE']
     exe = os.path.abspath(sys.executable)
     if sys.platform == 'darwin' and '.app/Contents/' in exe:
         return exe.split('/Contents/')[0]   # /path/to/OpenProxy.app
@@ -273,18 +280,35 @@ def check_for_updates():
                 download_url = asset['browser_download_url']
                 break
 
-        else:  # Linux — prefer AppImage, fall back to tar.gz
-            for ext in ('.appimage', '.tar.gz', '.zip'):
+        else:  # Linux — pick asset format that matches how the app was installed
+            is_appimage_install = bool(os.environ.get('APPIMAGE'))
+            _linux_path = _get_app_install_path()
+            is_deb_install = (
+                not is_appimage_install and
+                (_linux_path.startswith('/opt/') or _linux_path.startswith('/usr/'))
+            )
+            if is_appimage_install:
+                preferred = ['.appimage', '.tar.gz', '.zip']
+            elif is_deb_install:
+                preferred = ['.deb', '.tar.gz', '.zip']
+            else:
+                preferred = ['.tar.gz', '.zip', '.appimage']
+            for ext in preferred:
                 for asset in assets:
                     name = asset.get('name', '').lower()
-                    if name.endswith(ext) and any(kw in name for kw in ['linux', 'appimage']):
-                        # Architecture match
-                        if is_arm and 'arm64' not in name and 'aarch64' not in name:
-                            continue
-                        if not is_arm and ('arm64' in name or 'aarch64' in name):
-                            continue
-                        download_url = asset['browser_download_url']
-                        break
+                    if not name.endswith(ext):
+                        continue
+                    # For .zip, require 'linux' keyword to avoid picking up Windows/macOS zips.
+                    # .tar.gz and .appimage are Linux-only formats so no keyword filter needed.
+                    if ext == '.zip' and 'linux' not in name:
+                        continue
+                    # Architecture match
+                    if is_arm and 'arm64' not in name and 'aarch64' not in name:
+                        continue
+                    if not is_arm and ('arm64' in name or 'aarch64' in name):
+                        continue
+                    download_url = asset['browser_download_url']
+                    break
                 if download_url:
                     break
 
@@ -299,6 +323,43 @@ def check_for_updates():
         return None
 
 
+def _launch_linux_script(script, needs_elevation):
+    """Launch a bash update script, escalating via pkexec if the install path needs root.
+
+    For elevated installs we use a two-step approach:
+      1. A tiny 'launcher' script that pkexec runs *synchronously* (subprocess.run blocks).
+         The launcher immediately backgrounds the real update worker and exits.
+      2. subprocess.run() returns only after the user authenticates — so UPDATE_READY
+         (and the subsequent app quit) happens *after* the password dialog is dismissed,
+         not before.  The real worker continues running as root in the background.
+    """
+    if needs_elevation:
+        pkexec = subprocess.run(['which', 'pkexec'], capture_output=True, text=True).stdout.strip()
+        if not pkexec:
+            raise PermissionError(
+                "The install location requires elevated privileges but pkexec was not found. "
+                "Please download the new version manually from GitHub and reinstall."
+            )
+
+        # Tiny launcher: backgrounds the real script and exits immediately so
+        # pkexec (and our blocking subprocess.run) can return as soon as
+        # authentication succeeds — well before the app window closes.
+        launcher = script + '.launcher.sh'
+        with open(launcher, 'w') as f:
+            f.write(f'#!/bin/bash\nnohup bash "{script}" >/dev/null 2>&1 &\n')
+        os.chmod(launcher, os.stat(launcher).st_mode | stat.S_IEXEC)
+
+        # Block until the user authenticates.  Raises if cancelled/failed.
+        result = subprocess.run([pkexec, 'bash', launcher],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if result.returncode != 0:
+            raise PermissionError("Elevation was cancelled or authentication failed.")
+    else:
+        subprocess.Popen(['bash', script], close_fds=True,
+                         start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def apply_update(download_url, progress_cb=None):
     """
     Download the release zip, extract it, then launch a helper script that
@@ -309,10 +370,19 @@ def apply_update(download_url, progress_cb=None):
     import tempfile, zipfile, shutil, stat
 
     install_path = _get_app_install_path()
+
+    # Check write access early; on Linux we can escalate via pkexec if needed.
+    # macOS checks the parent dir (we need to replace the .app bundle itself).
+    check_path = os.path.dirname(install_path) if sys.platform == 'darwin' else install_path
+    needs_elevation = sys.platform not in ('darwin', 'win32') and not os.access(check_path, os.W_OK)
+
     tmp_dir = tempfile.mkdtemp(prefix='openproxy_update_')
 
-    zip_path = os.path.join(tmp_dir, 'update.zip')
-    ext = os.path.splitext(download_url.split('?')[0])[1].lower()
+    url_path = download_url.split('?')[0].lower()
+    if url_path.endswith('.tar.gz'):
+        ext = '.tar.gz'
+    else:
+        ext = os.path.splitext(url_path)[1]
     dl_path = os.path.join(tmp_dir, f'update{ext}')
     extract_dir = os.path.join(tmp_dir, 'extracted')
     os.makedirs(extract_dir, exist_ok=True)
@@ -327,34 +397,174 @@ def apply_update(download_url, progress_cb=None):
         progress_cb(100)
 
     # ── Linux AppImage: single executable, no extraction needed ─────────────
-    if sys.platform not in ('darwin', 'win32') and dl_path.lower().endswith('.appimage'):
-        log    = os.path.join(tmp_dir, 'update.log')
+    if sys.platform not in ('darwin', 'win32'):
+        log = os.path.join(tmp_dir, 'update.log')
         script = os.path.join(tmp_dir, 'do_update.sh')
-        with open(script, 'w') as f:
-            f.write(f"""#!/bin/bash
-exec >"{log}" 2>&1
-set -x
-sleep 2
-cp -f "{dl_path}" "{install_path}"
-chmod +x "{install_path}"
-nohup "{install_path}" &
-""")
-        os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
-        subprocess.Popen(['bash', script], close_fds=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return
+
+        # ============================================================
+        # APPIMAGE UPDATES
+        # ============================================================
+
+        if dl_path.lower().endswith('.appimage'):
+
+            needs_elevation = not os.access(
+                os.path.dirname(install_path),
+                os.W_OK
+            )
+
+            with open(script, 'w') as f:
+                f.write(f"""#!/bin/bash
+    exec > "{log}" 2>&1
+
+    set -e
+    set -x
+
+    sleep 4
+
+    APP="{install_path}"
+    NEW_APP="{dl_path}"
+
+    echo "Replacing AppImage..."
+
+    chmod +x "$NEW_APP"
+
+    mv -f "$NEW_APP" "$APP"
+
+    chmod +x "$APP"
+
+    echo "AppImage updated successfully."
+
+    exit 0
+    """)
+
+            os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
+
+            _launch_linux_script(script, needs_elevation)
+            return
+
+        # ============================================================
+        # DEB PACKAGE UPDATES
+        # ============================================================
+
+        elif dl_path.lower().endswith('.deb'):
+
+            # .deb ALWAYS requires elevation
+            needs_elevation = True
+
+            with open(script, 'w') as f:
+                f.write(f"""#!/bin/bash
+    exec > "{log}" 2>&1
+
+    set -e
+    set -x
+
+    sleep 4
+
+    DEB="{dl_path}"
+
+    echo "Installing DEB package..."
+
+    dpkg -i "$DEB" || apt-get install -f -y
+
+    echo "DEB installed successfully."
+
+    exit 0
+    """)
+
+            os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
+
+            _launch_linux_script(script, needs_elevation)
+            return
+
+        # ============================================================
+        # ARCHIVE UPDATES (.tar.gz / .zip)
+        # ============================================================
+
+        else:
+
+            # --------------------------------------------------------
+            # Extract archive
+            # --------------------------------------------------------
+
+            if dl_path.endswith('.tar.gz'):
+                subprocess.run(
+                    ['tar', '-xzf', dl_path, '-C', extract_dir],
+                    check=True
+                )
+
+            elif dl_path.endswith('.zip'):
+                result = subprocess.run(
+                    ['unzip', '-q', dl_path, '-d', extract_dir]
+                )
+
+                if result.returncode != 0:
+                    with zipfile.ZipFile(dl_path, 'r') as zf:
+                        zf.extractall(extract_dir)
+
+            else:
+                raise RuntimeError(
+                    f"Unsupported Linux update format: {dl_path}"
+                )
+
+            # --------------------------------------------------------
+            # Find extracted app dir
+            # --------------------------------------------------------
+
+            extracted_items = [
+                os.path.join(extract_dir, f)
+                for f in os.listdir(extract_dir)
+            ]
+
+            new_dir = next(
+                (p for p in extracted_items if os.path.isdir(p)),
+                extract_dir
+            )
+
+            executable_path = os.path.join(
+                install_path,
+                APP_LINUX_EXE_NAME
+            )
+
+            needs_elevation = not os.access(
+                install_path,
+                os.W_OK
+            )
+
+            with open(script, 'w') as f:
+                f.write(f"""#!/bin/bash
+    exec > "{log}" 2>&1
+
+    set -e
+    set -x
+
+    sleep 4
+
+    SRC="{new_dir}"
+    DEST="{install_path}"
+
+    echo "Copying updated files..."
+
+    mkdir -p "$DEST"
+
+    cp -rf "$SRC"/. "$DEST"/
+
+    echo "Fixing executable permissions..."
+
+    chmod +x "{executable_path}"
+
+    echo "Files updated successfully."
+
+    exit 0
+    """)
+
+            os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
+
+            _launch_linux_script(script, needs_elevation)
+            return
 
     # ── All other formats: extract the archive first ─────────────────────────
     if sys.platform == 'darwin':
         subprocess.run(['ditto', '-x', '-k', dl_path, extract_dir], check=True)
-    elif sys.platform != 'win32':
-        if dl_path.endswith('.tar.gz'):
-            subprocess.run(['tar', '-xzf', dl_path, '-C', extract_dir], check=True)
-        else:
-            result = subprocess.run(['unzip', '-q', dl_path, '-d', extract_dir])
-            if result.returncode != 0:
-                with zipfile.ZipFile(dl_path, 'r') as zf:
-                    zf.extractall(extract_dir)
     else:
         with zipfile.ZipFile(dl_path, 'r') as zf:
             zf.extractall(extract_dir)
@@ -402,44 +612,60 @@ open "{install_path}"
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     elif sys.platform == 'win32':
-        new_dir = next(
-            (os.path.join(extract_dir, f) for f in os.listdir(extract_dir)
-             if os.path.isdir(os.path.join(extract_dir, f))),
-            extract_dir
-        )
-        exe_name = os.path.basename(sys.executable)
-        log = os.path.join(tmp_dir, 'update.log')
-        script = os.path.join(tmp_dir, 'do_update.bat')
-        with open(script, 'w') as f:
-            f.write(f"""@echo off
-timeout /t 2 /nobreak >nul
-robocopy "{new_dir}" "{install_path}" /E /IS /IT /IM >"{log}" 2>&1
-start "" "{os.path.join(install_path, exe_name)}"
-""")
-        subprocess.Popen(['cmd', '/c', script], close_fds=True,
-                         creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+        exe_name = APP_PRODUCT_NAME + '.exe'
 
-    else:
-        new_dir = next(
-            (os.path.join(extract_dir, f) for f in os.listdir(extract_dir)
-             if os.path.isdir(os.path.join(extract_dir, f))),
-            extract_dir
-        )
-        exe_name = os.path.basename(sys.executable)
+        # electron-builder zips are usually flat
+        if os.path.isfile(os.path.join(extract_dir, exe_name)):
+            new_dir = extract_dir
+        else:
+            new_dir = next(
+                (
+                    os.path.join(extract_dir, f)
+                    for f in os.listdir(extract_dir)
+                    if os.path.isdir(os.path.join(extract_dir, f))
+                ),
+                extract_dir
+            )
+
         log = os.path.join(tmp_dir, 'update.log')
-        script = os.path.join(tmp_dir, 'do_update.sh')
-        with open(script, 'w') as f:
-            f.write(f"""#!/bin/bash
-exec >"{log}" 2>&1
-set -x
-sleep 2
-cp -rf "{new_dir}/." "{install_path}/"
-chmod +x "{os.path.join(install_path, exe_name)}"
-nohup "{os.path.join(install_path, exe_name)}" &
-""")
-        os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
-        subprocess.Popen(['bash', script], close_fds=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        script = os.path.join(tmp_dir, 'do_update.ps1')
+
+        exe_path = os.path.join(install_path, exe_name)
+
+        with open(script, 'w', encoding='utf-8') as f:
+            f.write(f'''
+    $ErrorActionPreference = "Stop"
+
+    Start-Transcript -Path "{log}" -Append
+
+    Write-Host "Waiting for app to close..."
+    Start-Sleep -Seconds 5
+
+    Write-Host "Copying update files..."
+
+    $source = "{new_dir}"
+    $dest = "{install_path}"
+
+    # Copy all files recursively
+    Copy-Item "$source\\*" "$dest" -Recurse -Force
+
+    Write-Host "Launching app..."
+
+    Start-Process "{exe_path}"
+
+    Stop-Transcript
+    ''')
+
+        subprocess.Popen(
+            [
+                'powershell',
+                '-NoProfile',
+                '-ExecutionPolicy', 'Bypass',
+                '-File', script
+            ],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            close_fds=True
+        )
 
 
 # ============================================================================
@@ -1795,6 +2021,8 @@ class ProxyUIBridge:
                         info = await asyncio.get_event_loop().run_in_executor(None, check_for_updates)
                         if info:
                             await websocket.send(json.dumps({"type": "UPDATE_AVAILABLE", "data": info}))
+                        else:
+                            await websocket.send(json.dumps({"type": "UP_TO_DATE"}))
                     asyncio.create_task(_check())
 
                 elif payload.get("type") == "APPLY_UPDATE":

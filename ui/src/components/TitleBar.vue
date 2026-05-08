@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { version as appVersion } from '../../../package.json'
 import { disableCache, toolbarVisibility, macosProxyActive } from '../store.js'
 import { currentThemeId, applyTheme } from '../composables/useTheme.js'
 
@@ -27,8 +28,10 @@ const MENUS = [
   {
     label: 'Tools',
     items: [
-      { label: 'OS Proxy',    action: () => op()?.toggleMacProxy(), checked: () => macosProxyActive.value },
-      { type: 'separator' },
+      ...(window.electronAPI?.platform === 'darwin' ? [
+        { label: 'OS Proxy', action: () => op()?.toggleMacProxy(), checked: () => macosProxyActive.value },
+        { type: 'separator' },
+      ] : []),
       { label: 'VPN Mode',    action: () => op()?.openVpnMode() },
       { label: 'Breakpoints', action: () => op()?.openBreakpoints() },
       { type: 'separator' },
@@ -88,9 +91,19 @@ const MENUS = [
           { label: 'Certificates',  action: () => op()?.toggleToolbarVisibility('certificates'),  checked: () => toolbarVisibility.value.certificates },
           { label: 'Throttle',      action: () => op()?.toggleToolbarVisibility('throttle'),      checked: () => toolbarVisibility.value.throttle },
           { label: 'Bust Cache',    action: () => op()?.toggleToolbarVisibility('bustCache'),     checked: () => toolbarVisibility.value.bustCache },
-          { label: 'OS Proxy',      action: () => op()?.toggleToolbarVisibility('osProxy'),       checked: () => toolbarVisibility.value.osProxy },
+          ...(window.electronAPI?.platform === 'darwin' ? [
+            { label: 'OS Proxy',    action: () => op()?.toggleToolbarVisibility('osProxy'),       checked: () => toolbarVisibility.value.osProxy },
+          ] : []),
         ],
       },
+    ],
+  },
+  {
+    label: 'Help',
+    items: [
+      { label: 'Check for Updates', action: () => op()?.checkForUpdates() },
+      { type: 'separator' },
+      { label: `About OpenProxy v${appVersion ?? ''}`, action: () => op()?.showAbout() },
     ],
   },
 ]

@@ -1,5 +1,6 @@
 <script setup>
-import { onMounted, onUnmounted, watch } from 'vue'
+import { onMounted, onUnmounted, watch, computed, ref } from 'vue'
+import { version as appVersion } from '../../package.json'
 import { initTheme } from './composables/useTheme'
 initTheme()
 import { Splitpanes, Pane } from 'splitpanes'
@@ -54,6 +55,7 @@ import {
   updateInfo,
   updateProgress,
   updateError,
+  upToDate,
   checkForUpdates,
   applyUpdate,
   toolbarVisibility,
@@ -97,6 +99,7 @@ onMounted(() => {
     toggleMacProxy:   () => toggleMacProxy(),
     checkForUpdates:  () => checkForUpdates(),
     toggleToolbarVisibility: (tool) => { toolbarVisibility.value[tool] = !toolbarVisibility.value[tool] },
+    showAbout:        () => { showAboutModal.value = true },
   }
 })
 
@@ -104,14 +107,31 @@ onUnmounted(() => {
   document.removeEventListener('click', closeContextMenu)
 })
 
+const isLinux = window.electronAPI?.platform === 'linux'
+
+const showUpdateModal = computed(() =>
+  !!(updateInfo.value || updateProgress.value !== null || updateError.value || upToDate.value)
+)
+
+const showAboutModal  = ref(false)
+
+const openReleaseNotes = () => {
+  if (updateInfo.value?.release_url) window.electronAPI?.openExternal(updateInfo.value.release_url)
+}
+
+const openGitHub = () => {
+  window.electronAPI?.openExternal('https://github.com/TiagoParente32/open-proxy')
+}
+
 const startUpdate = () => {
   if (updateInfo.value?.download_url) applyUpdate(updateInfo.value.download_url)
 }
 
 const dismissUpdate = () => {
-  updateInfo.value = null
-  updateError.value = null
+  updateInfo.value    = null
+  updateError.value   = null
   updateProgress.value = null
+  upToDate.value      = false
 }
 
 const handleEditAndRepeatFromContext = () => {
@@ -252,30 +272,134 @@ const openBreakpointModalFromContext = () => {
     <AppToolbar />
     <FilterBar />
 
-    <!-- Update Banner -->
-    <Transition name="update-banner">
-      <div v-if="updateInfo && updateProgress === null && !updateError" class="update-banner">
-        <span class="update-icon">🚀</span>
-        <span class="update-text">
-          <strong>{{ updateInfo.version }}</strong> is available
-          <a v-if="updateInfo.release_url" class="update-release-link" :href="updateInfo.release_url" target="_blank">See what's new</a>
-        </span>
-        <button class="update-btn-primary" :disabled="!updateInfo.download_url" @click="startUpdate">
-          {{ updateInfo.download_url ? 'Update Now' : 'No download for this platform' }}
-        </button>
-        <button class="update-btn-dismiss" @click="dismissUpdate">✕</button>
-      </div>
-      <div v-else-if="updateProgress !== null" class="update-banner update-banner--progress">
-        <span class="update-icon">⬇️</span>
-        <span class="update-text">Downloading update… {{ updateProgress }}%</span>
-        <div class="update-progress-bar"><div class="update-progress-fill" :style="{ width: updateProgress + '%' }"></div></div>
-      </div>
-      <div v-else-if="updateError" class="update-banner update-banner--error">
-        <span class="update-icon">⚠️</span>
-        <span class="update-text">Update failed: {{ updateError }}</span>
-        <button class="update-btn-dismiss" @click="dismissUpdate">✕</button>
-      </div>
-    </Transition>
+    <!-- Update Modal -->
+    <Teleport to="body">
+      <Transition name="update-modal">
+        <div v-if="showUpdateModal" class="update-modal-overlay"
+             @mousedown.self="updateProgress === null && dismissUpdate()">
+          <div class="update-modal">
+
+            <!-- ── Available ── -->
+            <template v-if="updateInfo && updateProgress === null && !updateError">
+              <button class="update-modal-close" @click="dismissUpdate" title="Dismiss">
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              </button>
+
+              <div class="update-modal-icon">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="9.5" stroke="var(--accent)" stroke-width="1.5"/>
+                  <path d="M12 15.5V8.5M9 11.5l3-3 3 3" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+
+              <h3 class="update-modal-title">Update Available</h3>
+
+              <div class="update-version-row">
+                <span class="update-version-badge current">{{ updateInfo.current }}</span>
+                <svg width="18" height="10" viewBox="0 0 18 10" fill="none" class="update-arrow-svg">
+                  <path d="M1 5h16M12 1l5 4-5 4" stroke="var(--fg-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="update-version-badge latest">{{ updateInfo.version }}</span>
+              </div>
+
+              <button v-if="updateInfo.release_url" class="update-release-link" @click="openReleaseNotes">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                View release notes
+              </button>
+
+              <div class="update-modal-actions">
+                <button class="update-btn-skip" @click="dismissUpdate">Skip</button>
+                <button class="update-btn-install" :disabled="!updateInfo.download_url" @click="startUpdate">
+                  {{ updateInfo.download_url ? 'Update Now' : 'Not available for this platform' }}
+                </button>
+              </div>
+            </template>
+
+            <!-- ── Downloading ── -->
+            <template v-else-if="updateProgress !== null">
+              <div class="update-modal-icon">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="9.5" stroke="var(--accent)" stroke-width="1.5"/>
+                  <path d="M12 8.5v7M9 12.5l3 3 3-3" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <h3 class="update-modal-title">Downloading Update</h3>
+              <p class="update-modal-sub">Installing {{ updateInfo?.version }}…</p>
+              <div class="update-progress-track">
+                <div class="update-progress-fill" :style="{ width: updateProgress + '%' }"></div>
+              </div>
+              <span class="update-progress-pct">{{ updateProgress }}%</span>
+              <p class="update-modal-hint">
+                {{ isLinux
+                  ? 'The app will close — please relaunch it manually when done.'
+                  : 'The app will restart automatically when done.' }}
+              </p>
+            </template>
+
+            <!-- ── Error ── -->
+            <template v-else-if="updateError">
+              <button class="update-modal-close" @click="dismissUpdate" title="Dismiss">
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              </button>
+              <div class="update-modal-icon error">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 9v4M12 16.5h.01" stroke="var(--error)" stroke-width="1.8" stroke-linecap="round"/>
+                  <path d="M10.61 4.42l-8.19 14A1.5 1.5 0 003.69 20.5h16.62a1.5 1.5 0 001.27-2.08l-8.19-14a1.5 1.5 0 00-2.78 0z" stroke="var(--error)" stroke-width="1.5" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <h3 class="update-modal-title">Update Failed</h3>
+              <p class="update-modal-error-msg">{{ updateError }}</p>
+              <div class="update-modal-actions">
+                <button class="update-btn-install" @click="dismissUpdate">Dismiss</button>
+              </div>
+            </template>
+
+            <!-- ── Up to date ── -->
+            <template v-else-if="upToDate">
+              <button class="update-modal-close" @click="dismissUpdate" title="Dismiss">
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              </button>
+              <div class="update-modal-icon">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="9.5" stroke="var(--accent)" stroke-width="1.5"/>
+                  <path d="M8 12.5l3 3 5-5" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <h3 class="update-modal-title">You're up to date</h3>
+              <p class="update-modal-sub">v{{ appVersion }} is the latest version.</p>
+            </template>
+
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- About Modal -->
+    <Teleport to="body">
+      <Transition name="update-modal">
+        <div v-if="showAboutModal" class="update-modal-overlay" @mousedown.self="showAboutModal = false">
+          <div class="update-modal">
+            <button class="update-modal-close" @click="showAboutModal = false" title="Close">
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+            <img src="../../icon.png" style="width:52px;height:52px;border-radius:12px;margin-bottom:14px;" alt="OpenProxy icon" />
+            <h3 class="update-modal-title" style="margin-bottom:4px;">OpenProxy</h3>
+            <span class="update-version-badge latest" style="margin-bottom:16px;">v{{ appVersion }}</span>
+            <p class="update-modal-hint" style="opacity:1;margin-bottom:20px;max-width:220px;text-align:center;line-height:1.6;">
+              A powerful HTTP/HTTPS proxy tool for developers.
+            </p>
+            <button class="update-release-link" @click="openGitHub">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              GitHub
+            </button>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <splitpanes class="default-theme custom-theme" style="flex: 1; overflow: hidden;">
       
@@ -431,63 +555,157 @@ body { margin: 0; padding: 0; }
 .traffic-table, .inspector-content, .modal-editor, .cm-editor, .cm-content { -webkit-user-select: text !important; user-select: text !important; cursor: text; }
 .toolbar, .sidebar, .action-btn, .panel-tabs, .sidebar-header, .splitpanes__splitter { -webkit-user-select: none !important; user-select: none !important; }
 
-/* --- UPDATE BANNER --- */
-.update-banner {
+/* --- UPDATE MODAL --- */
+.update-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
-  background: linear-gradient(90deg, rgba(59,130,246,0.15), rgba(99,102,241,0.15));
-  border-bottom: 1px solid rgba(99,102,241,0.35);
-  font-size: 13px;
-  color: var(--fg-secondary);
-  flex-shrink: 0;
+  justify-content: center;
+  z-index: 9000;
 }
-.update-banner--progress { background: linear-gradient(90deg, rgba(16,185,129,0.12), rgba(59,130,246,0.12)); }
-.update-banner--error    { background: rgba(239,68,68,0.12); border-bottom-color: rgba(239,68,68,0.3); }
-.update-icon { font-size: 15px; }
-.update-text { flex: 1; }
-.update-release-link { margin-left: 8px; opacity: 0.7; color: var(--accent); text-decoration: none; font-size: 12px; }
-.update-release-link:hover { opacity: 1; text-decoration: underline; }
-.update-btn-primary {
-  padding: 4px 14px;
-  background: var(--accent);
-  color: var(--fg-primary);
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
+.update-modal {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: 32px 28px 24px;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0;
 }
-.update-btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
-.update-btn-primary:disabled { opacity: 0.45; cursor: default; }
-.update-btn-dismiss {
+.update-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
   background: none;
   border: none;
   color: var(--fg-muted);
   cursor: pointer;
-  font-size: 13px;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 5px;
+  border-radius: 5px;
+  line-height: 0;
+  transition: color 0.15s, background 0.15s;
 }
-.update-btn-dismiss:hover { color: var(--fg-secondary); background: var(--surface-hover); }
-.update-progress-bar {
-  width: 120px;
-  height: 6px;
-  background: var(--border-subtle);
-  border-radius: 3px;
+.update-modal-close:hover { color: var(--fg-secondary); background: var(--surface-hover); }
+.update-modal-icon { margin-bottom: 14px; line-height: 0; }
+.update-modal-title {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg-primary);
+}
+.update-modal-sub {
+  margin: -10px 0 16px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.update-version-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.update-version-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 11px;
+  border-radius: 20px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.update-version-badge.current {
+  background: var(--surface-hover-strong);
+  color: var(--fg-muted);
+}
+.update-version-badge.latest {
+  background: var(--accent-muted);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+}
+.update-arrow-svg { flex-shrink: 0; }
+.update-release-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 22px;
+  transition: color 0.15s;
+}
+.update-release-link:hover { color: var(--accent); }
+.update-modal-actions { display: flex; gap: 8px; width: 100%; }
+.update-btn-skip {
+  flex: 1;
+  padding: 8px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  border-radius: 7px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.update-btn-skip:hover { background: var(--surface-hover); color: var(--fg-secondary); }
+.update-btn-install {
+  flex: 2;
+  padding: 8px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.update-btn-install:hover:not(:disabled) { background: var(--accent-hover); }
+.update-btn-install:disabled { opacity: 0.45; cursor: default; }
+.update-progress-track {
+  width: 100%;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
   overflow: hidden;
+  margin-bottom: 8px;
 }
 .update-progress-fill {
   height: 100%;
   background: var(--accent);
-  border-radius: 3px;
-  transition: width 0.2s;
+  border-radius: 2px;
+  transition: width 0.3s ease;
 }
-.update-banner-enter-active, .update-banner-leave-active { transition: max-height 0.25s ease, opacity 0.2s; overflow: hidden; }
-.update-banner-enter-from, .update-banner-leave-to { max-height: 0; opacity: 0; }
-.update-banner-enter-to, .update-banner-leave-from { max-height: 60px; opacity: 1; }
+.update-progress-pct {
+  font-size: 11px;
+  color: var(--fg-muted);
+  margin-bottom: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.update-modal-hint {
+  font-size: 11px;
+  color: var(--fg-muted);
+  margin: 0;
+  opacity: 0.65;
+}
+.update-modal-error-msg {
+  font-size: 12px;
+  color: var(--fg-muted);
+  line-height: 1.55;
+  margin: 0 0 20px;
+}
+.update-modal-enter-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.update-modal-leave-active { transition: opacity 0.15s ease, transform 0.15s ease; }
+.update-modal-enter-from, .update-modal-leave-to { opacity: 0; transform: scale(0.97) translateY(4px); }
+.update-modal-enter-to, .update-modal-leave-from { opacity: 1; transform: scale(1) translateY(0); }
 
 
 </style>

@@ -223,6 +223,8 @@ function setupIPC () {
   ipcMain.on('update:clearQuarantine', (_e, newAppPath) => {
     clearQuarantine(newAppPath)
   })
+
+  ipcMain.on('app:getVersion', (e) => { e.returnValue = app.getVersion() })
 }
 
 // ── Tray ─────────────────────────────────────────────────────────────────────
@@ -380,6 +382,20 @@ function setupMenu () {
               },
             })),
           ]),
+        },
+      ],
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Check for Updates',
+          click: () => win?.webContents.executeJavaScript('window.__op?.checkForUpdates()'),
+        },
+        { type: 'separator' },
+        {
+          label: `About OpenProxy v${app.getVersion()}`,
+          click: () => win?.webContents.executeJavaScript('window.__op?.showAbout()'),
         },
       ],
     },
