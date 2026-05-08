@@ -120,8 +120,8 @@ function startPython () {
 // ── BrowserWindow ────────────────────────────────────────────────────────────
 function createWindow () {
   win = new BrowserWindow({
-    width:    1024,
-    height:   720,
+    width:    1280,
+    height:   800,
     minWidth: 1024,
     minHeight: 720,
     // macOS: traffic lights overlay the content (hiddenInset)
