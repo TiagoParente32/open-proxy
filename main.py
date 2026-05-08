@@ -7,6 +7,7 @@ import socket
 import asyncio
 import re
 import base64
+import stat
 import subprocess
 import threading
 import signal
@@ -313,7 +314,15 @@ def check_for_updates():
 
 
 def _launch_linux_script(script, needs_elevation):
-    """Launch a bash update script, escalating via pkexec if the install path needs root."""
+    """Launch a bash update script, escalating via pkexec if the install path needs root.
+
+    For elevated installs we use a two-step approach:
+      1. A tiny 'launcher' script that pkexec runs *synchronously* (subprocess.run blocks).
+         The launcher immediately backgrounds the real update worker and exits.
+      2. subprocess.run() returns only after the user authenticates — so UPDATE_READY
+         (and the subsequent app quit) happens *after* the password dialog is dismissed,
+         not before.  The real worker continues running as root in the background.
+    """
     if needs_elevation:
         pkexec = subprocess.run(['which', 'pkexec'], capture_output=True, text=True).stdout.strip()
         if not pkexec:
@@ -321,12 +330,20 @@ def _launch_linux_script(script, needs_elevation):
                 "The install location requires elevated privileges but pkexec was not found. "
                 "Please download the new version manually from GitHub and reinstall."
             )
-        # pkexec shows a graphical password prompt while the app is still open.
-        # start_new_session=True fully detaches the process so it survives
-        # when Electron quits and kills the Python parent.
-        subprocess.Popen([pkexec, 'bash', script], close_fds=True,
-                         start_new_session=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # Tiny launcher: backgrounds the real script and exits immediately so
+        # pkexec (and our blocking subprocess.run) can return as soon as
+        # authentication succeeds — well before the app window closes.
+        launcher = script + '.launcher.sh'
+        with open(launcher, 'w') as f:
+            f.write(f'#!/bin/bash\nnohup bash "{script}" >/dev/null 2>&1 &\n')
+        os.chmod(launcher, os.stat(launcher).st_mode | stat.S_IEXEC)
+
+        # Block until the user authenticates.  Raises if cancelled/failed.
+        result = subprocess.run([pkexec, 'bash', launcher],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if result.returncode != 0:
+            raise PermissionError("Elevation was cancelled or authentication failed.")
     else:
         subprocess.Popen(['bash', script], close_fds=True,
                          start_new_session=True,
