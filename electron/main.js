@@ -284,6 +284,12 @@ function setupMenu () {
         { label: 'Compose Request', click: () => js('openComposeNew()') },
         { label: 'Clear Traffic',   click: () => js('clearTraffic()') },
         { type: 'separator' },
+        ...(process.platform === 'darwin' ? [{
+          label:   'OS Proxy',
+          type:    'checkbox',
+          checked: macosProxyActive,
+          click:   () => js('toggleMacProxy()'),
+        }] : []),
         {
           label:   'Bust Cache',
           type:    'checkbox',
@@ -294,12 +300,6 @@ function setupMenu () {
             setupMenu()   // rebuild so the checkmark updates
           },
         },
-        ...(process.platform === 'darwin' ? [{
-          label:   'OS Proxy',
-          type:    'checkbox',
-          checked: macosProxyActive,
-          click:   () => js('toggleMacProxy()'),
-        }] : []),
       ],
     },
     {
