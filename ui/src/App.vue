@@ -1,5 +1,6 @@
 <script setup>
-import { onMounted, onUnmounted, watch, computed } from 'vue'
+import { onMounted, onUnmounted, watch, computed, ref } from 'vue'
+import { version as appVersion } from '../../package.json'
 import { initTheme } from './composables/useTheme'
 initTheme()
 import { Splitpanes, Pane } from 'splitpanes'
@@ -54,6 +55,7 @@ import {
   updateInfo,
   updateProgress,
   updateError,
+  upToDate,
   checkForUpdates,
   applyUpdate,
   toolbarVisibility,
@@ -97,6 +99,7 @@ onMounted(() => {
     toggleMacProxy:   () => toggleMacProxy(),
     checkForUpdates:  () => checkForUpdates(),
     toggleToolbarVisibility: (tool) => { toolbarVisibility.value[tool] = !toolbarVisibility.value[tool] },
+    showAbout:        () => { showAboutModal.value = true },
   }
 })
 
@@ -104,12 +107,20 @@ onUnmounted(() => {
   document.removeEventListener('click', closeContextMenu)
 })
 
+const isLinux = window.electronAPI?.platform === 'linux'
+
 const showUpdateModal = computed(() =>
-  !!(updateInfo.value || updateProgress.value !== null || updateError.value)
+  !!(updateInfo.value || updateProgress.value !== null || updateError.value || upToDate.value)
 )
+
+const showAboutModal  = ref(false)
 
 const openReleaseNotes = () => {
   if (updateInfo.value?.release_url) window.electronAPI?.openExternal(updateInfo.value.release_url)
+}
+
+const openGitHub = () => {
+  window.electronAPI?.openExternal('https://github.com/TiagoParente32/open-proxy')
 }
 
 const startUpdate = () => {
@@ -120,6 +131,7 @@ const dismissUpdate = () => {
   updateInfo.value    = null
   updateError.value   = null
   updateProgress.value = null
+  upToDate.value      = false
 }
 
 const handleEditAndRepeatFromContext = () => {
@@ -319,7 +331,11 @@ const openBreakpointModalFromContext = () => {
                 <div class="update-progress-fill" :style="{ width: updateProgress + '%' }"></div>
               </div>
               <span class="update-progress-pct">{{ updateProgress }}%</span>
-              <p class="update-modal-hint">The app will restart automatically when done.</p>
+              <p class="update-modal-hint">
+                {{ isLinux
+                  ? 'The app will close — please relaunch it manually when done.'
+                  : 'The app will restart automatically when done.' }}
+              </p>
             </template>
 
             <!-- ── Error ── -->
@@ -340,6 +356,46 @@ const openBreakpointModalFromContext = () => {
               </div>
             </template>
 
+            <!-- ── Up to date ── -->
+            <template v-else-if="upToDate">
+              <button class="update-modal-close" @click="dismissUpdate" title="Dismiss">
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              </button>
+              <div class="update-modal-icon">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="9.5" stroke="var(--accent)" stroke-width="1.5"/>
+                  <path d="M8 12.5l3 3 5-5" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <h3 class="update-modal-title">You're up to date</h3>
+              <p class="update-modal-sub">v{{ appVersion }} is the latest version.</p>
+            </template>
+
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- About Modal -->
+    <Teleport to="body">
+      <Transition name="update-modal">
+        <div v-if="showAboutModal" class="update-modal-overlay" @mousedown.self="showAboutModal = false">
+          <div class="update-modal">
+            <button class="update-modal-close" @click="showAboutModal = false" title="Close">
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+            <img src="../../icon.png" style="width:52px;height:52px;border-radius:12px;margin-bottom:14px;" alt="OpenProxy icon" />
+            <h3 class="update-modal-title" style="margin-bottom:4px;">OpenProxy</h3>
+            <span class="update-version-badge latest" style="margin-bottom:16px;">v{{ appVersion }}</span>
+            <p class="update-modal-hint" style="opacity:1;margin-bottom:20px;max-width:220px;text-align:center;line-height:1.6;">
+              A powerful HTTP/HTTPS proxy tool for developers.
+            </p>
+            <button class="update-release-link" @click="openGitHub">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              GitHub
+            </button>
           </div>
         </div>
       </Transition>

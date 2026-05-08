@@ -422,9 +422,7 @@ def apply_update(download_url, progress_cb=None):
 
     chmod +x "$APP"
 
-    echo "Launching updated app..."
-
-    nohup "$APP" >/dev/null 2>&1 &
+    echo "AppImage updated successfully."
 
     exit 0
     """)
@@ -458,18 +456,7 @@ def apply_update(download_url, progress_cb=None):
 
     dpkg -i "$DEB" || apt-get install -f -y
 
-    echo "Waiting a moment before relaunch..."
-    sleep 2
-
-    echo "Launching updated app..."
-
-    # When run via pkexec the script is root; relaunch as the original user.
-    if [ -n "$PKEXEC_UID" ]; then
-        ORIG_USER=$(id -nu "$PKEXEC_UID")
-        su - "$ORIG_USER" -c "nohup \"{os.path.join(install_path, APP_LINUX_EXE_NAME)}\" >/dev/null 2>&1 &"
-    else
-        nohup "{os.path.join(install_path, APP_LINUX_EXE_NAME)}" >/dev/null 2>&1 &
-    fi
+    echo "DEB installed successfully."
 
     exit 0
     """)
@@ -555,15 +542,7 @@ def apply_update(download_url, progress_cb=None):
 
     chmod +x "{executable_path}"
 
-    echo "Launching updated app..."
-
-    # When run via pkexec the script is root; relaunch as the original user.
-    if [ -n "$PKEXEC_UID" ]; then
-        ORIG_USER=$(id -nu "$PKEXEC_UID")
-        su - "$ORIG_USER" -c "nohup \"{executable_path}\" >/dev/null 2>&1 &"
-    else
-        nohup "{executable_path}" >/dev/null 2>&1 &
-    fi
+    echo "Files updated successfully."
 
     exit 0
     """)
@@ -2032,6 +2011,8 @@ class ProxyUIBridge:
                         info = await asyncio.get_event_loop().run_in_executor(None, check_for_updates)
                         if info:
                             await websocket.send(json.dumps({"type": "UPDATE_AVAILABLE", "data": info}))
+                        else:
+                            await websocket.send(json.dumps({"type": "UP_TO_DATE"}))
                     asyncio.create_task(_check())
 
                 elif payload.get("type") == "APPLY_UPDATE":

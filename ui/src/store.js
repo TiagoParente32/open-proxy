@@ -859,10 +859,12 @@ export const requestWgConf = () => {
 export const updateInfo     = ref(null)   // { version, current, download_url, release_url }
 export const updateProgress = ref(null)   // 0-100 during download, null otherwise
 export const updateError    = ref(null)
+export const upToDate       = ref(false)  // true briefly after a check finds no update
 
 export const checkForUpdates = () => {
     if (wsConnection?.readyState !== WebSocket.OPEN) return
     updateError.value = null
+    upToDate.value = false
     wsConnection.send(JSON.stringify({ type: "CHECK_FOR_UPDATES" }))
 }
 
@@ -1145,6 +1147,11 @@ export const initWebSocket = () => {
         else if (payload.type === 'UPDATE_AVAILABLE') {
             updateInfo.value = payload.data
             updateError.value = null
+            upToDate.value = false
+        }
+        else if (payload.type === 'UP_TO_DATE') {
+            upToDate.value = true
+            setTimeout(() => { upToDate.value = false }, 4000)
         }
         else if (payload.type === 'UPDATE_PROGRESS') {
             updateProgress.value = payload.data.pct
