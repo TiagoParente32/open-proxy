@@ -342,8 +342,11 @@ def apply_update(download_url, progress_cb=None):
 
     tmp_dir = tempfile.mkdtemp(prefix='openproxy_update_')
 
-    zip_path = os.path.join(tmp_dir, 'update.zip')
-    ext = os.path.splitext(download_url.split('?')[0])[1].lower()
+    url_path = download_url.split('?')[0].lower()
+    if url_path.endswith('.tar.gz'):
+        ext = '.tar.gz'
+    else:
+        ext = os.path.splitext(url_path)[1]
     dl_path = os.path.join(tmp_dir, f'update{ext}')
     extract_dir = os.path.join(tmp_dir, 'extracted')
     os.makedirs(extract_dir, exist_ok=True)
@@ -358,7 +361,7 @@ def apply_update(download_url, progress_cb=None):
         progress_cb(100)
 
     # ── Linux AppImage: single executable, no extraction needed ─────────────
-    elif sys.platform not in ('darwin', 'win32'):
+    if sys.platform not in ('darwin', 'win32'):
         log = os.path.join(tmp_dir, 'update.log')
         script = os.path.join(tmp_dir, 'do_update.sh')
 
@@ -414,8 +417,6 @@ def apply_update(download_url, progress_cb=None):
             # .deb ALWAYS requires elevation
             needs_elevation = True
 
-            executable_name = APP_PRODUCT_NAME.lower()
-
             with open(script, 'w') as f:
                 f.write(f"""#!/bin/bash
     exec > "{log}" 2>&1
@@ -436,7 +437,7 @@ def apply_update(download_url, progress_cb=None):
 
     echo "Launching updated app..."
 
-    nohup "{install_path}" >/dev/null 2>&1 &
+    nohup "{os.path.join(install_path, APP_PRODUCT_NAME)}" >/dev/null 2>&1 &
 
     exit 0
     """)
@@ -537,14 +538,6 @@ def apply_update(download_url, progress_cb=None):
     # ── All other formats: extract the archive first ─────────────────────────
     if sys.platform == 'darwin':
         subprocess.run(['ditto', '-x', '-k', dl_path, extract_dir], check=True)
-    elif sys.platform != 'win32':
-        if dl_path.endswith('.tar.gz'):
-            subprocess.run(['tar', '-xzf', dl_path, '-C', extract_dir], check=True)
-        else:
-            result = subprocess.run(['unzip', '-q', dl_path, '-d', extract_dir])
-            if result.returncode != 0:
-                with zipfile.ZipFile(dl_path, 'r') as zf:
-                    zf.extractall(extract_dir)
     else:
         with zipfile.ZipFile(dl_path, 'r') as zf:
             zf.extractall(extract_dir)
@@ -646,28 +639,6 @@ open "{install_path}"
             creationflags=subprocess.CREATE_NO_WINDOW,
             close_fds=True
         )
-
-    else:
-        new_dir = next(
-            (os.path.join(extract_dir, f) for f in os.listdir(extract_dir)
-             if os.path.isdir(os.path.join(extract_dir, f))),
-            extract_dir
-        )
-        exe_name = APP_PRODUCT_NAME
-        log = os.path.join(tmp_dir, 'update.log')
-        script = os.path.join(tmp_dir, 'do_update.sh')
-        with open(script, 'w') as f:
-            f.write(f"""#!/bin/bash
-exec >"{log}" 2>&1
-set -e
-set -x
-sleep 4
-cp -rf "{new_dir}/." "{install_path}/"
-chmod +x "{os.path.join(install_path, exe_name)}"
-nohup "{os.path.join(install_path, exe_name)}" &
-""")
-        os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
-        _launch_linux_script(script, needs_elevation)
 
 
 # ============================================================================
