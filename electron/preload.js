@@ -18,4 +18,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onToolbarSet:     (cb)         => ipcRenderer.on('toolbar:set', (_e, vis) => cb(vis)),
   selectFile:          (opts) => ipcRenderer.invoke('dialog:selectFile', opts),
   onResetPreferences:  (cb)   => ipcRenderer.on('prefs:reset', () => cb()),
+  onFocusSearch:       (cb)   => ipcRenderer.on('app:focusSearch', () => cb()),
 })

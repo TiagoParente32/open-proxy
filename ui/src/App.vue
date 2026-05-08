@@ -64,6 +64,7 @@ import {
   resetPreferences,
   exportSettings,
   importSettings,
+  focusSearch,
 } from './store.js'
 
 onMounted(() => {
@@ -106,9 +107,11 @@ onMounted(() => {
     resetPreferences: () => resetPreferences(),
     exportSettings:   () => exportSettings(),
     importSettings:   () => importSettings(),
+    focusSearch:      () => focusSearch(),
   }
 
   window.electronAPI?.onResetPreferences?.(() => resetPreferences())
+  window.electronAPI?.onFocusSearch?.(() => focusSearch())
 })
 
 onUnmounted(() => {

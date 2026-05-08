@@ -392,8 +392,14 @@ function setupMenu () {
       ],
     },
     {
-      role: 'help',
+      label: 'Help',
       submenu: [
+        {
+          label:       'Search',
+          accelerator: 'CmdOrCtrl+F',
+          click:       () => win?.webContents.send('app:focusSearch'),
+        },
+        { type: 'separator' },
         {
           label: 'Check for Updates',
           click: () => win?.webContents.executeJavaScript('window.__op?.checkForUpdates()'),

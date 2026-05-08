@@ -130,6 +130,11 @@ export const searchQuery = ref('')
 export const searchScope = ref('All')
 export const searchMatchType = ref('Contains')
 export const sortKey = ref('time')
+
+// Registered by TrafficTable so any caller can focus the search input
+export let focusSearchFn = null
+export const registerFocusSearch = (fn) => { focusSearchFn = fn }
+export const focusSearch = () => focusSearchFn?.()
 export const sortOrder = ref('desc')
 
 export const activeChips = ref(loadState('activeChips', {
