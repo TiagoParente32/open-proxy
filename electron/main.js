@@ -294,6 +294,12 @@ function setupMenu () {
             setupMenu()   // rebuild so the checkmark updates
           },
         },
+        ...(process.platform === 'darwin' ? [{
+          label:   'OS Proxy',
+          type:    'checkbox',
+          checked: macosProxyActive,
+          click:   () => js('toggleMacProxy()'),
+        }] : []),
       ],
     },
     {
