@@ -1211,3 +1211,38 @@ export const resetPreferences = () => {
 
     location.reload()
 }
+
+// ============================================================================
+// 9. SETTINGS EXPORT
+// ============================================================================
+
+// Keys to skip — raw traffic data, not user configuration
+const EXPORT_SKIP_KEYS = new Set(['requests', 'wsMessages'])
+
+export const exportSettings = async () => {
+    const settings = {}
+
+    // Collect all openproxy_* keys (skip traffic)
+    for (const storageKey of Object.keys(localStorage)) {
+        if (storageKey === 'openproxy-theme') {
+            settings.theme = localStorage.getItem(storageKey)
+            continue
+        }
+        if (!storageKey.startsWith('openproxy_')) continue
+        const key = storageKey.slice('openproxy_'.length)
+        if (EXPORT_SKIP_KEYS.has(key)) continue
+        try { settings[key] = JSON.parse(localStorage.getItem(storageKey)) }
+        catch { settings[key] = localStorage.getItem(storageKey) }
+    }
+
+    // Include scripts from the backend (already loaded into reactive state)
+    settings.scripts = scripts.value.map(({ id, name, content, enabled }) => ({ id, name, content, enabled }))
+
+    const payload = {
+        exportedAt: new Date().toISOString(),
+        settings,
+    }
+
+    const filename = `openproxy-settings-${new Date().toISOString().slice(0, 10)}.json`
+    await window.electronAPI?.saveFile(filename, JSON.stringify(payload, null, 2))
+}

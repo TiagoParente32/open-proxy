@@ -394,6 +394,10 @@ function setupMenu () {
         },
         { type: 'separator' },
         {
+          label: 'Export Settings…',
+          click: () => win?.webContents.executeJavaScript('window.__op?.exportSettings()'),
+        },
+        {
           label: 'Reset All Preferences…',
           click: async () => {
             const { response } = await dialog.showMessageBox(win, {
