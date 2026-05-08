@@ -305,12 +305,6 @@ function setupMenu () {
     {
       label: 'Tools',
       submenu: [
-        ...(process.platform === 'darwin' ? [{
-          label:   'OS Proxy',
-          type:    'checkbox',
-          checked: macosProxyActive,
-          click:   () => js('toggleMacProxy()'),
-        }, { type: 'separator' }] : []),
         { label: 'VPN Mode',     click: () => js('openVpnMode()') },
         { label: 'Breakpoints',  click: () => js('openBreakpoints()') },
         { type: 'separator' },
