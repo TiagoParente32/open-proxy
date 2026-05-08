@@ -3,8 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { 
   filteredRequests, requests, selectedRequest, isFocusMode, pinnedSources, 
   formatUrl, contextMenu, searchQuery, searchScope, searchMatchType,
-  sortKey, sortOrder, toggleSort, formatTime, formatBytes,
-  registerFocusSearch,
+  sortKey, sortOrder, toggleSort, formatTime, formatBytes 
 } from '../store.js'
 
 // ── Virtual scrolling ────────────────────────────────────────────────────────
@@ -164,7 +163,6 @@ onMounted(() => {
     _resizeObserver = new ResizeObserver(([e]) => { containerHeight.value = e.contentRect.height })
     _resizeObserver.observe(containerRef.value)
   }
-  registerFocusSearch(() => searchInput.value?.focus())
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
