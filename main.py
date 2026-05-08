@@ -36,7 +36,7 @@ def _read_app_version():
         with open(os.path.join(root, 'package.json')) as _f:
             return json.load(_f)['version']
     except Exception:
-        return "1.0.6"   # fallback — keep in sync if auto-read ever fails
+        return "1.0.7"   # fallback — keep in sync if auto-read ever fails
 
 APP_VERSION      = _read_app_version()
 APP_PRODUCT_NAME   = "OpenProxy"   # must match build.productName in package.json
