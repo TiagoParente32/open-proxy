@@ -1199,3 +1199,15 @@ export const initWebSocket = () => {
         reconnectDelay = Math.min(reconnectDelay * 2, 10000)
     }
 }
+
+// ============================================================================
+// 8. PREFERENCES RESET
+// ============================================================================
+export const resetPreferences = () => {
+    // Clear all openproxy_* keys
+    Object.keys(localStorage)
+        .filter(k => k.startsWith('openproxy_') || k === 'openproxy-theme')
+        .forEach(k => localStorage.removeItem(k))
+
+    location.reload()
+}

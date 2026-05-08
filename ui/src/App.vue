@@ -61,6 +61,7 @@ import {
   toolbarVisibility,
   macosProxyActive,
   toggleMacProxy,
+  resetPreferences,
 } from './store.js'
 
 onMounted(() => {
@@ -100,7 +101,10 @@ onMounted(() => {
     checkForUpdates:  () => checkForUpdates(),
     toggleToolbarVisibility: (tool) => { toolbarVisibility.value[tool] = !toolbarVisibility.value[tool] },
     showAbout:        () => { showAboutModal.value = true },
+    resetPreferences: () => resetPreferences(),
   }
+
+  window.electronAPI?.onResetPreferences?.(() => resetPreferences())
 })
 
 onUnmounted(() => {

@@ -394,6 +394,22 @@ function setupMenu () {
         },
         { type: 'separator' },
         {
+          label: 'Reset All Preferences…',
+          click: async () => {
+            const { response } = await dialog.showMessageBox(win, {
+              type:    'warning',
+              buttons: ['Reset', 'Cancel'],
+              defaultId: 1,
+              cancelId:  1,
+              title:   'Reset All Preferences',
+              message: 'Reset all preferences to defaults?',
+              detail:  'This will clear all saved settings, rules, and traffic — like a fresh install. This cannot be undone.',
+            })
+            if (response === 0) win?.webContents.send('prefs:reset')
+          },
+        },
+        { type: 'separator' },
+        {
           label: `About OpenProxy v${app.getVersion()}`,
           click: () => win?.webContents.executeJavaScript('window.__op?.showAbout()'),
         },
