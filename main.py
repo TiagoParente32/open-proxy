@@ -38,7 +38,8 @@ def _read_app_version():
         return "1.0.4"   # fallback — keep in sync if auto-read ever fails
 
 APP_VERSION      = _read_app_version()
-APP_PRODUCT_NAME = "OpenProxy"   # must match build.productName in package.json
+APP_PRODUCT_NAME   = "OpenProxy"   # must match build.productName in package.json
+APP_LINUX_EXE_NAME = "open-proxy"  # must match package.json "name" (electron-builder uses this for the Linux binary)
 GITHUB_REPO      = "TiagoParente32/open-proxy"
 
 OPENPROXY_DATA_DIR = os.path.join(os.path.expanduser("~"), ".openproxy")
@@ -284,14 +285,19 @@ def check_for_updates():
             for ext in preferred:
                 for asset in assets:
                     name = asset.get('name', '').lower()
-                    if name.endswith(ext) and any(kw in name for kw in ['linux', 'appimage']):
-                        # Architecture match
-                        if is_arm and 'arm64' not in name and 'aarch64' not in name:
-                            continue
-                        if not is_arm and ('arm64' in name or 'aarch64' in name):
-                            continue
-                        download_url = asset['browser_download_url']
-                        break
+                    if not name.endswith(ext):
+                        continue
+                    # For .zip, require 'linux' keyword to avoid picking up Windows/macOS zips.
+                    # .tar.gz and .appimage are Linux-only formats so no keyword filter needed.
+                    if ext == '.zip' and 'linux' not in name:
+                        continue
+                    # Architecture match
+                    if is_arm and 'arm64' not in name and 'aarch64' not in name:
+                        continue
+                    if not is_arm and ('arm64' in name or 'aarch64' in name):
+                        continue
+                    download_url = asset['browser_download_url']
+                    break
                 if download_url:
                     break
 
@@ -316,11 +322,14 @@ def _launch_linux_script(script, needs_elevation):
                 "Please download the new version manually from GitHub and reinstall."
             )
         # pkexec shows a graphical password prompt while the app is still open.
-        # The script itself sleeps before acting, giving the app time to quit.
+        # start_new_session=True fully detaches the process so it survives
+        # when Electron quits and kills the Python parent.
         subprocess.Popen([pkexec, 'bash', script], close_fds=True,
+                         start_new_session=True,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
         subprocess.Popen(['bash', script], close_fds=True,
+                         start_new_session=True,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -437,7 +446,13 @@ def apply_update(download_url, progress_cb=None):
 
     echo "Launching updated app..."
 
-    nohup "{os.path.join(install_path, APP_PRODUCT_NAME)}" >/dev/null 2>&1 &
+    # When run via pkexec the script is root; relaunch as the original user.
+    if [ -n "$PKEXEC_UID" ]; then
+        ORIG_USER=$(id -nu "$PKEXEC_UID")
+        su - "$ORIG_USER" -c "nohup \"{os.path.join(install_path, APP_LINUX_EXE_NAME)}\" >/dev/null 2>&1 &"
+    else
+        nohup "{os.path.join(install_path, APP_LINUX_EXE_NAME)}" >/dev/null 2>&1 &
+    fi
 
     exit 0
     """)
@@ -493,7 +508,7 @@ def apply_update(download_url, progress_cb=None):
 
             executable_path = os.path.join(
                 install_path,
-                APP_PRODUCT_NAME
+                APP_LINUX_EXE_NAME
             )
 
             needs_elevation = not os.access(
@@ -525,7 +540,13 @@ def apply_update(download_url, progress_cb=None):
 
     echo "Launching updated app..."
 
-    nohup "{executable_path}" >/dev/null 2>&1 &
+    # When run via pkexec the script is root; relaunch as the original user.
+    if [ -n "$PKEXEC_UID" ]; then
+        ORIG_USER=$(id -nu "$PKEXEC_UID")
+        su - "$ORIG_USER" -c "nohup \"{executable_path}\" >/dev/null 2>&1 &"
+    else
+        nohup "{executable_path}" >/dev/null 2>&1 &
+    fi
 
     exit 0
     """)
