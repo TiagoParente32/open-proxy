@@ -234,6 +234,7 @@ const openMapLocalModalFromContext = () => {
       active: true, 
       // Keep the FULL URL so the Map Local grid can parse the parameters
       pattern: req.url, 
+      method: req.method || 'ANY',
       status: realStatus, 
       headers: realHeaders, 
       body: realBody 

@@ -226,6 +226,7 @@ const addNewRule = () => {
     id: Date.now(),
     active: true,
     label: '',
+    method: 'ANY',
     pattern: 'api.example.com/*',
     status: 200,
     headers: '{\n  "Content-Type": "application/json"\n}',
@@ -284,7 +285,10 @@ const browseFile = async () => {
                 <span class="pm-rule-pattern" :title="rule.label || rule.pattern">
                   {{ rule.label || rule.pattern || 'New Rule' }}
                 </span>
-                <span v-if="rule.label" class="pm-rule-subtext">{{ rule.pattern }}</span>
+                <span class="pm-rule-subtext">
+                  <span class="pm-method-badge" :class="`method-${(rule.method||'ANY').toLowerCase()}`">{{ rule.method || 'ANY' }}</span>
+                  <span v-if="rule.label">{{ rule.pattern }}</span>
+                </span>
               </div>
 
               <button class="pm-rule-del" @click.stop="deleteRule(rule.id)" title="Delete Rule">
@@ -343,7 +347,16 @@ const browseFile = async () => {
 
             <div class="pm-omnibar-container">
               <div class="pm-omnibar">
-                <div class="pm-method-display read-only">URL MATCH</div>
+                <select v-model="activeRule.method" class="pm-method-select" :class="`method-${(activeRule.method||'ANY').toLowerCase()}`">
+                  <option value="ANY">ANY</option>
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                  <option value="PUT">PUT</option>
+                  <option value="PATCH">PATCH</option>
+                  <option value="DELETE">DELETE</option>
+                  <option value="HEAD">HEAD</option>
+                  <option value="OPTIONS">OPTIONS</option>
+                </select>
                 <div class="pm-divider"></div>
                 <input type="text" v-model="activeRule.pattern" class="pm-url-input"
                   placeholder="e.g., api.example.com/*" @input="syncPatternToParams" />
@@ -574,6 +587,29 @@ const browseFile = async () => {
 .pm-url-input { flex: 1; background: transparent; border: none; color: var(--fg-secondary); padding: 10px 12px; font-size: 13px; outline: none; font-family: 'Consolas', monospace; }
 .pm-divider { width: 1px; height: 24px; background: var(--border); }
 .pm-method-display.read-only { padding: 10px 16px; font-weight: 700; font-size: 11px; color: var(--fg-muted); }
+.pm-method-select {
+  appearance: none; background: transparent; border: none; outline: none; cursor: pointer;
+  padding: 10px 14px; font-weight: 700; font-size: 11px; font-family: inherit;
+  color: var(--fg-muted); min-width: 78px; text-align: center;
+}
+.pm-method-select option { background: var(--bg-card); color: var(--fg-primary); }
+.pm-method-select.method-get    { color: #4ade80; }
+.pm-method-select.method-post   { color: #60a5fa; }
+.pm-method-select.method-put    { color: #f59e0b; }
+.pm-method-select.method-patch  { color: #a78bfa; }
+.pm-method-select.method-delete { color: #f87171; }
+.pm-method-select.method-head,
+.pm-method-select.method-options { color: var(--fg-muted); }
+.pm-method-badge {
+  display: inline-block; font-size: 9px; font-weight: 700; font-family: 'Consolas', monospace;
+  padding: 1px 5px; border-radius: 3px; background: rgba(255,255,255,0.06);
+  color: var(--fg-muted); letter-spacing: 0.03em; margin-right: 5px;
+}
+.pm-method-badge.method-get    { color: #4ade80; background: rgba(74,222,128,0.1); }
+.pm-method-badge.method-post   { color: #60a5fa; background: rgba(96,165,250,0.1); }
+.pm-method-badge.method-put    { color: #f59e0b; background: rgba(245,158,11,0.1); }
+.pm-method-badge.method-patch  { color: #a78bfa; background: rgba(167,139,250,0.1); }
+.pm-method-badge.method-delete { color: #f87171; background: rgba(248,113,113,0.1); }
 .pm-status-wrapper { display: flex; align-items: center; padding: 0 12px; gap: 8px; }
 .pm-status-input { background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-secondary); padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; width: 60px; text-align: center; }
 .pm-status-dropdown { position: absolute; top: calc(100% + 4px); right: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); z-index: 9999; min-width: 200px; max-height: 220px; overflow-y: auto; }

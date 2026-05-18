@@ -1205,8 +1205,10 @@ class ProxyUIBridge:
             for rule in self.map_local_rules:
                 pattern = rule.get("pattern", "")
                 strict_regex = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
+                rule_method = rule.get("method", "ANY").upper()
 
-                if rule.get("active") and re.search(strict_regex, flow.request.pretty_url):
+                method_match = rule_method == "ANY" or rule_method == flow.request.method.upper()
+                if rule.get("active") and method_match and re.search(strict_regex, flow.request.pretty_url):
                     try:
                         status_code = int(rule.get("status", 200))
                         headers_dict = {}
