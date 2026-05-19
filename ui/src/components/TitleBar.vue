@@ -31,6 +31,9 @@ const MENUS = [
       { label: 'Upstream Cert', action: () => op()?.toggleProxyUpstreamCert(), checked: () => proxyUpstreamCert.value },
       { type: 'separator' },
       { label: () => proxyHostFilterMode.value === 'allow' ? 'Allow Hosts…' : 'Ignore Hosts…', action: () => op()?.openIgnoreHosts() },
+      { type: 'separator' },
+      { label: 'Export Host Filter…', action: () => op()?.exportHostFilter() },
+      { label: 'Import Host Filter…', action: () => op()?.importHostFilter() },
     ],
   },
   {

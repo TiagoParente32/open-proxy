@@ -531,6 +531,38 @@ export const setProxyHostFilterMode = (mode) => {
     _sendProxyOptions()
 }
 
+export const exportHostFilter = async () => {
+    const payload = {
+        exportedAt: new Date().toISOString(),
+        mode: proxyHostFilterMode.value,
+        ignoreHosts: proxyIgnoreHosts.value,
+        allowHosts: proxyAllowHosts.value,
+    }
+    const filename = `openproxy-host-filter-${new Date().toISOString().slice(0, 10)}.json`
+    await window.electronAPI?.saveFile(filename, JSON.stringify(payload, null, 2))
+}
+
+export const importHostFilter = async () => {
+    const filePath = await window.electronAPI?.selectFile({
+        title: 'Import Host Filter',
+        filters: [{ name: 'OpenProxy Host Filter', extensions: ['json'] }],
+    })
+    if (!filePath) return
+    let payload
+    try {
+        const text = await fetch(`file://${filePath}`).then(r => r.text())
+        payload = JSON.parse(text)
+    } catch {
+        alert('Failed to read host filter file. Make sure it is a valid OpenProxy JSON export.')
+        return
+    }
+    if (payload.mode === 'ignore' || payload.mode === 'allow') {
+        setProxyHostFilterMode(payload.mode)
+    }
+    if (Array.isArray(payload.ignoreHosts)) syncProxyIgnoreHosts(payload.ignoreHosts, 'ignore')
+    if (Array.isArray(payload.allowHosts))  syncProxyIgnoreHosts(payload.allowHosts,  'allow')
+}
+
 export const applyAllHighlightRules = () => {
     requests.value.forEach(req => applyHighlightRules(req));
     requests.value = [...requests.value];
@@ -1345,10 +1377,11 @@ export const initWebSocket = () => {
 // 8. PREFERENCES RESET
 // ============================================================================
 export const resetPreferences = () => {
-    // Clear all openproxy_* keys
+    // Clear all openproxy_* keys and the onboarding flag
     Object.keys(localStorage)
         .filter(k => k.startsWith('openproxy_') || k === 'openproxy-theme')
         .forEach(k => localStorage.removeItem(k))
+    localStorage.removeItem('openproxyOnboardingDone')
 
     location.reload()
 }
@@ -1375,6 +1408,9 @@ export const exportSettings = async () => {
         try { settings[key] = JSON.parse(localStorage.getItem(storageKey)) }
         catch { settings[key] = localStorage.getItem(storageKey) }
     }
+
+    // Onboarding flag uses a non-standard key (no openproxy_ prefix) — handle explicitly
+    if (localStorage.getItem('openproxyOnboardingDone')) settings.onboardingDone = true
 
     // Include scripts from the backend (already loaded into reactive state)
     settings.scripts = scripts.value.map(({ id, name, content, enabled }) => ({ id, name, content, enabled }))
@@ -1418,6 +1454,8 @@ export const importSettings = async () => {
         'mapRemoteRules', 'enableMapRemote',
         'breakpointRules', 'breakpointsEnabled',
         'highlightRules', 'highlightsEnabled',
+        'proxyIgnoreHosts', 'proxyAllowHosts', 'proxyHostFilterMode',
+        'proxyHttp2', 'proxyUpstreamCert',
     ]
     for (const key of LS_KEYS) {
         if (!(key in settings)) continue
@@ -1427,6 +1465,9 @@ export const importSettings = async () => {
             localStorage.setItem(`openproxy_${key}`, JSON.stringify(settings[key]))
         }
     }
+
+    // Onboarding flag
+    if (settings.onboardingDone) localStorage.setItem('openproxyOnboardingDone', '1')
 
     // Restore scripts via WebSocket so the Python backend persists them
     if (Array.isArray(settings.scripts) && wsConnection?.readyState === WebSocket.OPEN) {

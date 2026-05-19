@@ -71,6 +71,8 @@ import {
   resetPreferences,
   exportSettings,
   importSettings,
+  exportHostFilter,
+  importHostFilter,
   showComposeModal,
   pinSource,
 } from './store.js'
@@ -126,6 +128,8 @@ onMounted(() => {
     resetPreferences: () => resetPreferences(),
     exportSettings:   () => exportSettings(),
     importSettings:   () => importSettings(),
+    exportHostFilter: () => exportHostFilter(),
+    importHostFilter: () => importHostFilter(),
     focusSearch:      () => document.dispatchEvent(new CustomEvent('openproxy:focus-search')),
     openShortcuts:    () => { showShortcutsModal.value = true },
   }
