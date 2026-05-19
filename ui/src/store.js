@@ -132,6 +132,40 @@ export const searchMatchType = ref('Contains')
 export const sortKey = ref('time')
 export const sortOrder = ref('desc')
 
+const normalizePinnedSource = (source) => String(source ?? '').trim()
+
+const findPinnedSource = (source) => {
+    const normalized = normalizePinnedSource(source).toLowerCase()
+    if (!normalized) return null
+    return pinnedSources.value.find(pinned => pinned.toLowerCase() === normalized) || null
+}
+
+export const isPinnedSource = (source) => !!findPinnedSource(source)
+
+export const pinSource = (source) => {
+    const normalized = normalizePinnedSource(source)
+    if (!normalized) return
+
+    const existing = findPinnedSource(normalized)
+    const pinnedValue = existing || normalized
+
+    if (!existing) {
+        pinnedSources.value.push(pinnedValue)
+    }
+
+    activeFilter.value = { type: 'pinned', domain: pinnedValue }
+}
+
+export const unpinSource = (source) => {
+    const existing = findPinnedSource(source)
+    if (!existing) return
+
+    pinnedSources.value = pinnedSources.value.filter(pinned => pinned.toLowerCase() !== existing.toLowerCase())
+    if (activeFilter.value.type === 'pinned' && String(activeFilter.value.domain ?? '').toLowerCase() === existing.toLowerCase()) {
+        activeFilter.value = { type: 'all' }
+    }
+}
+
 export const activeChips = ref(loadState('activeChips', {
     protocol: 'All', type: 'All', status: 'All', color: 'All', starred: false
 }))
