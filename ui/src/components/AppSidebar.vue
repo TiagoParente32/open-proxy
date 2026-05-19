@@ -213,7 +213,7 @@ const togglePinnedDomain = (domain, event) => {
 
 /* Subheaders */
 .sidebar-subheader { 
-  padding: 0 16px; 
+  padding: 0 8px; 
   margin-top: 24px; 
   margin-bottom: 8px; 
   font-size: 11px; 
@@ -222,7 +222,7 @@ const togglePinnedDomain = (domain, event) => {
   letter-spacing: 0.5px; 
 }
 
-.empty-state { padding: 0 16px; font-size: 12px; color: var(--fg-placeholder); font-style: italic; }
+.empty-state { padding: 0 8px; font-size: 12px; color: var(--fg-placeholder); font-style: italic; }
 
 /* Tree Layout */
 .tree-container { padding: 8px; overflow-y: auto; flex: 1; }
@@ -327,7 +327,7 @@ const togglePinnedDomain = (domain, event) => {
 /* Host Filter footer */
 .host-filter-section {
   border-top: 1px solid var(--border);
-  padding: 10px 12px;
+  padding: 10px 16px;
   display: flex; flex-direction: column; gap: 5px;
   background: var(--bg-sidebar);
 }
