@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { proxyIgnoreHosts, proxyAllowHosts, proxyHostFilterMode, syncProxyIgnoreHosts, setProxyHostFilterMode } from '../store.js'
+import { proxyIgnoreHosts, proxyAllowHosts, proxyHostFilterMode, syncProxyIgnoreHosts, setProxyHostFilterMode, exportHostFilter, importHostFilter } from '../store.js'
 
 const props = defineProps({ show: Boolean })
 const emit  = defineEmits(['close'])
@@ -88,6 +88,14 @@ const addPreset = (value) => {
 }
 
 const clear = () => { draft.value = '' }
+
+const importFilter = async () => {
+  await importHostFilter()
+  // Reload drafts to reflect the newly imported data
+  draftIgnore.value = proxyIgnoreHosts.value.map(prettifyPattern).join('\n')
+  draftAllow.value  = proxyAllowHosts.value.map(prettifyPattern).join('\n')
+  draftMode.value   = proxyHostFilterMode.value
+}
 </script>
 
 <template>
@@ -97,13 +105,6 @@ const clear = () => { draft.value = '' }
         <div class="ih-modal">
 
           <div class="ih-header">
-            <div class="ih-title">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-              </svg>
-              Ignore Hosts
-            </div>
             <button class="ih-close" @click="emit('close')">
               <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
             </button>
@@ -157,6 +158,8 @@ const clear = () => { draft.value = '' }
           <div class="ih-footer">
             <button class="ih-btn-clear" @click="clear">Clear all</button>
             <div style="flex:1"/>
+            <button class="ih-btn-secondary" @click="exportHostFilter">Export</button>
+            <button class="ih-btn-secondary" @click="importFilter">Import</button>
             <button class="ih-btn-save" @click="emit('close')">Done</button>
           </div>
 
@@ -179,12 +182,8 @@ const clear = () => { draft.value = '' }
   max-height: 80vh;
 }
 .ih-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 18px 12px; border-bottom: 1px solid var(--border);
-}
-.ih-title {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 14px; font-weight: 600; color: var(--fg-primary);
+  display: flex; align-items: center; justify-content: flex-end;
+  padding: 10px 14px 8px; border-bottom: 1px solid var(--border);
 }
 .ih-close {
   background: none; border: none; color: var(--fg-muted);
@@ -249,6 +248,12 @@ const clear = () => { draft.value = '' }
   transition: color 0.15s;
 }
 .ih-btn-clear:hover { color: var(--error); }
+.ih-btn-secondary {
+  font-size: 12px; font-weight: 600; background: var(--surface-hover-strong); border: none;
+  color: var(--fg-secondary); padding: 6px 16px; border-radius: 6px; cursor: pointer;
+  transition: background 0.15s;
+}
+.ih-btn-secondary:hover { background: var(--border); }
 .ih-btn-save {
   font-size: 12px; background: var(--accent); border: none;
   color: #fff; padding: 6px 22px; border-radius: 6px; cursor: pointer;

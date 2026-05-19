@@ -334,6 +334,15 @@ function setupMenu () {
           label: proxyHostFilterMode === 'allow' ? 'Allow Hosts…' : 'Ignore Hosts…',
           click: () => js('openIgnoreHosts()'),
         },
+        { type: 'separator' },
+        {
+          label: 'Export Host Filter…',
+          click: () => js('exportHostFilter()'),
+        },
+        {
+          label: 'Import Host Filter…',
+          click: () => js('importHostFilter()'),
+        },
       ],
     },
     {
