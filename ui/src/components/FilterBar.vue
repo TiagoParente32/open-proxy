@@ -16,11 +16,15 @@ const setChip = (category, value) => {
   <div class="filter-bar">
     <div class="chip-group">
       <button 
-        class="chip" :class="{ active: activeChips.starred }"
+        class="chip chip-star" :class="{ active: activeChips.starred }"
         @click="activeChips.starred = !activeChips.starred"
-        style="color: var(--method-put);"
       >
-        {{ activeChips.starred ? '⭐ Starred Only' : '⭐ Starred' }}
+        <svg width="11" height="11" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          :fill="activeChips.starred ? 'var(--warning)' : 'none'"
+          :stroke="activeChips.starred ? 'var(--warning)' : 'currentColor'">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+        {{ activeChips.starred ? 'Starred Only' : 'Starred' }}
       </button>
     </div>
 
@@ -112,6 +116,8 @@ const setChip = (category, value) => {
   white-space: nowrap;
   outline: none;
 }
+
+.chip-star { display: inline-flex; align-items: center; gap: 5px; }
 
 .chip:hover {
   color: var(--fg-secondary);

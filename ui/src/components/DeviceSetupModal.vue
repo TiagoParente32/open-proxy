@@ -1048,7 +1048,6 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.78);
   z-index: 99999; display: flex; justify-content: center; align-items: center;
-  backdrop-filter: blur(4px);
 }
 .modal-content {
   background: var(--bg-main); border: 1px solid var(--border);

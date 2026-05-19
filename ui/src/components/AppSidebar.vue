@@ -1,6 +1,6 @@
 <script setup>
-import { ref } from 'vue'
-import { isFocusMode, activeFilter, deviceTrafficTree, pinnedSources } from '../store.js'
+import { ref, computed } from 'vue'
+import { isFocusMode, activeFilter, deviceTrafficTree, pinnedSources, proxyIgnoreHosts, proxyAllowHosts, proxyHostFilterMode, showIgnoreHostsModal } from '../store.js'
 
 // --- FOLDER LOGIC ---
 const expandedFolders = ref(new Set())
@@ -22,6 +22,16 @@ const selectDomain = (ip, domain) => {
   isFocusMode.value = false
   activeFilter.value = { type: 'device_domain', ip: ip, domain: domain }
 }
+
+// Host filter display
+const hostFilterLabel = computed(() => {
+  if (proxyHostFilterMode.value === 'allow') {
+    const count = proxyAllowHosts.value.length
+    return count ? `Intercept ${count} host${count !== 1 ? 's' : ''}` : 'No hosts (nothing intercepted)'
+  }
+  const count = proxyIgnoreHosts.value.length
+  return count ? `Ignoring ${count} host${count !== 1 ? 's' : ''}` : 'All traffic'
+})
 
 // --- PINNED LOGIC ---
 const newPinnedSource = ref('')
@@ -106,6 +116,7 @@ const removePinnedSource = (source, event) => {
             <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line>
           </svg>
           <span class="truncate folder-label">{{ node.label }}</span>
+          <span v-if="node.label !== node.ip" class="device-ip-badge">{{ node.ip }}</span>
         </div>
 
         <div v-show="expandedFolders.has(node.ip)" class="folder-contents">
@@ -123,6 +134,25 @@ const removePinnedSource = (source, event) => {
       </div>
 
     </div>
+
+    <!-- Host Filter footer -->
+    <div class="host-filter-section">
+      <div class="host-filter-row">
+        <span class="host-filter-label">Host Filter</span>
+        <button class="host-filter-edit" @click="showIgnoreHostsModal = true" title="Edit host filter">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+          Edit
+        </button>
+      </div>
+      <div class="host-filter-status" @click="showIgnoreHostsModal = true">
+        <span class="host-filter-dot" :class="proxyHostFilterMode === 'allow' ? 'dot-allow' : (proxyIgnoreHosts.length ? 'dot-ignore' : 'dot-all')"></span>
+        <span class="host-filter-desc">{{ hostFilterLabel }}</span>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -221,6 +251,15 @@ const removePinnedSource = (source, event) => {
 .folder-group { margin-bottom: 4px; }
 .folder-header { gap: 6px; }
 .folder-label { font-weight: 500; color: var(--fg-secondary); }
+.device-ip-badge {
+  font-size: 10px;
+  color: var(--fg-muted);
+  opacity: 0.7;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: monospace;
+}
+.tree-item.active .device-ip-badge { color: #fff; opacity: 0.6; }
 
 .folder-contents { display: flex; flex-direction: column; position: relative; margin-left: 14px; padding-left: 10px; }
 .tree-line {
@@ -230,4 +269,37 @@ const removePinnedSource = (source, event) => {
 
 .sub-item { position: relative; font-size: 12px; color: var(--fg-muted); }
 .child-icon { opacity: 0.4; width: 12px; height: 12px; }
+
+/* Host Filter footer */
+.host-filter-section {
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 5px;
+  background: var(--bg-sidebar);
+}
+.host-filter-row {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.host-filter-label {
+  font-size: 10px; font-weight: 600; color: var(--fg-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.host-filter-edit {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 10px; color: var(--fg-muted); background: none; border: none;
+  cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: all 0.15s;
+}
+.host-filter-edit:hover { color: var(--accent); background: var(--accent-muted, rgba(88,166,255,0.1)); }
+.host-filter-status {
+  display: flex; align-items: center; gap: 7px;
+  cursor: pointer; padding: 4px 2px; border-radius: 5px; transition: background 0.15s;
+}
+.host-filter-status:hover { background: rgba(255,255,255,0.05); }
+.host-filter-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+}
+.dot-all    { background: #10b981; }
+.dot-ignore { background: #f59e0b; }
+.dot-allow  { background: #3b82f6; }
+.host-filter-desc { font-size: 11px; color: var(--fg-secondary); }
 </style>

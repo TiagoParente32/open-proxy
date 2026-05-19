@@ -491,7 +491,6 @@ const browseFile = async () => {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: var(--overlay); z-index: 99999;
   display: flex; justify-content: center; align-items: center;
-  backdrop-filter: blur(4px);
 }
 
 .pm-split-modal {

@@ -48,7 +48,7 @@ const copyHost = () => {
   setTimeout(() => copied.value = false, 1500)
 }
 
-const showCertMenu = ref(false)
+const showCertMenu    = ref(false)
 
 const openDeviceSetup = (type) => {
   deviceSetupType.value = type
@@ -75,7 +75,7 @@ const selectThrottle = (option) => {
 
 const closeDropdown = (e) => {
   if (!e.target.closest('.throttle-wrapper')) showThrottleMenu.value = false
-  if (!e.target.closest('.cert-wrapper')) showCertMenu.value = false
+  if (!e.target.closest('.cert-wrapper'))     showCertMenu.value = false
 }
 
 onMounted(() => document.addEventListener('click', closeDropdown))
@@ -260,6 +260,8 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         <span class="toggle-label">Bust Cache</span>
         <div class="switch"></div>
       </div>
+
+      <div class="divider"></div>
 
     </div>
 
@@ -475,4 +477,5 @@ button,
 .toggle.active .switch { background: rgba(245,158,11,.15); border-color: #f59e0b; }
 .toggle.active .switch::after { transform: translateX(10px); background: var(--method-put); }
 .toggle.loading { pointer-events: none; animation: wg-pulse 1s ease-in-out infinite; }
+
 </style>

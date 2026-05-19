@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { version as appVersion } from '../../../package.json'
-import { disableCache, toolbarVisibility, macosProxyActive } from '../store.js'
+import { disableCache, toolbarVisibility, macosProxyActive, proxyHttp2, proxyUpstreamCert, proxyHostFilterMode } from '../store.js'
 import { currentThemeId, applyTheme } from '../composables/useTheme.js'
 
 const isMac   = () => window.electronAPI?.platform === 'darwin'
@@ -18,26 +18,31 @@ const MENUS = [
   {
     label: 'Proxy',
     items: [
-      { label: 'Record / Pause',  action: () => op()?.toggleRecording() },
-      { label: 'Compose Request', action: () => op()?.openComposeNew() },
-      { label: 'Clear Traffic',   action: () => op()?.clearTraffic() },
+      { label: 'Record / Pause',  action: () => op()?.toggleRecording(), hint: 'Ctrl+⇧R' },
+      { label: 'Compose Request', action: () => op()?.openComposeNew(),  hint: 'Ctrl+N' },
+      { label: 'Clear Traffic',   action: () => op()?.clearTraffic(),    hint: 'Ctrl+K' },
       { type: 'separator' },
       ...(window.electronAPI?.platform === 'darwin' ? [
         { label: 'OS Proxy',   action: () => op()?.toggleMacProxy(), checked: () => macosProxyActive.value },
       ] : []),
       { label: 'Bust Cache', action: () => op()?.bustCache(), checked: () => disableCache.value },
+      { type: 'separator' },
+      { label: 'HTTP/2',        action: () => op()?.toggleProxyHttp2(),        checked: () => proxyHttp2.value },
+      { label: 'Upstream Cert', action: () => op()?.toggleProxyUpstreamCert(), checked: () => proxyUpstreamCert.value },
+      { type: 'separator' },
+      { label: () => proxyHostFilterMode.value === 'allow' ? 'Allow Hosts…' : 'Ignore Hosts…', action: () => op()?.openIgnoreHosts() },
     ],
   },
   {
     label: 'Tools',
     items: [
-      { label: 'VPN Mode',    action: () => op()?.openVpnMode() },
-      { label: 'Breakpoints', action: () => op()?.openBreakpoints() },
+      { label: 'VPN Mode',    action: () => op()?.openVpnMode(),      hint: 'Ctrl+⇧V' },
+      { label: 'Breakpoints', action: () => op()?.openBreakpoints(),  hint: 'Ctrl+⇧B' },
       { type: 'separator' },
-      { label: 'Map Local',   action: () => op()?.openMapLocal() },
-      { label: 'Map Remote',  action: () => op()?.openMapRemote() },
-      { label: 'Highlight',   action: () => op()?.openHighlight() },
-      { label: 'Scripts',     action: () => op()?.openScripting() },
+      { label: 'Map Local',   action: () => op()?.openMapLocal(),     hint: 'Ctrl+⇧M' },
+      { label: 'Map Remote',  action: () => op()?.openMapRemote(),    hint: 'Ctrl+⇧E' },
+      { label: 'Highlight',   action: () => op()?.openHighlight(),    hint: 'Ctrl+⇧H' },
+      { label: 'Scripts',     action: () => op()?.openScripting(),    hint: 'Ctrl+⇧S' },
       { type: 'separator' },
       {
         label: 'Certificate Setup',
@@ -101,6 +106,8 @@ const MENUS = [
     label: 'Help',
     items: [
       { label: 'Check for Updates', action: () => op()?.checkForUpdates() },
+      { type: 'separator' },
+      { label: 'Keyboard Shortcuts…', action: () => op()?.openShortcuts(), hint: 'Ctrl+⇧/' },
       { type: 'separator' },
       { label: 'Export Settings…',  action: () => op()?.exportSettings() },
       { label: 'Import Settings…',  action: () => op()?.importSettings() },
@@ -193,7 +200,8 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
               </li>
               <li v-else class="win-item" @click.stop="clickItem(item)">
                 <span class="win-item-check">{{ item.checked?.() ? '✓' : '' }}</span>
-                {{ item.label }}
+                <span class="win-item-label">{{ typeof item.label === 'function' ? item.label() : item.label }}</span>
+                <span v-if="item.hint" class="win-item-hint">{{ item.hint }}</span>
               </li>
             </template>
           </ul>
@@ -337,6 +345,16 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   font-size: 11px;
   color: var(--fg-secondary);
   text-align: center;
+}
+
+.win-item-label { flex: 1; }
+
+.win-item-hint {
+  margin-left: 20px;
+  font-size: 10.5px;
+  color: var(--fg-muted);
+  opacity: 0.7;
+  font-family: monospace;
 }
 
 .win-drag {

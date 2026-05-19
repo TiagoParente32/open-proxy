@@ -22,6 +22,9 @@ import HighlightModal from './components/HighlightModal.vue'
 import DeviceSetupModal from './components/DeviceSetupModal.vue'
 import ScriptingModal from './components/ScriptingModal.vue'
 import ProgressOverlay from './components/ProgressOverlay.vue'
+import IgnoreHostsModal from './components/IgnoreHostsModal.vue'
+import OnboardingModal from './components/OnboardingModal.vue'
+import KeyboardShortcutsModal from './components/KeyboardShortcutsModal.vue'
 // Import just the logic needed for the top-level app overlay (WebSockets & Context Menu)
 import { 
   initWebSocket, 
@@ -61,9 +64,16 @@ import {
   toolbarVisibility,
   macosProxyActive,
   toggleMacProxy,
+  proxyHttp2,
+  proxyUpstreamCert,
+  proxyHostFilterMode,
+  toggleProxyHttp2,
+  toggleProxyUpstreamCert,
+  showIgnoreHostsModal,
   resetPreferences,
   exportSettings,
   importSettings,
+  showComposeModal,
 } from './store.js'
 
 onMounted(() => {
@@ -77,6 +87,14 @@ onMounted(() => {
   // Same dance for the macOS system proxy toggle so the Tools menu checkmark tracks state
   window.electronAPI?.macosProxySync?.(macosProxyActive.value)
   watch(macosProxyActive, val => window.electronAPI?.macosProxySync?.(val))
+
+  // Sync proxy compat options with native menu checkmarks
+  window.electronAPI?.proxyHttp2Sync?.(proxyHttp2.value)
+  window.electronAPI?.proxyUpstreamCertSync?.(proxyUpstreamCert.value)
+  window.electronAPI?.proxyHostFilterModeSync?.(proxyHostFilterMode.value)
+  watch(proxyHttp2,         val  => window.electronAPI?.proxyHttp2Sync?.(val))
+  watch(proxyUpstreamCert,  val  => window.electronAPI?.proxyUpstreamCertSync?.(val))
+  watch(proxyHostFilterMode, mode => window.electronAPI?.proxyHostFilterModeSync?.(mode))
 
   // Sync toolbar visibility with native menu on startup (main process always starts fresh)
   window.electronAPI?.toolbarSyncToMain?.({ ...toolbarVisibility.value })
@@ -100,13 +118,52 @@ onMounted(() => {
     setThrottle:      (profile) => { throttleProfile.value = profile },
     bustCache:        () => { disableCache.value = !disableCache.value },
     toggleMacProxy:   () => toggleMacProxy(),
+    toggleProxyHttp2:       () => toggleProxyHttp2(),
+    toggleProxyUpstreamCert: () => toggleProxyUpstreamCert(),
+    openIgnoreHosts:  () => { showIgnoreHostsModal.value = true },
     checkForUpdates:  () => checkForUpdates(),
     toggleToolbarVisibility: (tool) => { toolbarVisibility.value[tool] = !toolbarVisibility.value[tool] },
     showAbout:        () => { showAboutModal.value = true },
     resetPreferences: () => resetPreferences(),
     exportSettings:   () => exportSettings(),
     importSettings:   () => importSettings(),
+    focusSearch:      () => document.dispatchEvent(new CustomEvent('openproxy:focus-search')),
+    openShortcuts:    () => { showShortcutsModal.value = true },
   }
+
+  // ── Global keyboard shortcuts ────────────────────────────────────────────
+  const handleGlobalKey = (e) => {
+    const tag = document.activeElement?.tagName
+    const isEditing = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable
+    const cmd   = e.metaKey || e.ctrlKey
+    const shift = e.shiftKey
+    if (cmd && shift && e.code === 'KeyR') { e.preventDefault(); toggleRecording() }
+    else if (cmd && !shift && e.code === 'KeyK') { e.preventDefault(); requests.value.length = 0; wsMessages.value = {} }
+    else if (cmd && !shift && e.code === 'KeyN' && !isEditing) { e.preventDefault(); openComposeNew() }
+    else if (cmd && !shift && e.code === 'KeyF') { e.preventDefault(); document.dispatchEvent(new CustomEvent('openproxy:focus-search')) }
+    else if (cmd && shift && e.code === 'KeyM') { e.preventDefault(); showMapModal.value = true }
+    else if (cmd && shift && e.code === 'KeyE') { e.preventDefault(); showMapRemoteModal.value = true }
+    else if (cmd && shift && e.code === 'KeyB') { e.preventDefault(); showBreakpointModal.value = true }
+    else if (cmd && shift && e.code === 'KeyH') { e.preventDefault(); showHighlightModal.value = true }
+    else if (cmd && shift && e.code === 'KeyS') { e.preventDefault(); showScriptingModal.value = true }
+    else if (cmd && shift && e.code === 'KeyV') { e.preventDefault(); openVpnMode() }
+    else if (cmd && shift && e.code === 'Slash') { e.preventDefault(); showShortcutsModal.value = true }
+    else if (e.key === 'Escape') {
+      // Close the topmost open modal first
+      if      (showShortcutsModal.value)    showShortcutsModal.value    = false
+      else if (showOnboardingModal.value)   showOnboardingModal.value   = false
+      else if (showIgnoreHostsModal.value)  showIgnoreHostsModal.value  = false
+      else if (showScriptingModal.value)    showScriptingModal.value    = false
+      else if (showDeviceSetupModal.value)  showDeviceSetupModal.value  = false
+      else if (showComposeModal.value)      showComposeModal.value      = false
+      else if (showBreakpointModal.value)   showBreakpointModal.value   = false
+      else if (showHighlightModal.value)    showHighlightModal.value    = false
+      else if (showMapRemoteModal.value)    showMapRemoteModal.value    = false
+      else if (showMapModal.value)          showMapModal.value          = false
+    }
+  }
+  window.addEventListener('keydown', handleGlobalKey)
+  onUnmounted(() => window.removeEventListener('keydown', handleGlobalKey))
 
   window.electronAPI?.onResetPreferences?.(() => resetPreferences())
 })
@@ -122,6 +179,8 @@ const showUpdateModal = computed(() =>
 )
 
 const showAboutModal  = ref(false)
+const showOnboardingModal  = ref(!localStorage.getItem('openproxyOnboardingDone'))
+const showShortcutsModal = ref(false)
 
 const openReleaseNotes = () => {
   if (updateInfo.value?.release_url) window.electronAPI?.openExternal(updateInfo.value.release_url)
@@ -442,8 +501,13 @@ const openBreakpointModalFromContext = () => {
 
       <!-- Group: Mark -->
       <div class="ctx-group-label">Mark</div>
-      <div class="context-menu-item" @click="toggleStar">
-        {{ contextMenu.request?.starred ? '⭐ Unstar' : '⭐ Star' }}
+      <div class="context-menu-item ctx-star-item" @click="toggleStar">
+        <svg width="13" height="13" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          :fill="contextMenu.request?.starred ? 'var(--warning)' : 'none'"
+          :stroke="contextMenu.request?.starred ? 'var(--warning)' : 'currentColor'">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+        {{ contextMenu.request?.starred ? 'Unstar' : 'Star' }}
       </div>
       <div class="context-menu-colors">
         <div class="color-dot red"    @click="setRowColor('red')"    title="Red"></div>
@@ -473,6 +537,9 @@ const openBreakpointModalFromContext = () => {
     <HighlightModal />
     <DeviceSetupModal />
     <ScriptingModal />
+    <IgnoreHostsModal :show="showIgnoreHostsModal" @close="showIgnoreHostsModal = false" />
+    <OnboardingModal v-if="showOnboardingModal" @done="showOnboardingModal = false" />
+    <KeyboardShortcutsModal v-if="showShortcutsModal" @close="showShortcutsModal = false" />
   </div>
 </template>
 
@@ -528,6 +595,7 @@ body { margin: 0; padding: 0; }
   border-radius: 5px;
   text-align: left;
 }
+.ctx-star-item { display: flex; align-items: center; gap: 7px; }
 .context-menu-item:hover { background: var(--accent); color: var(--fg-primary); }
 .context-menu-divider { height: 1px; background: var(--border); margin: 3px 4px; }
 

@@ -199,7 +199,7 @@ const drop = () => {
 
 <style scoped>
 /* OVERLAY & MODAL */
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--overlay); z-index: 99999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--overlay); z-index: 99999; display: flex; justify-content: center; align-items: center; }
 .pm-modal { background: var(--bg-main); border-radius: 8px; width: 850px; height: 650px; display: flex; flex-direction: column; overflow: hidden; }
 
 /* BREAKPOINT SPECIFIC GLOW */
