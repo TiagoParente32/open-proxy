@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { isFocusMode, activeFilter, deviceTrafficTree, pinnedSources } from '../store.js'
+import { isFocusMode, activeFilter, deviceTrafficTree, pinnedSources, pinSource, unpinSource, isPinnedSource } from '../store.js'
 
 // --- FOLDER LOGIC ---
 const expandedFolders = ref(new Set())
@@ -28,19 +28,24 @@ const newPinnedSource = ref('')
 
 const addPinnedSource = (sourceToAdd = null) => {
   const val = (sourceToAdd || newPinnedSource.value).trim()
-  if (val && !pinnedSources.value.includes(val)) {
-    pinnedSources.value.push(val)
-    activeFilter.value = { type: 'pinned', domain: val }
+  if (val) {
+    pinSource(val)
     newPinnedSource.value = ''
   }
 }
 
 const removePinnedSource = (source, event) => {
   event.stopPropagation()
-  pinnedSources.value = pinnedSources.value.filter(s => s !== source)
-  if (activeFilter.value.type === 'pinned' && activeFilter.value.domain === source) {
-    activeFilter.value = { type: 'all' }
+  unpinSource(source)
+}
+
+const togglePinnedDomain = (domain, event) => {
+  event.stopPropagation()
+  if (isPinnedSource(domain)) {
+    unpinSource(domain)
+    return
   }
+  pinSource(domain)
 }
 </script>
 
@@ -78,8 +83,9 @@ const removePinnedSource = (source, event) => {
            class="tree-item pin-item" 
            :class="{ 'active': activeFilter.type === 'pinned' && activeFilter.domain === source }" 
            @click="isFocusMode = false; activeFilter = { type: 'pinned', domain: source }">
-        <svg class="ui-icon outline-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle>
+        <svg class="pin-icon" viewBox="0 0 24 24" style="width:16px;height:16px;min-width:16px;opacity:1" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="9" r="5.5"/>
+          <line x1="12" y1="14.5" x2="12" y2="21" stroke-width="2.5"/>
         </svg>
         <span class="truncate" :title="source">{{ source }}</span>
         <span class="delete-icon" @click="removePinnedSource(source, $event)">
@@ -113,11 +119,22 @@ const removePinnedSource = (source, event) => {
                class="tree-item sub-item"
                @click="selectDomain(node.ip, domain)"
                :class="{ 'active': activeFilter.type === 'device_domain' && activeFilter.ip === node.ip && activeFilter.domain === domain }">
-            <div class="tree-line"></div>
-            <svg class="ui-icon child-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="child-icon" viewBox="0 0 24 24" style="width:16px;height:16px;min-width:16px;opacity:0.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline>
             </svg>
             <span class="truncate">{{ domain }}</span>
+            <button
+              class="pin-toggle"
+              :class="{ pinned: isPinnedSource(domain) }"
+              :title="isPinnedSource(domain) ? 'Unpin endpoint' : 'Pin endpoint'"
+              @click="togglePinnedDomain(domain, $event)"
+            >
+              <svg viewBox="0 0 24 24" style="width:16px;height:16px;flex-shrink:0"
+                fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="9" r="5.5"/>
+                <line x1="12" y1="14.5" x2="12" y2="21" stroke-width="2.5"/>
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -217,17 +234,53 @@ const removePinnedSource = (source, event) => {
 .delete-icon:hover { background: var(--error-muted); }
 .tree-item:hover .delete-icon { opacity: 1; }
 
+.pin-toggle {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-placeholder);
+  opacity: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.2s, color 0.2s, background 0.2s;
+}
+
+.sub-item:hover .pin-toggle,
+.pin-toggle.pinned {
+  opacity: 1;
+}
+
+.pin-toggle:hover {
+  background: var(--surface-hover-strong);
+}
+
+.pin-toggle.pinned {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.tree-item.active .pin-toggle {
+  color: var(--fg-placeholder);
+  opacity: 1;
+}
+
+.tree-item.active .pin-toggle.pinned {
+  color: #fff;
+}
+
 /* Folders (IDE Style) */
 .folder-group { margin-bottom: 4px; }
 .folder-header { gap: 6px; }
 .folder-label { font-weight: 500; color: var(--fg-secondary); }
 
-.folder-contents { display: flex; flex-direction: column; position: relative; margin-left: 14px; padding-left: 10px; }
-.tree-line {
-  position: absolute; left: 0; top: 0; bottom: 8px; width: 1px;
-  background: var(--border);
-}
-
+.folder-contents { display: flex; flex-direction: column; position: relative; margin-left: 22px; padding-left: 12px; border-left: 1px solid var(--border); }
 .sub-item { position: relative; font-size: 12px; color: var(--fg-muted); }
-.child-icon { opacity: 0.4; width: 12px; height: 12px; }
+.child-icon { opacity: 0.5; width: 16px !important; height: 16px !important; min-width: 16px !important; }
+.pin-icon { color: var(--accent); }
+.tree-item.active .pin-icon { color: #fff; }
 </style>
