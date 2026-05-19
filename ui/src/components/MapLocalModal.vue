@@ -21,6 +21,13 @@ const extensions = computed(() => [json(), ...cmTheme.value, EditorView.lineWrap
 const activeRule = computed(() => mapLocalRules.value.find(r => r.id === selectedRuleId.value))
 const activeTab = ref('Body')
 const queryParams = ref([{ key: '', value: '' }])
+const showMethodMenu = ref(false)
+
+const selectMethod = (m) => {
+  if (activeRule.value) activeRule.value.method = m
+  showMethodMenu.value = false
+  syncMapLocalRules()
+}
 
 // --- 2. PARAMETER SYNC LOGIC (Defined first to avoid init errors) ---
 
@@ -347,16 +354,22 @@ const browseFile = async () => {
 
             <div class="pm-omnibar-container">
               <div class="pm-omnibar">
-                <select v-model="activeRule.method" class="pm-method-select" :class="`method-${(activeRule.method||'ANY').toLowerCase()}`">
-                  <option value="ANY">ANY</option>
-                  <option value="GET">GET</option>
-                  <option value="POST">POST</option>
-                  <option value="PUT">PUT</option>
-                  <option value="PATCH">PATCH</option>
-                  <option value="DELETE">DELETE</option>
-                  <option value="HEAD">HEAD</option>
-                  <option value="OPTIONS">OPTIONS</option>
-                </select>
+                <div class="pm-method-wrapper" style="position: relative;">
+                  <div class="pm-method-display" :class="(activeRule.method||'ANY').toLowerCase()"
+                    @click="showMethodMenu = !showMethodMenu">
+                    {{ activeRule.method || 'ANY' }}
+                    <svg class="pm-chevron" viewBox="0 0 24 24" width="12" height="12">
+                      <path d="M7 10l5 5 5-5z" fill="currentColor"/>
+                    </svg>
+                  </div>
+                  <div v-if="showMethodMenu" class="pm-dropdown-overlay" @click.stop="showMethodMenu = false"></div>
+                  <div v-if="showMethodMenu" class="pm-method-dropdown">
+                    <div v-for="m in ['ANY', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']" :key="m"
+                      class="pm-method-option" :class="m.toLowerCase()" @click="selectMethod(m)">
+                      {{ m }}
+                    </div>
+                  </div>
+                </div>
                 <div class="pm-divider"></div>
                 <input type="text" v-model="activeRule.pattern" class="pm-url-input"
                   placeholder="e.g., api.example.com/*" @input="syncPatternToParams" />
@@ -585,20 +598,35 @@ const browseFile = async () => {
 .pm-omnibar { display: flex; align-items: center; background: var(--bg-deepest); border: 1px solid var(--border); border-radius: 6px; }
 .pm-url-input { flex: 1; background: transparent; border: none; color: var(--fg-secondary); padding: 10px 12px; font-size: 13px; outline: none; font-family: 'Consolas', monospace; }
 .pm-divider { width: 1px; height: 24px; background: var(--border); }
-.pm-method-display.read-only { padding: 10px 16px; font-weight: 700; font-size: 11px; color: var(--fg-muted); }
-.pm-method-select {
-  appearance: none; background: transparent; border: none; outline: none; cursor: pointer;
-  padding: 10px 14px; font-weight: 700; font-size: 11px; font-family: inherit;
-  color: var(--fg-muted); min-width: 78px; text-align: center;
+.pm-method-wrapper { position: relative; }
+.pm-method-display {
+  padding: 10px 14px; font-weight: 700; font-size: 11px; cursor: pointer;
+  color: var(--fg-muted); min-width: 78px; display: flex; align-items: center; gap: 4px;
+  user-select: none;
 }
-.pm-method-select option { background: var(--bg-card); color: var(--fg-primary); }
-.pm-method-select.method-get    { color: #4ade80; }
-.pm-method-select.method-post   { color: #60a5fa; }
-.pm-method-select.method-put    { color: #f59e0b; }
-.pm-method-select.method-patch  { color: #a78bfa; }
-.pm-method-select.method-delete { color: #f87171; }
-.pm-method-select.method-head,
-.pm-method-select.method-options { color: var(--fg-muted); }
+.pm-method-display.get    { color: #4ade80; }
+.pm-method-display.post   { color: #60a5fa; }
+.pm-method-display.put    { color: #f59e0b; }
+.pm-method-display.patch  { color: #a78bfa; }
+.pm-method-display.delete { color: #f87171; }
+.pm-dropdown-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99; cursor: default;
+}
+.pm-method-dropdown {
+  position: absolute; top: 100%; left: 0; margin-top: 4px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: var(--shadow-lg); z-index: 100; min-width: 120px; padding: 4px 0;
+}
+.pm-method-option {
+  padding: 8px 16px; font-size: 12px; font-weight: 700; cursor: pointer; transition: background 0.1s;
+  color: var(--fg-muted);
+}
+.pm-method-option:hover { background: var(--surface-hover-strong); }
+.pm-method-option.get    { color: #4ade80; }
+.pm-method-option.post   { color: #60a5fa; }
+.pm-method-option.put    { color: #f59e0b; }
+.pm-method-option.patch  { color: #a78bfa; }
+.pm-method-option.delete { color: #f87171; }
 .pm-method-badge {
   display: inline-block; font-size: 9px; font-weight: 700; font-family: 'Consolas', monospace;
   padding: 1px 5px; border-radius: 3px; background: rgba(255,255,255,0.06);
