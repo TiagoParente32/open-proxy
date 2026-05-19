@@ -183,13 +183,13 @@ const removePinnedSource = (source, event) => {
   cursor: pointer; 
   transition: all 0.2s; 
 }
-.focus-mode-wrapper:hover { background: rgba(255, 255, 255, 0.03); }
+.focus-mode-wrapper:hover { background: var(--surface-hover); }
 .focus-mode-wrapper.focus-on { background: rgba(59, 130, 246, 0.1); border-bottom-color: rgba(59, 130, 246, 0.3); }
 .focus-mode-wrapper.focus-on .ui-icon { color: #3b82f6; opacity: 1; }
 
 .focus-label { flex: 1; font-weight: 600; font-size: 13px; color: var(--fg-secondary); }
 
-.toggle-switch { width: 32px; height: 18px; background: #333; border-radius: 20px; position: relative; transition: background 0.3s; margin-left: auto; border: 1px solid #444; }
+.toggle-switch { width: 32px; height: 18px; background: var(--border); border-radius: 20px; position: relative; transition: background 0.3s; margin-left: auto; border: 1px solid var(--border); }
 .toggle-switch::after { content: ''; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: var(--fg-muted); border-radius: 50%; transition: transform 0.3s, background 0.3s; }
 .toggle-switch.on { background: var(--accent); border-color: var(--accent); }
 .toggle-switch.on::after { transform: translateX(14px); background: #fff; }
@@ -222,9 +222,10 @@ const removePinnedSource = (source, event) => {
   color: var(--fg-muted); 
   transition: all 0.1s; 
 }
-.tree-item:hover { background: rgba(255, 255, 255, 0.05); color: var(--fg-primary); }
+.tree-item:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
 .tree-item.active { background: var(--accent); color: #fff; font-weight: 500; }
 .tree-item.active .ui-icon, .tree-item.active .chevron-icon { opacity: 1; }
+.tree-item.active .folder-label, .tree-item.active .truncate { color: #fff; }
 
 .main-item { margin-bottom: 8px; font-weight: 500; color: var(--fg-secondary); }
 
@@ -241,7 +242,7 @@ const removePinnedSource = (source, event) => {
   border-radius: 4px; padding: 0 8px; cursor: pointer; transition: all 0.2s; 
   display: flex; align-items: center; justify-content: center;
 }
-.action-btn:hover { background: rgba(255, 255, 255, 0.1); color: var(--fg-primary); }
+.action-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
 
 .delete-icon { margin-left: auto; color: var(--error); opacity: 0; transition: opacity 0.2s; display: flex; align-items: center; padding: 2px; border-radius: 4px; }
 .delete-icon:hover { background: var(--error-muted); }
