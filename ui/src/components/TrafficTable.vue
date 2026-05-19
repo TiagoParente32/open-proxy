@@ -155,9 +155,12 @@ const handleKeyDown = async (e) => {
 }
 
 let _resizeObserver = null
+const handleFocusSearch = () => { searchInput.value?.focus(); searchInput.value?.select() }
+
 onMounted(() => {
   window.addEventListener('keydown', handleKeyDown)
   document.addEventListener('click', closeAllMenus)
+  document.addEventListener('openproxy:focus-search', handleFocusSearch)
   if (containerRef.value) {
     containerHeight.value = containerRef.value.clientHeight
     _resizeObserver = new ResizeObserver(([e]) => { containerHeight.value = e.contentRect.height })
@@ -167,6 +170,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   document.removeEventListener('click', closeAllMenus)
+  document.removeEventListener('openproxy:focus-search', handleFocusSearch)
   _resizeObserver?.disconnect()
 })
 </script>
@@ -288,7 +292,9 @@ onUnmounted(() => {
             ]"
           >
             <td class="text-muted text-id">
-              <span v-if="req.starred" style="margin-right: 4px; font-size: 10px;">⭐</span>
+              <svg v-if="req.starred" width="10" height="10" viewBox="0 0 24 24" fill="var(--warning)" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; flex-shrink: 0;">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
               {{ req.id.substring(0, 5) }}
             </td>
             <td><span class="method-badge" :style="{ backgroundColor: getMethodColor(req.method) + '20', color: getMethodColor(req.method) }">{{ req.method }}</span></td>
@@ -444,7 +450,7 @@ onUnmounted(() => {
 .traffic-table tbody tr.row-blue   { background-color: rgba(59,  130, 246, 0.15); }
 .traffic-table tbody tr.row-purple { background-color: rgba(139, 92,  246, 0.15); }
 
-.text-id { font-family: monospace; font-size: 11px; }
+.text-id { font-family: monospace; font-size: 11px; display: flex; align-items: center; }
 .method-badge { padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10px; }
 .status-badge { padding: 2px 6px; border-radius: 4px; background: var(--border); font-size: 10px; font-weight: bold; border: 1px solid var(--border); }
 </style>

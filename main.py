@@ -36,7 +36,7 @@ def _read_app_version():
         with open(os.path.join(root, 'package.json')) as _f:
             return json.load(_f)['version']
     except Exception:
-        return "1.0.8"   # fallback — keep in sync if auto-read ever fails
+        return "1.0.9"   # fallback — keep in sync if auto-read ever fails
 
 APP_VERSION      = _read_app_version()
 APP_PRODUCT_NAME   = "OpenProxy"   # must match build.productName in package.json
@@ -183,6 +183,29 @@ def get_resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 LOCAL_IP = get_local_ip()
+
+# Cache: ip -> resolved hostname (or None if failed)
+_hostname_cache: dict = {}
+
+async def _resolve_hostname_bg(ip: str, proxy_addon):
+    """Resolve a hostname for an IP in the background and notify the UI."""
+    try:
+        loop = asyncio.get_running_loop()
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, socket.gethostbyaddr, ip),
+            timeout=2.0
+        )
+        hostname = result[0]
+        # Strip trailing .local FQDN noise from mDNS (keep it readable)
+        _hostname_cache[ip] = hostname
+    except Exception:
+        _hostname_cache[ip] = None
+        return
+    # Notify frontend so sidebar can update without waiting for next request
+    try:
+        await proxy_addon.broadcast_to_ui("CLIENT_HOSTNAME_RESOLVED", {"ip": ip, "hostname": hostname})
+    except Exception:
+        pass
 
 
 # ============================================================================
@@ -1160,9 +1183,19 @@ class ProxyUIBridge:
                 else:
                     req_body = text
 
+        raw_ip = flow.client_conn.peername[0] if flow.client_conn.peername else "Unknown"
+        hostname = _hostname_cache.get(raw_ip)  # None if not yet resolved
+        if raw_ip not in _hostname_cache and raw_ip != "Unknown":
+            # Fire background resolution — result cached for future requests
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(_resolve_hostname_bg(raw_ip, self))
+            self.bg_tasks.add(task)
+            task.add_done_callback(self.bg_tasks.discard)
+
         request_data = {
             "id": flow.id,
-            "client_ip": flow.client_conn.peername[0] if flow.client_conn.peername else "Unknown",
+            "client_ip": raw_ip,
+            "client_hostname": hostname,
             "method": flow.request.method,
             "url": flow.request.pretty_url,
             "status": "...",
@@ -1205,8 +1238,10 @@ class ProxyUIBridge:
             for rule in self.map_local_rules:
                 pattern = rule.get("pattern", "")
                 strict_regex = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
+                rule_method = rule.get("method", "ANY").upper()
 
-                if rule.get("active") and re.search(strict_regex, flow.request.pretty_url):
+                method_match = rule_method == "ANY" or rule_method == flow.request.method.upper()
+                if rule.get("active") and method_match and re.search(strict_regex, flow.request.pretty_url):
                     try:
                         status_code = int(rule.get("status", 200))
                         headers_dict = {}
@@ -1827,6 +1862,25 @@ class ProxyUIBridge:
 
                 elif payload.get("type") == "TOGGLE_CACHE":
                     self.disable_cache = payload.get("disable_cache")
+
+                elif payload.get("type") == "UPDATE_PROXY_OPTIONS":
+                    if self._master:
+                        opts = {}
+                        if "http2" in payload:
+                            opts["http2"] = bool(payload["http2"])
+                        if "upstream_cert" in payload:
+                            opts["upstream_cert"] = bool(payload["upstream_cert"])
+                        if "ignore_hosts" in payload:
+                            hosts = payload["ignore_hosts"]
+                            opts["ignore_hosts"] = [h for h in hosts if h.strip()]
+                        if "allow_hosts" in payload:
+                            hosts = payload["allow_hosts"]
+                            opts["allow_hosts"] = [h for h in hosts if h.strip()]
+                        if opts:
+                            self._master.options.update(**opts)
+                            n_ignore = len(opts.get('ignore_hosts', []))
+                            n_allow  = len(opts.get('allow_hosts', []))
+                            print(f"[Proxy] Options updated: http2={opts.get('http2', '?')} upstream_cert={opts.get('upstream_cert', '?')} ignore_hosts={n_ignore} allow_hosts={n_allow}")
 
                 elif payload.get("type") == "UPDATE_MAP_REMOTE_RULES":
                     self.map_remote_rules = payload.get("rules", [])

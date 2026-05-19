@@ -327,6 +327,17 @@ export const macosProxyLoading = ref(false)
 export const macosProxyError = ref(null)
 export const macosProxyServices = ref([])
 
+// Proxy engine options (persisted)
+export const proxyHttp2        = ref(loadState('proxyHttp2', true))
+export const proxyUpstreamCert = ref(loadState('proxyUpstreamCert', true))
+export const proxyIgnoreHosts  = ref(loadState('proxyIgnoreHosts', []))
+export const proxyAllowHosts   = ref(loadState('proxyAllowHosts', []))
+// 'ignore' = pass listed hosts through | 'allow' = only intercept listed hosts
+export const proxyHostFilterMode = ref(loadState('proxyHostFilterMode', 'ignore'))
+
+// UI modal visibility (shared so sidebar can trigger it)
+export const showIgnoreHostsModal = ref(false)
+
 
 // ============================================================================
 // 4. ACTIONS & LOGIC
@@ -473,6 +484,53 @@ export const toggleMacProxy = () => {
     }))
 }
 
+const _sendProxyOptions = () => {
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        const mode = proxyHostFilterMode.value
+        wsConnection.send(JSON.stringify({
+            type: 'UPDATE_PROXY_OPTIONS',
+            http2: proxyHttp2.value,
+            upstream_cert: proxyUpstreamCert.value,
+            ignore_hosts: mode === 'ignore' ? proxyIgnoreHosts.value : [],
+            allow_hosts:  mode === 'allow'  ? proxyAllowHosts.value  : [],
+        }))
+    }
+}
+
+export const toggleProxyHttp2 = () => {
+    proxyHttp2.value = !proxyHttp2.value
+    saveState('proxyHttp2', proxyHttp2.value)
+    _sendProxyOptions()
+}
+
+export const toggleProxyUpstreamCert = () => {
+    proxyUpstreamCert.value = !proxyUpstreamCert.value
+    saveState('proxyUpstreamCert', proxyUpstreamCert.value)
+    _sendProxyOptions()
+}
+
+export const syncProxyIgnoreHosts = (hosts, mode) => {
+    // Save to the correct list based on mode
+    if (mode === 'allow') {
+        proxyAllowHosts.value = hosts
+        saveState('proxyAllowHosts', hosts)
+    } else {
+        proxyIgnoreHosts.value = hosts
+        saveState('proxyIgnoreHosts', hosts)
+    }
+    if (mode !== undefined) {
+        proxyHostFilterMode.value = mode
+        saveState('proxyHostFilterMode', mode)
+    }
+    _sendProxyOptions()
+}
+
+export const setProxyHostFilterMode = (mode) => {
+    proxyHostFilterMode.value = mode
+    saveState('proxyHostFilterMode', mode)
+    _sendProxyOptions()
+}
+
 export const applyAllHighlightRules = () => {
     requests.value.forEach(req => applyHighlightRules(req));
     requests.value = [...requests.value];
@@ -572,24 +630,66 @@ export const setupAndroidEmulator = () => {
 // ============================================================================
 // 5. COMPUTED PROPERTIES (Filtering)
 // ============================================================================
+
+// Map of ip -> resolved hostname, populated lazily via CLIENT_HOSTNAME_RESOLVED
+export const clientHostnames = ref({})
+
+function parseUserAgentDevice(ua) {
+    if (!ua) return null
+    // iOS devices
+    if (/iPhone/i.test(ua)) return 'iPhone'
+    if (/iPad/i.test(ua)) return 'iPad'
+    if (/iPod/i.test(ua)) return 'iPod'
+    // Android
+    const android = ua.match(/Android[^;]*;\s*([^)]+)\)/i)
+    if (android) {
+        // Try to extract device model from Android UA, e.g. "SM-G991B" or "Pixel 6"
+        const model = android[1].trim()
+        return model.length > 0 && model.length < 40 ? model : 'Android Device'
+    }
+    if (/Android/i.test(ua)) return 'Android Device'
+    // macOS / Mac
+    if (/Macintosh|Mac OS X/i.test(ua)) return 'Mac'
+    // Windows
+    if (/Windows/i.test(ua)) return 'Windows PC'
+    // Linux (non-Android)
+    if (/Linux/i.test(ua)) return 'Linux Device'
+    return null
+}
+
+function deviceLabel(ip, uaDevice) {
+    if (ip === '127.0.0.1' || ip === '::1') return 'Local System'
+    const hostname = clientHostnames.value[ip]
+    if (hostname) {
+        return hostname.endsWith('.local') ? hostname.slice(0, -6) : hostname
+    }
+    // Fall back to UA-derived device name if available
+    if (uaDevice) return uaDevice
+    return ip
+}
+
 export const deviceTrafficTree = computed(() => {
-    const tree = {}
+    const tree = {}         // ip -> Set of domains
+    const uaMap = {}        // ip -> best UA device name found
 
     requests.value.forEach(req => {
         const ip = req.client_ip || 'Unknown Device'
         const domain = formatUrl(req.url).host
 
-        if (!tree[ip]) {
-            tree[ip] = new Set()
-        }
-        if (domain) {
-            tree[ip].add(domain)
+        if (!tree[ip]) tree[ip] = new Set()
+        if (domain) tree[ip].add(domain)
+
+        // Collect best UA-based device name for this IP
+        if (!uaMap[ip]) {
+            const ua = req.req_headers?.['user-agent'] || req.req_headers?.['User-Agent']
+            const name = parseUserAgentDevice(ua)
+            if (name) uaMap[ip] = name
         }
     })
 
     return Object.keys(tree).sort().map(ip => ({
         ip: ip,
-        label: ip === '127.0.0.1' ? 'Local System' : ip,
+        label: deviceLabel(ip, uaMap[ip]),
         domains: Array.from(tree[ip]).sort()
     }))
 })
@@ -958,6 +1058,7 @@ export const initWebSocket = () => {
         wsConnection.send(JSON.stringify({ type: "TOGGLE_MAP_REMOTE", enabled: enableMapRemote.value }))
         wsConnection.send(JSON.stringify({ type: "TOGGLE_BREAKPOINTS", enabled: breakpointsEnabled.value }))
         wsConnection.send(JSON.stringify({ type: "TOGGLE_CACHE", disable_cache: disableCache.value }))
+        _sendProxyOptions()
         if (wgEnabled.value) requestWgConf()
     }
 
@@ -1213,6 +1314,12 @@ export const initWebSocket = () => {
             const ids = scripts.value.map(s => s.id)
             if (!selectedScriptId.value || !ids.includes(selectedScriptId.value)) {
                 selectedScriptId.value = ids[0] ?? null
+            }
+        }
+        else if (payload.type === 'CLIENT_HOSTNAME_RESOLVED') {
+            const { ip, hostname } = payload.data
+            if (ip && hostname) {
+                clientHostnames.value = { ...clientHostnames.value, [ip]: hostname }
             }
         }
     }

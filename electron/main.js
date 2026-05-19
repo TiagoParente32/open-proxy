@@ -33,6 +33,9 @@ function getAppBundlePath () {
 
 let bustCacheEnabled = false
 let macosProxyActive = false
+let proxyHttp2       = true
+let proxyUpstreamCert = true
+let proxyHostFilterMode = 'ignore'
 let currentTheme = 'dark'
 let toolbarVisibility = {
   vpnMode: true, breakpoints: true, mapLocal: true,
@@ -182,6 +185,19 @@ function setupIPC () {
     setupMenu()
   })
 
+  ipcMain.on('menu:proxyHttp2Sync', (_e, val) => {
+    proxyHttp2 = !!val
+    setupMenu()
+  })
+  ipcMain.on('menu:proxyUpstreamCertSync', (_e, val) => {
+    proxyUpstreamCert = !!val
+    setupMenu()
+  })
+  ipcMain.on('menu:proxyHostFilterModeSync', (_e, mode) => {
+    proxyHostFilterMode = mode
+    setupMenu()
+  })
+
   ipcMain.on('theme:changed', (_e, id) => {
     currentTheme = id
     if (process.platform === 'win32' && win) {
@@ -280,9 +296,9 @@ function setupMenu () {
     {
       label: 'Proxy',
       submenu: [
-        { label: 'Record / Pause',  click: () => js('toggleRecording()') },
-        { label: 'Compose Request', click: () => js('openComposeNew()') },
-        { label: 'Clear Traffic',   click: () => js('clearTraffic()') },
+        { label: 'Record / Pause',  click: () => js('toggleRecording()'), accelerator: 'CmdOrCtrl+Shift+R' },
+        { label: 'Compose Request', click: () => js('openComposeNew()'),   accelerator: 'CmdOrCtrl+N' },
+        { label: 'Clear Traffic',   click: () => js('clearTraffic()'),     accelerator: 'CmdOrCtrl+K' },
         { type: 'separator' },
         ...(process.platform === 'darwin' ? [{
           label:   'OS Proxy',
@@ -300,18 +316,36 @@ function setupMenu () {
             setupMenu()   // rebuild so the checkmark updates
           },
         },
+        { type: 'separator' },
+        {
+          label:   'HTTP/2',
+          type:    'checkbox',
+          checked: proxyHttp2,
+          click:   () => { proxyHttp2 = !proxyHttp2; js('toggleProxyHttp2()'); setupMenu() },
+        },
+        {
+          label:   'Upstream Cert',
+          type:    'checkbox',
+          checked: proxyUpstreamCert,
+          click:   () => { proxyUpstreamCert = !proxyUpstreamCert; js('toggleProxyUpstreamCert()'); setupMenu() },
+        },
+        { type: 'separator' },
+        {
+          label: proxyHostFilterMode === 'allow' ? 'Allow Hosts…' : 'Ignore Hosts…',
+          click: () => js('openIgnoreHosts()'),
+        },
       ],
     },
     {
       label: 'Tools',
       submenu: [
-        { label: 'VPN Mode',     click: () => js('openVpnMode()') },
-        { label: 'Breakpoints',  click: () => js('openBreakpoints()') },
+        { label: 'VPN Mode',     click: () => js('openVpnMode()'),     accelerator: 'CmdOrCtrl+Shift+V' },
+        { label: 'Breakpoints',  click: () => js('openBreakpoints()'), accelerator: 'CmdOrCtrl+Shift+B' },
         { type: 'separator' },
-        { label: 'Map Local',    click: () => js('openMapLocal()') },
-        { label: 'Map Remote',   click: () => js('openMapRemote()') },
-        { label: 'Highlight',    click: () => js('openHighlight()') },
-        { label: 'Scripts',      click: () => js('openScripting()') },
+        { label: 'Map Local',    click: () => js('openMapLocal()'),    accelerator: 'CmdOrCtrl+Shift+M' },
+        { label: 'Map Remote',   click: () => js('openMapRemote()'),   accelerator: 'CmdOrCtrl+Shift+E' },
+        { label: 'Highlight',    click: () => js('openHighlight()'),   accelerator: 'CmdOrCtrl+Shift+H' },
+        { label: 'Scripts',      click: () => js('openScripting()'),   accelerator: 'CmdOrCtrl+Shift+S' },
         { type: 'separator' },
         {
           label: 'Certificate Setup',
@@ -391,6 +425,12 @@ function setupMenu () {
         {
           label: 'Check for Updates',
           click: () => win?.webContents.executeJavaScript('window.__op?.checkForUpdates()'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Keyboard Shortcuts…',
+          accelerator: 'CmdOrCtrl+Shift+/',
+          click: () => win?.webContents.executeJavaScript('window.__op?.openShortcuts()'),
         },
         { type: 'separator' },
         {

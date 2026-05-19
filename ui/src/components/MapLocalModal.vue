@@ -21,6 +21,13 @@ const extensions = computed(() => [json(), ...cmTheme.value, EditorView.lineWrap
 const activeRule = computed(() => mapLocalRules.value.find(r => r.id === selectedRuleId.value))
 const activeTab = ref('Body')
 const queryParams = ref([{ key: '', value: '' }])
+const showMethodMenu = ref(false)
+
+const selectMethod = (m) => {
+  if (activeRule.value) activeRule.value.method = m
+  showMethodMenu.value = false
+  syncMapLocalRules()
+}
 
 // --- 2. PARAMETER SYNC LOGIC (Defined first to avoid init errors) ---
 
@@ -226,6 +233,7 @@ const addNewRule = () => {
     id: Date.now(),
     active: true,
     label: '',
+    method: 'ANY',
     pattern: 'api.example.com/*',
     status: 200,
     headers: '{\n  "Content-Type": "application/json"\n}',
@@ -284,7 +292,10 @@ const browseFile = async () => {
                 <span class="pm-rule-pattern" :title="rule.label || rule.pattern">
                   {{ rule.label || rule.pattern || 'New Rule' }}
                 </span>
-                <span v-if="rule.label" class="pm-rule-subtext">{{ rule.pattern }}</span>
+                <span class="pm-rule-subtext">
+                  <span class="pm-method-badge" :class="`method-${(rule.method||'ANY').toLowerCase()}`">{{ rule.method || 'ANY' }}</span>
+                  <span v-if="rule.label">{{ rule.pattern }}</span>
+                </span>
               </div>
 
               <button class="pm-rule-del" @click.stop="deleteRule(rule.id)" title="Delete Rule">
@@ -343,7 +354,22 @@ const browseFile = async () => {
 
             <div class="pm-omnibar-container">
               <div class="pm-omnibar">
-                <div class="pm-method-display read-only">URL MATCH</div>
+                <div class="pm-method-wrapper" style="position: relative;">
+                  <div class="pm-method-display" :class="(activeRule.method||'ANY').toLowerCase()"
+                    @click="showMethodMenu = !showMethodMenu">
+                    {{ activeRule.method || 'ANY' }}
+                    <svg class="pm-chevron" viewBox="0 0 24 24" width="12" height="12">
+                      <path d="M7 10l5 5 5-5z" fill="currentColor"/>
+                    </svg>
+                  </div>
+                  <div v-if="showMethodMenu" class="pm-dropdown-overlay" @click.stop="showMethodMenu = false"></div>
+                  <div v-if="showMethodMenu" class="pm-method-dropdown">
+                    <div v-for="m in ['ANY', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']" :key="m"
+                      class="pm-method-option" :class="m.toLowerCase()" @click="selectMethod(m)">
+                      {{ m }}
+                    </div>
+                  </div>
+                </div>
                 <div class="pm-divider"></div>
                 <input type="text" v-model="activeRule.pattern" class="pm-url-input"
                   placeholder="e.g., api.example.com/*" @input="syncPatternToParams" />
@@ -478,7 +504,6 @@ const browseFile = async () => {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: var(--overlay); z-index: 99999;
   display: flex; justify-content: center; align-items: center;
-  backdrop-filter: blur(4px);
 }
 
 .pm-split-modal {
@@ -573,7 +598,45 @@ const browseFile = async () => {
 .pm-omnibar { display: flex; align-items: center; background: var(--bg-deepest); border: 1px solid var(--border); border-radius: 6px; }
 .pm-url-input { flex: 1; background: transparent; border: none; color: var(--fg-secondary); padding: 10px 12px; font-size: 13px; outline: none; font-family: 'Consolas', monospace; }
 .pm-divider { width: 1px; height: 24px; background: var(--border); }
-.pm-method-display.read-only { padding: 10px 16px; font-weight: 700; font-size: 11px; color: var(--fg-muted); }
+.pm-method-wrapper { position: relative; }
+.pm-method-display {
+  padding: 10px 14px; font-weight: 700; font-size: 11px; cursor: pointer;
+  color: var(--fg-muted); min-width: 78px; display: flex; align-items: center; gap: 4px;
+  user-select: none;
+}
+.pm-method-display.get    { color: #4ade80; }
+.pm-method-display.post   { color: #60a5fa; }
+.pm-method-display.put    { color: #f59e0b; }
+.pm-method-display.patch  { color: #a78bfa; }
+.pm-method-display.delete { color: #f87171; }
+.pm-dropdown-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99; cursor: default;
+}
+.pm-method-dropdown {
+  position: absolute; top: 100%; left: 0; margin-top: 4px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: var(--shadow-lg); z-index: 100; min-width: 120px; padding: 4px 0;
+}
+.pm-method-option {
+  padding: 8px 16px; font-size: 12px; font-weight: 700; cursor: pointer; transition: background 0.1s;
+  color: var(--fg-muted);
+}
+.pm-method-option:hover { background: var(--surface-hover-strong); }
+.pm-method-option.get    { color: #4ade80; }
+.pm-method-option.post   { color: #60a5fa; }
+.pm-method-option.put    { color: #f59e0b; }
+.pm-method-option.patch  { color: #a78bfa; }
+.pm-method-option.delete { color: #f87171; }
+.pm-method-badge {
+  display: inline-block; font-size: 9px; font-weight: 700; font-family: 'Consolas', monospace;
+  padding: 1px 5px; border-radius: 3px; background: rgba(255,255,255,0.06);
+  color: var(--fg-muted); letter-spacing: 0.03em; margin-right: 5px;
+}
+.pm-method-badge.method-get    { color: #4ade80; background: rgba(74,222,128,0.1); }
+.pm-method-badge.method-post   { color: #60a5fa; background: rgba(96,165,250,0.1); }
+.pm-method-badge.method-put    { color: #f59e0b; background: rgba(245,158,11,0.1); }
+.pm-method-badge.method-patch  { color: #a78bfa; background: rgba(167,139,250,0.1); }
+.pm-method-badge.method-delete { color: #f87171; background: rgba(248,113,113,0.1); }
 .pm-status-wrapper { display: flex; align-items: center; padding: 0 12px; gap: 8px; }
 .pm-status-input { background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-secondary); padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; width: 60px; text-align: center; }
 .pm-status-dropdown { position: absolute; top: calc(100% + 4px); right: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); z-index: 9999; min-width: 200px; max-height: 220px; overflow-y: auto; }

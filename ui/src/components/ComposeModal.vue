@@ -181,7 +181,6 @@ const removeParamRow = (index) => {
   display: flex;
   justify-content: center;
   align-items: center;
-  backdrop-filter: blur(4px);
 }
 
 .pm-modal {
