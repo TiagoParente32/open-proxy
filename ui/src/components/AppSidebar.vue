@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { isFocusMode, activeFilter, deviceTrafficTree, pinnedSources } from '../store.js'
+import { isFocusMode, activeFilter, deviceTrafficTree, pinnedSources, pinSource, unpinSource, isPinnedSource } from '../store.js'
 
 // --- FOLDER LOGIC ---
 const expandedFolders = ref(new Set())
@@ -28,19 +28,24 @@ const newPinnedSource = ref('')
 
 const addPinnedSource = (sourceToAdd = null) => {
   const val = (sourceToAdd || newPinnedSource.value).trim()
-  if (val && !pinnedSources.value.includes(val)) {
-    pinnedSources.value.push(val)
-    activeFilter.value = { type: 'pinned', domain: val }
+  if (val) {
+    pinSource(val)
     newPinnedSource.value = ''
   }
 }
 
 const removePinnedSource = (source, event) => {
   event.stopPropagation()
-  pinnedSources.value = pinnedSources.value.filter(s => s !== source)
-  if (activeFilter.value.type === 'pinned' && activeFilter.value.domain === source) {
-    activeFilter.value = { type: 'all' }
+  unpinSource(source)
+}
+
+const togglePinnedDomain = (domain, event) => {
+  event.stopPropagation()
+  if (isPinnedSource(domain)) {
+    unpinSource(domain)
+    return
   }
+  pinSource(domain)
 }
 </script>
 
@@ -118,6 +123,17 @@ const removePinnedSource = (source, event) => {
               <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline>
             </svg>
             <span class="truncate">{{ domain }}</span>
+            <button
+              class="pin-toggle"
+              :class="{ pinned: isPinnedSource(domain) }"
+              :title="isPinnedSource(domain) ? 'Unpin endpoint' : 'Pin endpoint'"
+              @click="togglePinnedDomain(domain, $event)"
+            >
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 17v5"></path>
+                <path d="M9 3h6l4 5-4 3v4H9v-4L5 8l4-5z"></path>
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -216,6 +232,36 @@ const removePinnedSource = (source, event) => {
 .delete-icon { margin-left: auto; color: var(--error); opacity: 0; transition: opacity 0.2s; display: flex; align-items: center; padding: 2px; border-radius: 4px; }
 .delete-icon:hover { background: var(--error-muted); }
 .tree-item:hover .delete-icon { opacity: 1; }
+
+.pin-toggle {
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-placeholder);
+  opacity: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.2s, color 0.2s, background 0.2s;
+}
+
+.sub-item:hover .pin-toggle,
+.pin-toggle.pinned {
+  opacity: 1;
+}
+
+.pin-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fg-primary);
+}
+
+.pin-toggle.pinned {
+  color: var(--accent);
+}
 
 /* Folders (IDE Style) */
 .folder-group { margin-bottom: 4px; }

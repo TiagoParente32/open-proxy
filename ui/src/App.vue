@@ -28,8 +28,6 @@ import {
   closeContextMenu, 
   contextMenu, 
   formatUrl, 
-  pinnedSources, 
-  activeFilter, 
   showMapModal, 
   mapLocalRules, 
   selectedRuleId,
@@ -64,6 +62,7 @@ import {
   resetPreferences,
   exportSettings,
   importSettings,
+  pinSource,
 } from './store.js'
 
 onMounted(() => {
@@ -181,13 +180,10 @@ const copyUrl = () => {
 
 const pinFromContextMenu = () => {
   if (contextMenu.value.request) {
-    const host = formatUrl(contextMenu.value.request.url).host;
-    if (host && !pinnedSources.value.includes(host)) {
-      pinnedSources.value.push(host);
-      activeFilter.value = { type: 'pinned', value: host };
-    }
+    const host = formatUrl(contextMenu.value.request.url).host
+    if (host) pinSource(host)
   }
-  closeContextMenu();
+  closeContextMenu()
 }
 
 const openMapRemoteModalFromContext = () => {
