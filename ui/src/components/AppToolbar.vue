@@ -437,7 +437,7 @@ button,
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  width: 150px;
+  min-width: 190px;
   background: var(--bg-modal);
   border: 1px solid var(--border);
   border-radius: 6px;
