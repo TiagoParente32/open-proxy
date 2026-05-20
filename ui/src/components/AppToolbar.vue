@@ -66,10 +66,14 @@ const clearTraffic = () => {
 }
 
 const showThrottleMenu = ref(false)
-const throttleOptions = ['None', 'Fast 3G', 'Slow 3G']
+const throttleOptions = [
+  { label: 'None',             speed: 'No throttling'           },
+  { label: 'Slow 3G',          speed: '↓ 400 kbps  ↑ 400 kbps' },
+  { label: 'Fast 3G',          speed: '↓ 1.5 Mbps  ↑ 750 kbps' },
+]
 
 const selectThrottle = (option) => {
-  throttleProfile.value = option
+  throttleProfile.value = option.label
   showThrottleMenu.value = false
 }
 
@@ -222,15 +226,18 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         <div v-if="showThrottleMenu" class="custom-dropdown-menu">
           <div
             v-for="opt in throttleOptions"
-            :key="opt"
+            :key="opt.label"
             class="dropdown-item"
-            :class="{ 'selected': throttleProfile === opt }"
+            :class="{ 'selected': throttleProfile === opt.label }"
             @click="selectThrottle(opt)"
           >
             <span style="width: 12px; display: inline-block;">
-              <svg v-if="throttleProfile === opt" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              <svg v-if="throttleProfile === opt.label" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
             </span>
-            {{ opt }}
+            <span style="display: flex; flex-direction: column; gap: 1px;">
+              <span>{{ opt.label }}</span>
+              <span style="font-size: 10px; opacity: 0.5;">{{ opt.speed }}</span>
+            </span>
           </div>
         </div>
       </div>
