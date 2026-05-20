@@ -600,11 +600,19 @@ def apply_update(download_url, progress_cb=None):
         if not new_app:
             raise FileNotFoundError("No .app bundle found in the downloaded zip")
 
+        # Verify the extracted bundle has actual contents before we touch the installed app.
+        new_app_macos = os.path.join(new_app, 'Contents', 'MacOS')
+        if not os.path.isdir(new_app_macos) or not os.listdir(new_app_macos):
+            raise RuntimeError(
+                f"Downloaded .app bundle appears empty or corrupt (missing Contents/MacOS): {new_app}"
+            )
+
         app_name = os.path.splitext(os.path.basename(new_app))[0]
         new_support_dir = os.path.join(extract_dir, app_name)
 
         install_dir = os.path.dirname(install_path)
         old_support_dir = os.path.join(install_dir, app_name)
+        backup_path = install_path + '.old'
 
         log = os.path.join(tmp_dir, 'update.log')
         script = os.path.join(tmp_dir, 'do_update.sh')
@@ -620,14 +628,33 @@ xattr -r -d com.apple.quarantine "{old_support_dir}" 2>/dev/null || true"""
 exec >"{log}" 2>&1
 set -e
 set -x
-sleep 4
-rm -rf "{install_path}"
+
+# Wait for the app process to fully exit (up to 15 s) instead of a blind sleep.
+# This covers cases where Spotlight/Finder holds the .app directory open —
+# a plain rm -rf in that state removes the contents but leaves an empty dir,
+# then mv puts the new bundle *inside* it instead of replacing it.
+for i in $(seq 1 15); do
+  if ! pgrep -x "OpenProxy" > /dev/null 2>&1; then
+    break
+  fi
+  echo "Waiting for app to exit... ($i/15)"
+  sleep 1
+done
+sleep 1
+
+# Rename old app to a backup — avoids rm -rf leaving a locked empty dir behind.
+# mv is an atomic rename so the destination is always fully absent before we place the new bundle.
 if [ -e "{install_path}" ]; then
-  echo "ERROR: could not remove old bundle at {install_path}" >&2
-  exit 1
+  rm -rf "{backup_path}"
+  mv -f "{install_path}" "{backup_path}"
 fi
+
+# Move new app into place — destination no longer exists so mv does a rename, not a move-inside.
 mv -f "{new_app}" "{install_path}"
+
 xattr -r -d com.apple.quarantine "{install_path}" 2>/dev/null || true{support_lines}
+rm -rf "{backup_path}"
+
 open "{install_path}"
 """)
         os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
