@@ -1429,7 +1429,8 @@ class ProxyUIBridge:
             "res_headers": dict(flow.response.headers),
             "res_body": res_body,
             "res_is_image": res_is_image,
-            "res_is_binary": res_is_binary
+            "res_is_binary": res_is_binary,
+            "map_local": flow.response.headers.get("X-Map-Local") == "Active"
         }
 
         try:
