@@ -45,6 +45,7 @@ import {
   toggleRecording,
   requests,
   wsMessages,
+  selectedRequest,
   openComposeNew,
   openVpnMode,
   showHighlightModal,
@@ -107,7 +108,7 @@ onMounted(() => {
   // Native app menu bridge — Python calls window.__op.xxx() via evaluate_js
   window.__op = {
     toggleRecording:  () => toggleRecording(),
-    clearTraffic:     () => { requests.value.length = 0; wsMessages.value = {} },
+    clearTraffic:     () => { requests.value.length = 0; wsMessages.value = {}; selectedRequest.value = null },
     openComposeNew:   () => openComposeNew(),
     openVpnMode:      () => openVpnMode(),
     openBreakpoints:  () => { showBreakpointModal.value = true },
@@ -141,7 +142,7 @@ onMounted(() => {
     const cmd   = e.metaKey || e.ctrlKey
     const shift = e.shiftKey
     if (cmd && shift && e.code === 'KeyR') { e.preventDefault(); toggleRecording() }
-    else if (cmd && !shift && e.code === 'KeyK') { e.preventDefault(); requests.value.length = 0; wsMessages.value = {} }
+    else if (cmd && !shift && e.code === 'KeyK') { e.preventDefault(); requests.value.length = 0; wsMessages.value = {}; selectedRequest.value = null }
     else if (cmd && !shift && e.code === 'KeyN' && !isEditing) { e.preventDefault(); openComposeNew() }
     else if (cmd && !shift && e.code === 'KeyF') { e.preventDefault(); document.dispatchEvent(new CustomEvent('openproxy:focus-search')) }
     else if (cmd && shift && e.code === 'KeyM') { e.preventDefault(); showMapModal.value = true }

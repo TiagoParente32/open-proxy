@@ -37,6 +37,7 @@ import {
   macosProxyActive,
   macosProxyLoading,
   toggleMacProxy,
+  selectedRequest,
 } from '../store.js'
 
 const isMac = () => window.electronAPI?.platform === 'darwin'
@@ -63,6 +64,7 @@ const toggleCache = () => {
 const clearTraffic = () => {
   requests.value.length = 0
   wsMessages.value = {}
+  selectedRequest.value = null
 }
 
 const showThrottleMenu = ref(false)
