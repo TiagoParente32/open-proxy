@@ -1,6 +1,6 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { isFocusMode, activeFilter, deviceTrafficTree, pinnedSources, proxyIgnoreHosts, proxyAllowHosts, proxyHostFilterMode, showIgnoreHostsModal, pinSource, unpinSource, isPinnedSource } from '../store.js'
+import { ref, computed, nextTick } from 'vue'
+import { isFocusMode, activeFilter, deviceTrafficTree, pinnedSources, proxyIgnoreHosts, proxyAllowHosts, proxyHostFilterMode, showIgnoreHostsModal, pinSource, unpinSource, isPinnedSource, deviceNicknames, addDeviceHighlightRule } from '../store.js'
 
 // --- FOLDER LOGIC ---
 const expandedFolders = ref(new Set())
@@ -21,6 +21,48 @@ const selectDevice = (ip) => {
 const selectDomain = (ip, domain) => {
   isFocusMode.value = false
   activeFilter.value = { type: 'device_domain', ip: ip, domain: domain }
+}
+
+// --- DEVICE CONTEXT MENU ---
+const deviceMenu = ref({ show: false, x: 0, y: 0, ip: null, label: null })
+
+const openDeviceMenu = (e, node) => {
+  e.preventDefault()
+  e.stopPropagation()
+  deviceMenu.value = { show: true, x: e.clientX, y: e.clientY, ip: node.ip, label: node.label }
+}
+
+const closeDeviceMenu = () => { deviceMenu.value.show = false }
+
+const renameDevice = () => {
+  const ip = deviceMenu.value.ip
+  closeDeviceMenu()
+  editingIp.value = ip
+  editingValue.value = deviceNicknames.value[ip] || ''
+  nextTick(() => renameInput.value?.[0]?.focus())
+}
+
+const highlightDevice = () => {
+  const { ip, label } = deviceMenu.value
+  closeDeviceMenu()
+  addDeviceHighlightRule(ip, label)
+}
+
+// --- INLINE RENAME ---
+const editingIp = ref(null)
+const editingValue = ref('')
+const renameInput = ref(null)
+
+const commitRename = (ip) => {
+  const val = editingValue.value.trim()
+  if (val) {
+    deviceNicknames.value = { ...deviceNicknames.value, [ip]: val }
+  } else {
+    const n = { ...deviceNicknames.value }
+    delete n[ip]
+    deviceNicknames.value = n
+  }
+  editingIp.value = null
 }
 
 // Host filter display
@@ -114,15 +156,35 @@ const togglePinnedDomain = (domain, event) => {
       <div v-for="node in deviceTrafficTree" :key="node.ip" class="folder-group">
         <div class="tree-item folder-header" 
              @click="toggleFolder(node.ip); selectDevice(node.ip)"
+             @contextmenu="openDeviceMenu($event, node)"
              :class="{ 'active': activeFilter.type === 'device' && activeFilter.ip === node.ip }">
           <svg class="chevron-icon" :class="{ 'rotated': expandedFolders.has(node.ip) }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="9 18 15 12 9 6"></polyline>
           </svg>
-          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line>
+          <!-- Local System (Mac/laptop) -->
+          <svg v-if="node.type === 'local'" class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="4" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="18" x2="12" y2="21"/>
           </svg>
-          <span class="truncate folder-label">{{ node.label }}</span>
-          <span v-if="node.label !== node.ip" class="device-ip-badge">{{ node.ip }}</span>
+          <!-- VPN device -->
+          <svg v-else-if="node.type === 'vpn'" class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <!-- Wi-Fi / physical device -->
+          <svg v-else class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/>
+          </svg>
+          <input
+            v-if="editingIp === node.ip"
+            ref="renameInput"
+            v-model="editingValue"
+            class="rename-input"
+            @blur="commitRename(node.ip)"
+            @keyup.enter="commitRename(node.ip)"
+            @keyup.escape="editingIp = null"
+            @click.stop
+          />
+          <span v-else class="truncate folder-label">{{ node.label }}</span>
+          <span v-if="node.label !== node.ip && editingIp !== node.ip" class="device-ip-badge">{{ node.ip }}</span>
         </div>
 
         <div v-show="expandedFolders.has(node.ip)" class="folder-contents">
@@ -171,6 +233,27 @@ const togglePinnedDomain = (domain, event) => {
     </div>
 
   </div>
+
+  <!-- Device context menu -->
+  <Teleport to="body">
+    <div v-if="deviceMenu.show" class="device-ctx-overlay" @mousedown="closeDeviceMenu">
+      <div class="device-ctx-menu" :style="{ top: deviceMenu.y + 'px', left: deviceMenu.x + 'px' }" @mousedown.stop>
+        <button class="ctx-item" @click="renameDevice">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+          Rename device
+        </button>
+        <button class="ctx-item" @click="highlightDevice">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><path d="M8 12l2 2 4-4"/>
+          </svg>
+          Highlight traffic
+        </button>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -323,6 +406,45 @@ const togglePinnedDomain = (domain, event) => {
 .child-icon { opacity: 0.5; width: 16px !important; height: 16px !important; min-width: 16px !important; }
 .pin-icon { color: var(--accent); }
 .tree-item.active .pin-icon { color: #fff; }
+
+/* Device context menu */
+.device-ctx-overlay { position: fixed; inset: 0; z-index: 9999; }
+.device-ctx-menu {
+  position: fixed;
+  background: var(--bg-elevated, var(--bg-sidebar));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 160px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  z-index: 10000;
+}
+.ctx-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 10px;
+  background: none; border: none; border-radius: 5px;
+  color: var(--fg-secondary); font-size: 12.5px;
+  cursor: pointer; text-align: left;
+  transition: background 0.1s, color 0.1s;
+}
+.ctx-item:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
+
+/* Inline rename input */
+.rename-input {
+  flex: 1; min-width: 0;
+  background: var(--bg-deepest);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--fg-primary);
+  font-size: 12.5px;
+  padding: 1px 5px;
+  outline: none;
+}
+.tree-item.active .rename-input {
+  border-color: #fff;
+  color: #fff;
+  background: rgba(255,255,255,0.1);
+}
 
 /* Host Filter footer */
 .host-filter-section {

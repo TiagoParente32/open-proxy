@@ -4,6 +4,7 @@ import {
   showHighlightModal, 
   highlightRules, 
   highlightsEnabled,
+  pendingHighlightRuleId,
   importRules, 
   exportRules,
 } from '../store.js'
@@ -17,6 +18,13 @@ watch(highlightRules, (newRules) => {
     selectedRuleId.value = newRules[0].id
   }
 }, { immediate: true, deep: true })
+
+watch(pendingHighlightRuleId, (id) => {
+  if (id) {
+    selectedRuleId.value = id
+    pendingHighlightRuleId.value = null
+  }
+})
 
 const showTypeMenu = ref(false)
 const typeGroups = [
@@ -40,6 +48,12 @@ const typeGroups = [
     options: [
       { value: 'req_header', label: 'Request Header' },
       { value: 'res_header', label: 'Response Header' },
+    ]
+  },
+  {
+    label: 'Device',
+    options: [
+      { value: 'client_ip', label: 'Client IP' },
     ]
   },
   {

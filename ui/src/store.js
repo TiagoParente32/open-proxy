@@ -196,6 +196,14 @@ export const selectedBreakpointId = ref(null)
 export const showHighlightModal = ref(false)
 export const highlightRules = ref(loadState('highlightRules', []))
 export const highlightsEnabled = ref(highlightRules.value.length > 0 ? loadState('highlightsEnabled', true) : false)
+export const pendingHighlightRuleId = ref(null)  // set before opening modal to auto-select a new rule
+
+export const addDeviceHighlightRule = (ip, label) => {
+    const newRule = { id: Date.now(), active: true, name: `${label} traffic`, type: 'client_ip', pattern: ip, color: 'blue' }
+    highlightRules.value.unshift(newRule)
+    pendingHighlightRuleId.value = newRule.id
+    showHighlightModal.value = true
+}
 
 // Compose
 export const showComposeModal = ref(false)
@@ -374,6 +382,7 @@ const applyHighlightRules = (req) => {
                 case 'req_body':     isMatch = reqBody.toLowerCase().includes(pat.toLowerCase()); break
                 case 'res_header':   isMatch = resHeaders.toLowerCase().includes(pat.toLowerCase()); break
                 case 'req_header':   isMatch = reqHeaders.toLowerCase().includes(pat.toLowerCase()); break
+                case 'client_ip':    isMatch = (req.client_ip || '127.0.0.1') === pat; break
             }
         } catch (e) { continue; }
 
@@ -665,6 +674,8 @@ export const setupAndroidEmulator = () => {
 
 // Map of ip -> resolved hostname, populated lazily via CLIENT_HOSTNAME_RESOLVED
 export const clientHostnames = ref({})
+// Map of ip -> user-set nickname
+export const deviceNicknames = ref(loadState('deviceNicknames', {}))
 
 function parseUserAgentDevice(ua) {
     if (!ua) return null
@@ -690,6 +701,7 @@ function parseUserAgentDevice(ua) {
 }
 
 function deviceLabel(ip, uaDevice) {
+    if (deviceNicknames.value[ip]) return deviceNicknames.value[ip]
     if (ip === '127.0.0.1' || ip === '::1') return 'Local System'
     const hostname = clientHostnames.value[ip]
     if (hostname) {
@@ -722,6 +734,9 @@ export const deviceTrafficTree = computed(() => {
     return Object.keys(tree).sort().map(ip => ({
         ip: ip,
         label: deviceLabel(ip, uaMap[ip]),
+        type: (ip === '127.0.0.1' || ip === '::1') ? 'local'
+            : /^10\.\d+\.\d+\.\d+$/.test(ip) ? 'vpn'
+            : 'wifi',
         domains: Array.from(tree[ip]).sort()
     }))
 })
@@ -914,6 +929,7 @@ watch(requests, () => {
 watch(pinnedSources, (newVals) => saveState('pinnedSources', newVals), { deep: true })
 watch(isFocusMode, (newVal) => saveState('isFocusMode', newVal))
 watch(activeChips, (newVals) => saveState('activeChips', newVals), { deep: true })
+watch(deviceNicknames, (val) => saveState('deviceNicknames', val), { deep: true })
 watch(highlightRules, (val) => { saveState('highlightRules', val); applyAllHighlightRules() }, { deep: true })
 watch(highlightsEnabled, (val) => { saveState('highlightsEnabled', val); applyAllHighlightRules() })
 watch(() => highlightRules.value.length, (n, o) => {
