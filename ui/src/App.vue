@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, watch, computed, ref } from 'vue'
+import { onMounted, onUnmounted, watch, computed, ref, nextTick } from 'vue'
 import { version as appVersion } from '../../package.json'
 import { initTheme } from './composables/useTheme'
 initTheme()
@@ -184,6 +184,22 @@ const showUpdateModal = computed(() =>
 const showAboutModal  = ref(false)
 const showOnboardingModal  = ref(!localStorage.getItem('openproxyOnboardingDone'))
 const showShortcutsModal = ref(false)
+
+const contextMenuEl = ref(null)
+watch(() => [contextMenu.value.x, contextMenu.value.y, contextMenu.value.show], ([,, visible]) => {
+  if (!visible) return
+  nextTick(() => {
+    const el = contextMenuEl.value
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    if (rect.bottom > window.innerHeight) {
+      contextMenu.value.y = Math.max(0, contextMenu.value.y - rect.height)
+    }
+    if (rect.right > window.innerWidth) {
+      contextMenu.value.x = Math.max(0, contextMenu.value.x - rect.width)
+    }
+  })
+})
 
 const openReleaseNotes = () => {
   if (updateInfo.value?.release_url) window.electronAPI?.openExternal(updateInfo.value.release_url)
@@ -489,7 +505,7 @@ const openBreakpointModalFromContext = () => {
 
     </splitpanes>
 
-   <div v-if="contextMenu.show" class="context-menu" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
+   <div v-if="contextMenu.show" ref="contextMenuEl" class="context-menu" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
       
       <!-- Group: Request actions -->
       <div class="ctx-group-label">Request</div>
@@ -577,6 +593,8 @@ body { margin: 0; padding: 0; }
   padding: 4px;
   z-index: 9999;
   min-width: 170px;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
 }
 .ctx-group-label {
   padding: 4px 10px 2px;
