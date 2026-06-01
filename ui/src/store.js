@@ -1472,6 +1472,7 @@ export const importSettings = async () => {
         'highlightRules', 'highlightsEnabled',
         'proxyIgnoreHosts', 'proxyAllowHosts', 'proxyHostFilterMode',
         'proxyHttp2', 'proxyUpstreamCert',
+        'deviceNicknames',
     ]
     for (const key of LS_KEYS) {
         if (!(key in settings)) continue
