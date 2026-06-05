@@ -247,6 +247,97 @@ const selectedSimulatorName = () => {
     return s ? s.name : selectedUdid.value
 }
 
+// ── Filtered device lists ─────────────────────────────────────────────────────
+// Only show emulators in the android_emulator picker
+const filteredAdbDevices = computed(() =>
+    deviceSetupType.value === 'android_emulator'
+        ? adbDevices.value.filter(d => d.type === 'emulator')
+        : adbDevices.value
+)
+
+// Only booted simulators can have the cert installed
+const bootedSimulators = computed(() => iosSimulators.value.filter(s => s.state === 'Booted'))
+
+// ── Install All — Android emulators ──────────────────────────────────────────
+const installAllQueue    = ref([])
+const installAllIdx      = ref(0)
+const installAllActive   = computed(() => installAllQueue.value.length > 0)
+
+const _kickAndroidNext = () => {
+    const device = installAllQueue.value[installAllIdx.value]
+    if (!device) return
+    selectedSerial.value = device.serial
+    activePane.value     = 'progress'
+    setupAndroidDevice(device.serial, device.type)
+}
+
+const startInstallAll = () => {
+    const devices = filteredAdbDevices.value
+    if (devices.length === 0) return
+    installAllQueue.value = [...devices]
+    installAllIdx.value   = 0
+    _kickAndroidNext()
+}
+
+watch(() => setupProgress.value.steps.map(s => s.status).join(), () => {
+    if (!installAllActive.value) return
+    const steps = setupProgress.value.steps
+    const done  = steps.every(s => s.status === 'success' || s.status === 'skip')
+    const err   = steps.some(s => s.status === 'error')
+    if (done || err) {
+        const next = installAllIdx.value + 1
+        if (next < installAllQueue.value.length) {
+            setTimeout(() => { installAllIdx.value = next; _kickAndroidNext() }, 1200)
+        } else {
+            setTimeout(() => { installAllQueue.value = [] }, 2000)
+        }
+    }
+})
+
+// ── Install All — iOS Simulators ──────────────────────────────────────────────
+const iosInstallAllQueue  = ref([])
+const iosInstallAllIdx    = ref(0)
+const iosInstallAllActive = computed(() => iosInstallAllQueue.value.length > 0)
+
+const _kickIosNext = () => {
+    const sim = iosInstallAllQueue.value[iosInstallAllIdx.value]
+    if (!sim) return
+    selectedUdid.value = sim.udid
+    activePane.value   = 'progress'
+    setupIosSimulator(sim.udid)
+}
+
+const startIosInstallAll = () => {
+    const sims = bootedSimulators.value
+    if (sims.length === 0) return
+    iosInstallAllQueue.value = [...sims]
+    iosInstallAllIdx.value   = 0
+    _kickIosNext()
+}
+
+watch(() => iosSetupProgress.value.steps.map(s => s.status).join(), () => {
+    if (!iosInstallAllActive.value) return
+    const steps = iosSetupProgress.value.steps
+    const done  = steps.every(s => s.status === 'success' || s.status === 'skip')
+    const err   = steps.some(s => s.status === 'error')
+    if (done || err) {
+        const next = iosInstallAllIdx.value + 1
+        if (next < iosInstallAllQueue.value.length) {
+            setTimeout(() => { iosInstallAllIdx.value = next; _kickIosNext() }, 1200)
+        } else {
+            setTimeout(() => { iosInstallAllQueue.value = [] }, 2000)
+        }
+    }
+})
+
+// Clear queues when navigating back to the picker
+watch(activePane, (pane) => {
+    if (pane === 'pick') {
+        installAllQueue.value    = []
+        iosInstallAllQueue.value = []
+    }
+})
+
 // ── Shared helpers ────────────────────────────────────────────────────────────
 const currentSetupProgress = computed(() =>
     deviceSetupType.value === 'ios_simulator' ? iosSetupProgress.value : setupProgress.value
@@ -256,11 +347,17 @@ const currentRevertProgress = computed(() =>
 )
 const currentProgressLabel = computed(() => {
     if (deviceSetupType.value === 'ios_simulator') {
-        const name = selectedSimulatorName()
+        const name  = selectedSimulatorName()
         const short = selectedUdid.value ? selectedUdid.value.slice(0, 8) + '…' : ''
-        return `${name} · ${short}`
+        const queue = iosInstallAllActive.value
+            ? ` · ${iosInstallAllIdx.value + 1} / ${iosInstallAllQueue.value.length}`
+            : ''
+        return `${name} · ${short}${queue}`
     }
-    return `${selectedDeviceModel()} · ${selectedSerial.value}`
+    const queue = installAllActive.value
+        ? ` · ${installAllIdx.value + 1} / ${installAllQueue.value.length}`
+        : ''
+    return `${selectedDeviceModel()} · ${selectedSerial.value}${queue}`
 })
 
 const allStepsDone = (steps) => steps.every(s => s.status === 'success' || s.status === 'skip')
@@ -364,18 +461,28 @@ const modalTitle = () => {
         <template v-if="activePane === 'pick' && deviceSetupType === 'android_emulator'">
 
           <div class="picker-top">
-            <p class="hint">Select a connected device to install the certificate and configure the proxy.</p>
-            <button class="refresh-btn" :disabled="adbDevicesLoading" @click="listAdbDevices()" title="Refresh devices">
-              <!-- Refresh / rotate-cw icon -->
-              <svg :class="{ spinning: adbDevicesLoading }"
-                   width="13" height="13" viewBox="0 0 24 24"
-                   fill="none" stroke="currentColor" stroke-width="2.2"
-                   stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="23 4 23 10 17 10"/>
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-              </svg>
-              <span>{{ adbDevicesLoading ? 'Scanning…' : 'Refresh' }}</span>
-            </button>
+            <p class="hint">Select a connected emulator to install the certificate and configure the proxy.</p>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button v-if="filteredAdbDevices.length > 1" class="install-all-btn" @click="startInstallAll">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Install All ({{ filteredAdbDevices.length }})
+              </button>
+              <button class="refresh-btn" :disabled="adbDevicesLoading" @click="listAdbDevices()" title="Refresh devices">
+                <!-- Refresh / rotate-cw icon -->
+                <svg :class="{ spinning: adbDevicesLoading }"
+                     width="13" height="13" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2.2"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                <span>{{ adbDevicesLoading ? 'Scanning…' : 'Refresh' }}</span>
+              </button>
+            </div>
           </div>
 
           <div v-if="adbDevicesError" class="alert error">
@@ -397,19 +504,19 @@ const modalTitle = () => {
           </div>
 
           <!-- Empty state -->
-          <div v-else-if="!adbDevicesLoading && adbDevices.length === 0 && !adbDevicesError"
+          <div v-else-if="!adbDevicesLoading && filteredAdbDevices.length === 0 && !adbDevicesError"
                class="empty-state">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="1.5">
               <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
             </svg>
-            <p class="empty-title">No devices detected</p>
+            <p class="empty-title">No emulators detected</p>
             <p class="empty-sub">Start your emulator, then click Refresh.</p>
             <p class="empty-sub">Requires <code>adb</code> and <code>openssl</code> in PATH.</p>
           </div>
 
           <!-- Device rows -->
           <div v-else class="device-list">
-            <div v-for="device in adbDevices" :key="device.serial" class="device-row">
+            <div v-for="device in filteredAdbDevices" :key="device.serial" class="device-row">
               <div class="device-thumb">
                 <svg v-if="device.type === 'emulator'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                   <rect x="2" y="3" width="20" height="14" rx="2"/>
@@ -480,16 +587,26 @@ const modalTitle = () => {
 
           <div class="picker-top">
             <p class="hint">Select a simulator to install the certificate. The simulator must be <strong>Booted</strong> to install.</p>
-            <button class="refresh-btn" :disabled="iosSimulatorsLoading" @click="listIosSimulators()" title="Refresh simulators">
-              <svg :class="{ spinning: iosSimulatorsLoading }"
-                   width="13" height="13" viewBox="0 0 24 24"
-                   fill="none" stroke="currentColor" stroke-width="2.2"
-                   stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="23 4 23 10 17 10"/>
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-              </svg>
-              <span>{{ iosSimulatorsLoading ? 'Scanning…' : 'Refresh' }}</span>
-            </button>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button v-if="bootedSimulators.length > 1" class="install-all-btn" @click="startIosInstallAll">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Install All ({{ bootedSimulators.length }})
+              </button>
+              <button class="refresh-btn" :disabled="iosSimulatorsLoading" @click="listIosSimulators()" title="Refresh simulators">
+                <svg :class="{ spinning: iosSimulatorsLoading }"
+                     width="13" height="13" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2.2"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                <span>{{ iosSimulatorsLoading ? 'Scanning…' : 'Refresh' }}</span>
+              </button>
+            </div>
           </div>
 
           <div v-if="iosSimulatorsError" class="alert error">
@@ -1121,6 +1238,15 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 }
 .refresh-btn:hover:not(:disabled) { background: var(--bg-active); color: var(--fg-secondary); border-color: var(--border); }
 .refresh-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.install-all-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 6px; font-size: 12px; font-weight: 500;
+  background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.25); color: var(--accent);
+  cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+  white-space: nowrap;
+}
+.install-all-btn:hover { background: rgba(59,130,246,0.2); border-color: rgba(59,130,246,0.4); }
 
 /* ── Device list ──────────────────────────────────── */
 .device-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
