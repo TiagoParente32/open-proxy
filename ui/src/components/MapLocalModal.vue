@@ -21,6 +21,8 @@ const extensions = computed(() => [json(), ...cmTheme.value, EditorView.lineWrap
 const activeRule = computed(() => mapLocalRules.value.find(r => r.id === selectedRuleId.value))
 const activeTab = ref('Body')
 const queryParams = ref([{ key: '', value: '' }])
+const responseHeaders = ref([{ key: '', value: '' }])
+const reqHeadersMod = ref([{ key: '', value: '' }])
 const showMethodMenu = ref(false)
 
 const selectMethod = (m) => {
@@ -103,6 +105,94 @@ const removeParamRow = (index) => {
   syncParamsToPattern()
 }
 
+// HEADERS JSON -> GRID
+const syncRuleToHeaders = () => {
+  if (!activeRule.value) return
+
+  const newHeaders = []
+  try {
+    const parsed = JSON.parse(activeRule.value.headers || '{}')
+    for (const [k, v] of Object.entries(parsed)) {
+      newHeaders.push({ key: k, value: String(v) })
+    }
+  } catch (e) {
+    // If JSON is invalid, keep current grid as-is
+  }
+
+  newHeaders.push({ key: '', value: '' })
+  responseHeaders.value = newHeaders
+}
+
+// GRID -> HEADERS JSON
+const syncHeadersToRule = () => {
+  if (!activeRule.value) return
+
+  const obj = {}
+  responseHeaders.value.forEach(h => {
+    if (h.key.trim()) obj[h.key.trim()] = h.value
+  })
+  activeRule.value.headers = JSON.stringify(obj, null, 2)
+}
+
+const checkHeaderRow = (index) => {
+  if (index === responseHeaders.value.length - 1 && responseHeaders.value[index].key !== '') {
+    responseHeaders.value.push({ key: '', value: '' })
+  }
+}
+
+const removeHeaderRow = (index) => {
+  responseHeaders.value.splice(index, 1)
+
+  if (responseHeaders.value.length === 0) {
+    responseHeaders.value.push({ key: '', value: '' })
+  }
+
+  syncHeadersToRule()
+}
+
+// REQ_HEADERS_MOD OBJECT -> GRID
+const syncRuleToReqHeaders = () => {
+  if (!activeRule.value) return
+
+  const newHeaders = []
+  const mod = activeRule.value.req_headers_mod
+  if (mod && typeof mod === 'object') {
+    for (const [k, v] of Object.entries(mod)) {
+      newHeaders.push({ key: k, value: String(v) })
+    }
+  }
+
+  newHeaders.push({ key: '', value: '' })
+  reqHeadersMod.value = newHeaders
+}
+
+// GRID -> REQ_HEADERS_MOD OBJECT
+const syncReqHeadersToRule = () => {
+  if (!activeRule.value) return
+
+  const obj = {}
+  reqHeadersMod.value.forEach(h => {
+    if (h.key.trim()) obj[h.key.trim()] = h.value
+  })
+  activeRule.value.req_headers_mod = obj
+}
+
+const checkReqHeaderRow = (index) => {
+  if (index === reqHeadersMod.value.length - 1 && reqHeadersMod.value[index].key !== '') {
+    reqHeadersMod.value.push({ key: '', value: '' })
+  }
+}
+
+const removeReqHeaderRow = (index) => {
+  reqHeadersMod.value.splice(index, 1)
+
+  if (reqHeadersMod.value.length === 0) {
+    reqHeadersMod.value.push({ key: '', value: '' })
+  }
+
+  syncReqHeadersToRule()
+}
+
 // --- 3. WATCHERS ---
 
 // Auto-select the first rule if nothing is selected but rules exist
@@ -112,17 +202,21 @@ watch(mapLocalRules, (newRules) => {
   }
 }, { immediate: true, deep: true })
 
-// Sync params when the active rule changes (e.g. clicking a different rule in the sidebar)
+// Sync params and headers when the active rule changes (e.g. clicking a different rule in the sidebar)
 watch(activeRule, (rule) => {
   if (rule) {
     syncPatternToParams()
+    syncRuleToHeaders()
+    syncRuleToReqHeaders()
   }
 }, { immediate: true })
 
-// Sync params when the modal opens (e.g. intercepted request triggered it)
+// Sync params and headers when the modal opens (e.g. intercepted request triggered it)
 watch(showMapModal, (isOpen) => {
   if (isOpen && activeRule.value) {
     syncPatternToParams()
+    syncRuleToHeaders()
+    syncRuleToReqHeaders()
   }
 })
 
@@ -408,8 +502,10 @@ const browseFile = async () => {
               <span class="pm-tab" :class="{ active: activeTab === 'Body' }" @click="activeTab = 'Body'">Body</span>
               <span class="pm-tab" :class="{ active: activeTab === 'Params' }"
                 @click="activeTab = 'Params'">Params</span>
-              <span class="pm-tab" :class="{ active: activeTab === 'Headers' }"
-                @click="activeTab = 'Headers'">Headers</span>
+              <span class="pm-tab" :class="{ active: activeTab === 'Req Headers' }"
+                @click="activeTab = 'Req Headers'">Request Headers</span>
+              <span class="pm-tab" :class="{ active: activeTab === 'Res Headers' }"
+                @click="activeTab = 'Res Headers'">Response Headers</span>
             </div>
 
             <div class="pm-editor-area">
@@ -479,9 +575,53 @@ const browseFile = async () => {
 
                 </div>
               </div>
-              <div v-if="activeTab === 'Headers'" class="pm-editor-wrapper">
-                <div class="pm-helper-text">Response Headers (Format as JSON)</div>
-              <CodeMirrorEditor v-model="activeRule.headers" :extensions="extensions" class="pm-codemirror" />
+              <div v-if="activeTab === 'Res Headers'" class="pm-editor-wrapper">
+                <div class="pm-helper-text">Response Headers — sent back in the mock response</div>
+
+                <div class="pm-params-container">
+
+                  <div class="pm-param-header">
+                    <div class="pm-param-col">Header Name</div>
+                    <div class="pm-param-col">Value</div>
+                    <div class="pm-param-action"></div>
+                  </div>
+
+                  <div class="pm-param-row" v-for="(header, index) in responseHeaders" :key="index">
+                    <input type="text" v-model="header.key" placeholder="e.g. Content-Type" class="pm-param-input"
+                      @input="syncHeadersToRule(); checkHeaderRow(index)" />
+
+                    <input type="text" v-model="header.value" placeholder="e.g. application/json" class="pm-param-input"
+                      @input="syncHeadersToRule()" />
+
+                    <button class="pm-param-del" @click="removeHeaderRow(index)" title="Remove Header">
+                      ✕
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+              <div v-if="activeTab === 'Req Headers'" class="pm-editor-wrapper">
+                <div class="pm-helper-text">Request Headers — override headers on the intercepted request</div>
+
+                <div class="pm-params-container">
+
+                  <div class="pm-param-header">
+                    <div class="pm-param-col">Header Name</div>
+                    <div class="pm-param-col">Value</div>
+                    <div class="pm-param-action"></div>
+                  </div>
+
+                  <div class="pm-param-row" v-for="(header, index) in reqHeadersMod" :key="index">
+                    <input type="text" v-model="header.key" placeholder="e.g. os" class="pm-param-input"
+                      @input="syncReqHeadersToRule(); checkReqHeaderRow(index)" />
+                    <input type="text" v-model="header.value" placeholder="e.g. android" class="pm-param-input"
+                      @input="syncReqHeadersToRule()" />
+                    <button class="pm-param-del" @click="removeReqHeaderRow(index)" title="Remove Header">
+                      ✕
+                    </button>
+                  </div>
+
+                </div>
               </div>
             </div>
 
@@ -675,6 +815,9 @@ const browseFile = async () => {
 .pm-param-input:focus { border-color: var(--accent); background: var(--bg-sidebar); }
 .pm-param-del { background: transparent; border: none; color: var(--fg-placeholder); cursor: pointer; width: 32px; font-size: 14px; }
 .pm-param-del:hover { color: var(--error); }
+
+/* Request headers override section */
+.pm-req-headers-label { border-top: 1px solid var(--border); margin-top: 0; flex-shrink: 0; }
 
 /* Body source toggle */
 .pm-body-source-bar {

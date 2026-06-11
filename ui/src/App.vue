@@ -313,7 +313,8 @@ const openMapLocalModalFromContext = () => {
       method: req.method || 'ANY',
       status: realStatus, 
       headers: realHeaders, 
-      body: realBody 
+      body: realBody,
+      req_headers_mod: req.req_headers || {}
     };
     
     mapLocalRules.value.unshift(newRule);

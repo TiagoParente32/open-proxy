@@ -1278,6 +1278,13 @@ class ProxyUIBridge:
                         except json.JSONDecodeError:
                             headers_dict = {"Content-Type": "text/plain"}
 
+                        # Apply request header overrides
+                        req_headers_mod = rule.get("req_headers_mod", {})
+                        if isinstance(req_headers_mod, dict):
+                            for k, v in req_headers_mod.items():
+                                if k:
+                                    flow.request.headers[k] = str(v)
+
                         file_path = rule.get("file_path", "")
                         body_source = rule.get("body_source", "inline")
                         if body_source == "file" and file_path and os.path.isfile(file_path):
@@ -1426,6 +1433,7 @@ class ProxyUIBridge:
             "status": flow.response.status_code,
             "duration": round(duration_ms),
             "res_bytes": len(flow.response.raw_content) if flow.response.raw_content else 0,
+            "req_headers": dict(flow.request.headers),
             "res_headers": dict(flow.response.headers),
             "res_body": res_body,
             "res_is_image": res_is_image,
