@@ -633,7 +633,7 @@ def apply_update(download_url, progress_cb=None):
         old_support_dir = os.path.join(install_dir, app_name)
         backup_path = install_path + '.old'
 
-        log = os.path.join(tmp_dir, 'update.log')
+        log = os.path.join(os.path.expanduser("~"), ".openproxy", "update.log")
         script = os.path.join(tmp_dir, 'do_update.sh')
         with open(script, 'w') as f:
             support_lines = ""
@@ -641,7 +641,7 @@ def apply_update(download_url, progress_cb=None):
                 support_lines = f"""
 rm -rf "{old_support_dir}"
 mv -f "{new_support_dir}" "{old_support_dir}"
-xattr -r -d com.apple.quarantine "{old_support_dir}" 2>/dev/null || true"""
+xattr -cr "{old_support_dir}" 2>/dev/null || true"""
 
             f.write(f"""#!/bin/bash
 exec >"{log}" 2>&1
@@ -671,13 +671,19 @@ fi
 # Move new app into place — destination no longer exists so mv does a rename, not a move-inside.
 mv -f "{new_app}" "{install_path}"
 
-xattr -r -d com.apple.quarantine "{install_path}" 2>/dev/null || true{support_lines}
+# Clear ALL extended attributes (not just quarantine) — consistent with what
+# Electron does at startup and required on macOS Sonoma/Sequoia where other
+# xattrs (e.g. com.apple.macl) can silently block Gatekeeper from launching.
+xattr -cr "{install_path}" 2>/dev/null || true{support_lines}
 rm -rf "{backup_path}"
 
-open "{install_path}"
+open -n "{install_path}"
 """)
         os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
+        # start_new_session=True puts the script in its own process group so it
+        # is fully independent of Python — survives Python being killed by Electron.
         subprocess.Popen(['bash', script], close_fds=True,
+                         start_new_session=True,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     elif sys.platform == 'win32':
