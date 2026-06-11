@@ -184,6 +184,25 @@ def get_resource_path(relative_path):
 
 LOCAL_IP = get_local_ip()
 
+async def _watch_local_ip(bridge):
+    """Poll the local IP every 5 seconds and notify the UI when it changes."""
+    global LOCAL_IP
+    while True:
+        await asyncio.sleep(5)
+        try:
+            new_ip = get_local_ip()
+            if new_ip != LOCAL_IP:
+                LOCAL_IP = new_ip
+                print(f"[INFO] Network change detected — new local IP: {LOCAL_IP}")
+                await bridge.broadcast_to_ui("SYSTEM_INFO", {
+                    "ip": LOCAL_IP,
+                    "port": bridge.proxy_port,
+                    "platform": sys.platform,
+                    "mac_proxy_active": bridge.is_mac_proxy_set,
+                })
+        except Exception as e:
+            print(f"[WARN] IP watch error: {e}")
+
 # Cache: ip -> resolved hostname (or None if failed)
 _hostname_cache: dict = {}
 
@@ -2426,6 +2445,7 @@ def run_async_loop(bridge, proxy_port):
             run_proxy_forever(bridge, proxy_port),
             run_ws_forever(bridge),
             _auto_check_update(bridge),
+            _watch_local_ip(bridge),
         )
 
     try:
