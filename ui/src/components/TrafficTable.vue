@@ -129,7 +129,6 @@ const sortIcon = (key) => {
 
 const handleKeyDown = async (e) => {
   if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return
-  if (document.activeElement.closest('.cm-editor')) return
   if ((showScopeMenu.value || showMatchMenu.value) && e.key === 'Escape') {
     showScopeMenu.value = false; showMatchMenu.value = false; return
   }
