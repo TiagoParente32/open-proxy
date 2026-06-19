@@ -6,6 +6,35 @@ import {
   sortKey, sortOrder, toggleSort, formatTime, formatBytes 
 } from '../store.js'
 
+// ── Column resizing ──────────────────────────────────────────────────────────
+const columns = [
+  { key: 'id',        label: 'ID',       width: 60  },
+  { key: 'method',    label: 'Method',   width: 75  },
+  { key: 'status',    label: 'Status',   width: 65  },
+  { key: 'url',       label: 'URL',      width: 450 },
+  { key: 'time',      label: 'Time',     width: 85  },
+  { key: 'duration',  label: 'Time (ms)',width: 90  },
+  { key: 'req_bytes', label: 'Req Size', width: 85  },
+  { key: 'res_bytes', label: 'Res Size', width: 85  },
+]
+const colWidths = ref(columns.map(c => c.width))
+
+const startColResize = (e, idx) => {
+  e.preventDefault()
+  e.stopPropagation()
+  const startX = e.clientX
+  const startW = colWidths.value[idx]
+  const onMove = (e) => {
+    colWidths.value[idx] = Math.max(40, startW + (e.clientX - startX))
+  }
+  const onUp = () => {
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+  }
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
+}
+
 // ── Virtual scrolling ────────────────────────────────────────────────────────
 const ROW_HEIGHT = 26   // px — matches td padding (4px top + 4px bottom) + 12px font ~18px line = 26px
 const BUFFER     = 12   // extra rows rendered above and below the visible window
@@ -266,14 +295,11 @@ onUnmounted(() => {
       <table class="traffic-table">
         <thead>
           <tr>
-            <th><div class="resize-handle" style="width: 60px;" @click="toggleSort('id')">ID{{ sortIcon('id') }}</div></th>
-            <th><div class="resize-handle" style="width: 75px;" @click="toggleSort('method')">Method{{ sortIcon('method') }}</div></th>
-            <th><div class="resize-handle" style="width: 65px;" @click="toggleSort('status')">Status{{ sortIcon('status') }}</div></th>
-            <th><div class="resize-handle" style="width: 450px;" @click="toggleSort('url')">URL{{ sortIcon('url') }}</div></th>
-            <th><div class="resize-handle" style="width: 85px;" @click="toggleSort('time')">Time{{ sortIcon('time') }}</div></th>
-            <th><div class="resize-handle" style="width: 90px;" @click="toggleSort('duration')">Time (ms){{ sortIcon('duration') }}</div></th>
-            <th><div class="resize-handle" style="width: 85px;" @click="toggleSort('req_bytes')">Req Size{{ sortIcon('req_bytes') }}</div></th>
-            <th><div class="resize-handle" style="width: 85px;" @click="toggleSort('res_bytes')">Res Size{{ sortIcon('res_bytes') }}</div></th>
+            <th v-for="(col, i) in columns" :key="col.key"
+                :style="{ width: colWidths[i] + 'px', minWidth: colWidths[i] + 'px' }">
+              <div class="th-inner" @click="toggleSort(col.key)">{{ col.label }}{{ sortIcon(col.key) }}</div>
+              <span class="col-resizer" @mousedown="startColResize($event, i)"></span>
+            </th>
             <th style="width: 100%;"></th>
           </tr>
         </thead>
@@ -421,18 +447,30 @@ onUnmounted(() => {
   top: 0;
   z-index: 1;
   text-align: left;
+  user-select: none;
 }
 
-.resize-handle {
+.th-inner {
   display: flex; align-items: center;
   padding: 6px 10px;
   color: var(--fg-muted); font-weight: 500;
   cursor: pointer;
-  resize: horizontal; overflow: hidden;
   box-sizing: border-box;
   transition: color 0.2s;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.resize-handle:hover { color: var(--fg-secondary); }
+.th-inner:hover { color: var(--fg-secondary); }
+
+.col-resizer {
+  position: absolute;
+  right: 0; top: 20%; bottom: 20%;
+  width: 2px;
+  cursor: col-resize;
+  background: var(--border);
+  border-radius: 1px;
+  transition: background 0.15s, top 0.15s, bottom 0.15s;
+}
+.col-resizer:hover { background: var(--accent); top: 0; bottom: 0; }
 
 .traffic-table td {
   padding: 4px 10px;

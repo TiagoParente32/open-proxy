@@ -4,6 +4,7 @@ import { Codemirror } from 'vue-codemirror'
 import { python } from '@codemirror/lang-python'
 import { EditorView } from '@codemirror/view'
 import { cmTheme } from '../composables/useTheme'
+import { useEdgeResize } from '../composables/useEdgeResize'
 import {
   showScriptingModal,
   scripts,
@@ -17,6 +18,8 @@ const draftName    = ref('')
 const draftEnabled = ref(false)
 const saving       = ref(false)
 const renaming     = ref(false)
+const modalRef     = ref(null)
+const { modalStyle, startResize } = useEdgeResize(modalRef, { minW: 500, minH: 380 })
 
 const selectedScript = computed(() => scripts.value.find(s => s.id === selectedScriptId.value) ?? null)
 
@@ -159,7 +162,15 @@ const formatCode = () => {
 <template>
   <div v-if="showScriptingModal" class="modal-overlay" @mousedown.self="showScriptingModal = false"
        @keydown.shift.alt.f.prevent="formatCode">
-    <div class="modal-content">
+    <div class="modal-content" ref="modalRef" :style="modalStyle">
+      <span class="resize-edge resize-n"  @mousedown.prevent.stop="startResize('n',  $event)"></span>
+      <span class="resize-edge resize-ne" @mousedown.prevent.stop="startResize('ne', $event)"></span>
+      <span class="resize-edge resize-e"  @mousedown.prevent.stop="startResize('e',  $event)"></span>
+      <span class="resize-edge resize-se" @mousedown.prevent.stop="startResize('se', $event)"></span>
+      <span class="resize-edge resize-s"  @mousedown.prevent.stop="startResize('s',  $event)"></span>
+      <span class="resize-edge resize-sw" @mousedown.prevent.stop="startResize('sw', $event)"></span>
+      <span class="resize-edge resize-w"  @mousedown.prevent.stop="startResize('w',  $event)"></span>
+      <span class="resize-edge resize-nw" @mousedown.prevent.stop="startResize('nw', $event)"></span>
 
       <!-- Header -->
       <div class="modal-header">
@@ -326,8 +337,15 @@ const formatCode = () => {
   flex-direction: column;
   box-shadow: var(--shadow-lg);
   overflow: hidden;
-  resize: both;
+  position: relative;
 }
+.resize-edge { position: absolute; z-index: 10; }
+.resize-n, .resize-s { left: 8px; right: 8px; height: 6px; cursor: ns-resize; }
+.resize-e, .resize-w { top: 8px; bottom: 8px; width: 6px; cursor: ew-resize; }
+.resize-n { top: 0; } .resize-s { bottom: 0; } .resize-e { right: 0; } .resize-w { left: 0; }
+.resize-ne, .resize-nw, .resize-se, .resize-sw { width: 12px; height: 12px; }
+.resize-ne { top: 0; right: 0; cursor: nesw-resize; } .resize-nw { top: 0; left: 0; cursor: nwse-resize; }
+.resize-se { bottom: 0; right: 0; cursor: nwse-resize; } .resize-sw { bottom: 0; left: 0; cursor: nesw-resize; }
 
 /* Header */
 .modal-header {
