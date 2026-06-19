@@ -563,75 +563,65 @@ const browseFile = async () => {
               </div>
               <div v-if="activeTab === 'Params'" class="pm-editor-wrapper">
                 <div class="pm-helper-text">Query Parameters</div>
-
                 <div class="pm-params-container">
-
-                  <div class="pm-param-header">
-                    <div class="pm-param-col">Key</div>
-                    <div class="pm-param-col">Value</div>
-                    <div class="pm-param-action"></div>
+                  <div class="pm-kv-table">
+                    <div class="pm-kv-head">
+                      <span class="pm-kv-head-cell">Key</span>
+                      <span class="pm-kv-head-cell">Value</span>
+                      <span></span>
+                    </div>
+                    <div class="pm-kv-row" v-for="(param, index) in queryParams" :key="index">
+                      <input type="text" v-model="param.key" placeholder="e.g. page" class="pm-kv-input"
+                        @input="syncParamsToPattern(); checkParamRow(index)" />
+                      <input type="text" v-model="param.value" placeholder="e.g. 1" class="pm-kv-input pm-kv-input-last"
+                        @input="syncParamsToPattern()" />
+                      <button class="pm-kv-del" @click="removeParamRow(index)" title="Remove">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    </div>
                   </div>
-
-                  <div class="pm-param-row" v-for="(param, index) in queryParams" :key="index">
-                    <input type="text" v-model="param.key" placeholder="Key" class="pm-param-input"
-                      @input="syncParamsToPattern(); checkParamRow(index)" />
-
-                    <input type="text" v-model="param.value" placeholder="Value" class="pm-param-input"
-                      @input="syncParamsToPattern()" />
-
-                    <button class="pm-param-del" @click="removeParamRow(index)" title="Remove Row">
-                      ✕
-                    </button>
-                  </div>
-
                 </div>
               </div>
               <div v-if="activeTab === 'Res Headers'" class="pm-editor-wrapper">
                 <div class="pm-helper-text">Response Headers — sent back in the mock response</div>
-
                 <div class="pm-params-container">
-
-                  <div class="pm-param-header">
-                    <div class="pm-param-col">Header Name</div>
-                    <div class="pm-param-col">Value</div>
-                    <div class="pm-param-action"></div>
+                  <div class="pm-kv-table">
+                    <div class="pm-kv-head">
+                      <span class="pm-kv-head-cell">Header Name</span>
+                      <span class="pm-kv-head-cell">Value</span>
+                      <span></span>
+                    </div>
+                    <div class="pm-kv-row" v-for="(header, index) in responseHeaders" :key="index">
+                      <input type="text" v-model="header.key" placeholder="e.g. Content-Type" class="pm-kv-input"
+                        @input="syncHeadersToRule(); checkHeaderRow(index)" />
+                      <input type="text" v-model="header.value" placeholder="e.g. application/json" class="pm-kv-input pm-kv-input-last"
+                        @input="syncHeadersToRule()" />
+                      <button class="pm-kv-del" @click="removeHeaderRow(index)" title="Remove">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    </div>
                   </div>
-
-                  <div class="pm-param-row" v-for="(header, index) in responseHeaders" :key="index">
-                    <input type="text" v-model="header.key" placeholder="e.g. Content-Type" class="pm-param-input"
-                      @input="syncHeadersToRule(); checkHeaderRow(index)" />
-
-                    <input type="text" v-model="header.value" placeholder="e.g. application/json" class="pm-param-input"
-                      @input="syncHeadersToRule()" />
-
-                    <button class="pm-param-del" @click="removeHeaderRow(index)" title="Remove Header">
-                      ✕
-                    </button>
-                  </div>
-
                 </div>
               </div>
               <div v-if="activeTab === 'Req Headers'" class="pm-editor-wrapper">
                 <div class="pm-helper-text">Request Headers — override headers on the intercepted request</div>
-
                 <div class="pm-params-container">
-
-                  <div class="pm-param-header">
-                    <div class="pm-param-col">Header Name</div>
-                    <div class="pm-param-col">Value</div>
-                    <div class="pm-param-action"></div>
+                  <div class="pm-kv-table">
+                    <div class="pm-kv-head">
+                      <span class="pm-kv-head-cell">Header Name</span>
+                      <span class="pm-kv-head-cell">Value</span>
+                      <span></span>
+                    </div>
+                    <div class="pm-kv-row" v-for="(header, index) in reqHeadersMod" :key="index">
+                      <input type="text" v-model="header.key" placeholder="e.g. os" class="pm-kv-input"
+                        @input="syncReqHeadersToRule(); checkReqHeaderRow(index)" />
+                      <input type="text" v-model="header.value" placeholder="e.g. android" class="pm-kv-input pm-kv-input-last"
+                        @input="syncReqHeadersToRule()" />
+                      <button class="pm-kv-del" @click="removeReqHeaderRow(index)" title="Remove">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    </div>
                   </div>
-
-                  <div class="pm-param-row" v-for="(header, index) in reqHeadersMod" :key="index">
-                    <input type="text" v-model="header.key" placeholder="e.g. os" class="pm-param-input"
-                      @input="syncReqHeadersToRule(); checkReqHeaderRow(index)" />
-                    <input type="text" v-model="header.value" placeholder="e.g. android" class="pm-param-input"
-                      @input="syncReqHeadersToRule()" />
-                    <button class="pm-param-del" @click="removeReqHeaderRow(index)" title="Remove Header">
-                      ✕
-                    </button>
-                  </div>
-
                 </div>
               </div>
             </div>
@@ -830,15 +820,74 @@ const browseFile = async () => {
 .pm-btn-execute { background: var(--accent); border: none; color: #fff; padding: 6px 24px; border-radius: 6px; cursor: pointer; font-weight: 500; font-size: 12px; transition: background 0.15s; }
 .pm-btn-execute:hover { background: var(--accent-hover); }
 
-.pm-params-container { padding: 16px 24px; overflow-y: auto; flex: 1; }
-.pm-param-header { display: flex; font-size: 11px; color: var(--fg-muted); font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
-.pm-param-col { flex: 1; padding: 0 8px; }
-.pm-param-action { width: 32px; }
-.pm-param-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
-.pm-param-input { flex: 1; background: transparent; border: 1px solid var(--border); color: var(--fg-secondary); padding: 6px 10px; font-size: 13px; font-family: 'Consolas', monospace; border-radius: 4px; outline: none; }
-.pm-param-input:focus { border-color: var(--accent); background: var(--bg-sidebar); }
-.pm-param-del { background: transparent; border: none; color: var(--fg-placeholder); cursor: pointer; width: 32px; font-size: 14px; }
-.pm-param-del:hover { color: var(--error); }
+.pm-params-container { padding: 16px 20px; overflow-y: auto; flex: 1; }
+
+.pm-kv-table {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-deepest);
+}
+
+.pm-kv-head {
+  display: grid;
+  grid-template-columns: 1fr 1fr 32px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+}
+.pm-kv-head-cell {
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.pm-kv-head-cell + .pm-kv-head-cell { border-left: 1px solid var(--border); }
+
+.pm-kv-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 32px;
+  border-bottom: 1px solid var(--border-subtle);
+  align-items: stretch;
+  transition: background 0.1s;
+}
+.pm-kv-row:last-child { border-bottom: none; }
+.pm-kv-row:hover { background: var(--bg-active); }
+
+.pm-kv-input {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border-subtle);
+  color: var(--fg-secondary);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: 'Consolas', monospace;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  transition: background 0.1s, color 0.1s;
+}
+.pm-kv-input::placeholder { color: var(--fg-placeholder); }
+.pm-kv-input:focus {
+  background: var(--accent-muted);
+  color: var(--fg-primary);
+}
+.pm-kv-input-last { border-right: none; }
+
+.pm-kv-del {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--fg-placeholder);
+  cursor: pointer;
+  transition: color 0.15s;
+  padding: 0;
+  width: 32px;
+}
+.pm-kv-del:hover { color: var(--error); }
 
 /* Request headers override section */
 .pm-req-headers-label { border-top: 1px solid var(--border); margin-top: 0; flex-shrink: 0; }

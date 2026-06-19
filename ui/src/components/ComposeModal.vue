@@ -60,10 +60,43 @@ const syncParamsToUrl = () => {
   }
 }
 
+// --- TWO-WAY HEADERS SYNCING ---
+const reqHeaders = ref([{ key: '', value: '' }])
+
+const syncReqHeadersFromJson = () => {
+  try {
+    const parsed = JSON.parse(composeData.value.req_headers || '{}')
+    const rows = Object.entries(parsed).map(([k, v]) => ({ key: k, value: String(v) }))
+    rows.push({ key: '', value: '' })
+    reqHeaders.value = rows
+  } catch (e) {
+    reqHeaders.value = [{ key: '', value: '' }]
+  }
+}
+
+const syncReqHeadersToJson = () => {
+  const obj = {}
+  reqHeaders.value.forEach(h => { if (h.key) obj[h.key] = h.value })
+  composeData.value.req_headers = JSON.stringify(obj, null, 2)
+}
+
+const checkHeaderRow = (index) => {
+  if (index === reqHeaders.value.length - 1 && reqHeaders.value[index].key !== '') {
+    reqHeaders.value.push({ key: '', value: '' })
+  }
+}
+
+const removeHeaderRow = (index) => {
+  reqHeaders.value.splice(index, 1)
+  if (reqHeaders.value.length === 0) reqHeaders.value.push({ key: '', value: '' })
+  syncReqHeadersToJson()
+}
+
 // Auto-fill the grid whenever the modal is opened (perfect for Edit Mode!)
 watch(() => showComposeModal.value, (isOpen) => {
   if (isOpen) {
     syncUrlToParams();
+    syncReqHeadersFromJson();
   }
 })
 
@@ -140,24 +173,45 @@ const removeParamRow = (index) => {
           <div v-if="activeTab === 'Params'" class="pm-editor-wrapper">
             <div class="pm-helper-text">Query Parameters</div>
             <div class="pm-params-container">
-              <div class="pm-param-header">
-                <div class="pm-param-col">Key</div>
-                <div class="pm-param-col">Value</div>
-                <div class="pm-param-action"></div>
-              </div>
-              <div class="pm-param-row" v-for="(param, index) in queryParams" :key="index">
-                <input type="text" v-model="param.key" placeholder="Key" class="pm-param-input"
-                  @input="syncParamsToUrl(); checkParamRow(index)" />
-                <input type="text" v-model="param.value" placeholder="Value" class="pm-param-input"
-                  @input="syncParamsToUrl()" />
-                <button class="pm-param-del" @click="removeParamRow(index)" title="Remove Row">✕</button>
+              <div class="pm-kv-table">
+                <div class="pm-kv-head">
+                  <span class="pm-kv-head-cell">Key</span>
+                  <span class="pm-kv-head-cell">Value</span>
+                  <span></span>
+                </div>
+                <div class="pm-kv-row" v-for="(param, index) in queryParams" :key="index">
+                  <input type="text" v-model="param.key" placeholder="e.g. page" class="pm-kv-input"
+                    @input="syncParamsToUrl(); checkParamRow(index)" />
+                  <input type="text" v-model="param.value" placeholder="e.g. 1" class="pm-kv-input pm-kv-input-last"
+                    @input="syncParamsToUrl()" />
+                  <button class="pm-kv-del" @click="removeParamRow(index)" title="Remove Row">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
           <div v-if="activeTab === 'Headers'" class="pm-editor-wrapper">
-            <div class="pm-helper-text">Format as JSON (e.g., { "Content-Type": "application/json" })</div>
-            <CodeMirrorEditor v-model="composeData.req_headers" :extensions="extensions" class="pm-codemirror" />
+            <div class="pm-helper-text">Request Headers</div>
+            <div class="pm-params-container">
+              <div class="pm-kv-table">
+                <div class="pm-kv-head">
+                  <span class="pm-kv-head-cell">Key</span>
+                  <span class="pm-kv-head-cell">Value</span>
+                  <span></span>
+                </div>
+                <div class="pm-kv-row" v-for="(header, index) in reqHeaders" :key="index">
+                  <input type="text" v-model="header.key" placeholder="e.g. Content-Type" class="pm-kv-input"
+                    @input="syncReqHeadersToJson(); checkHeaderRow(index)" />
+                  <input type="text" v-model="header.value" placeholder="e.g. application/json" class="pm-kv-input pm-kv-input-last"
+                    @input="syncReqHeadersToJson()" />
+                  <button class="pm-kv-del" @click="removeHeaderRow(index)" title="Remove Row">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
 
@@ -437,71 +491,69 @@ const removeParamRow = (index) => {
 }
 
 /* PARAMS GRID */
-.pm-params-container {
-  padding: 16px 24px;
-  overflow-y: auto;
-  flex: 1;
-}
+.pm-params-container { padding: 16px 20px; overflow-y: auto; flex: 1; }
 
-.pm-param-header {
-  display: flex;
-  font-size: 11px;
-  color: var(--fg-muted);
-  font-weight: 600;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 8px;
-}
-
-.pm-param-col {
-  flex: 1;
-  padding: 0 8px;
-}
-
-.pm-param-action {
-  width: 32px;
-}
-
-.pm-param-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-  align-items: center;
-}
-
-.pm-param-input {
-  flex: 1;
-  background: transparent;
+.pm-kv-table {
   border: 1px solid var(--border);
-  color: var(--fg-secondary);
-  padding: 6px 10px;
-  font-size: 13px;
-  font-family: 'Consolas', monospace;
-  border-radius: 4px;
-  outline: none;
-  transition: border 0.2s;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-deepest);
 }
 
-.pm-param-input:focus {
-  border-color: var(--accent);
+.pm-kv-head {
+  display: grid;
+  grid-template-columns: 1fr 1fr 32px;
   background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
 }
+.pm-kv-head-cell {
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.pm-kv-head-cell + .pm-kv-head-cell { border-left: 1px solid var(--border); }
 
-.pm-param-del {
+.pm-kv-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 32px;
+  border-bottom: 1px solid var(--border-subtle);
+  align-items: stretch;
+  transition: background 0.1s;
+}
+.pm-kv-row:last-child { border-bottom: none; }
+.pm-kv-row:hover { background: var(--bg-active); }
+
+.pm-kv-input {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border-subtle);
+  color: var(--fg-secondary);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: 'Consolas', monospace;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  transition: background 0.1s, color 0.1s;
+}
+.pm-kv-input::placeholder { color: var(--fg-placeholder); }
+.pm-kv-input:focus { background: var(--accent-muted); color: var(--fg-primary); }
+.pm-kv-input-last { border-right: none; }
+
+.pm-kv-del {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
   color: var(--fg-placeholder);
   cursor: pointer;
+  transition: color 0.15s;
+  padding: 0;
   width: 32px;
-  font-size: 14px;
-  transition: color 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
 }
-
-.pm-param-del:hover {
-  color: var(--error);
-}
+.pm-kv-del:hover { color: var(--error); }
 </style>
