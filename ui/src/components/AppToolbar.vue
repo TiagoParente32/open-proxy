@@ -38,6 +38,7 @@ import {
   macosProxyLoading,
   toggleMacProxy,
   selectedRequest,
+  closeAllModals,
 } from '../store.js'
 
 const isMac = () => window.electronAPI?.platform === 'darwin'
@@ -53,6 +54,7 @@ const showCertMenu    = ref(false)
 
 const openDeviceSetup = (type) => {
   deviceSetupType.value = type
+  closeAllModals()
   showDeviceSetupModal.value = true
   showCertMenu.value = false
 }
@@ -152,35 +154,35 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         v-if="showBreakpointsBtn"
         class="secondary-pill"
         :class="{ 'script-active': anyBreakpointActive }"
-        @click="showBreakpointModal = true" title="Manage Breakpoints">
+        @click="closeAllModals(); showBreakpointModal = true" title="Manage Breakpoints">
         Breakpoints
       </button>
       <button
         v-if="showMapLocalBtn"
         class="secondary-pill"
         :class="{ 'script-active': anyMapLocalActive }"
-        @click="showMapModal = true" title="Map Local Rules">
+        @click="closeAllModals(); showMapModal = true" title="Map Local Rules">
         Map Local
       </button>
       <button
         v-if="showMapRemoteBtn"
         class="secondary-pill"
         :class="{ 'script-active': anyMapRemoteActive }"
-        @click="showMapRemoteModal = true" title="Map Remote Rules">
+        @click="closeAllModals(); showMapRemoteModal = true" title="Map Remote Rules">
         Map Remote
       </button>
       <button
         v-if="showHighlightBtn"
         class="secondary-pill"
         :class="{ 'script-active': anyHighlightActive }"
-        @click="showHighlightModal = true" title="Highlight Rules">
+        @click="closeAllModals(); showHighlightModal = true" title="Highlight Rules">
         Highlight
       </button>
       <button
         v-if="showScriptBtn"
         class="secondary-pill"
         :class="{ 'script-active': anyScriptEnabled }"
-        @click="showScriptingModal = true"
+        @click="closeAllModals(); showScriptingModal = true"
         title="Scripts"
       >
         Scripts

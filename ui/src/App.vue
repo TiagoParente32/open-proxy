@@ -76,6 +76,7 @@ import {
   importHostFilter,
   showComposeModal,
   pinSource,
+  closeAllModals,
 } from './store.js'
 
 onMounted(() => {
@@ -111,18 +112,18 @@ onMounted(() => {
     clearTraffic:     () => { requests.value.length = 0; wsMessages.value = {}; selectedRequest.value = null },
     openComposeNew:   () => openComposeNew(),
     openVpnMode:      () => openVpnMode(),
-    openBreakpoints:  () => { showBreakpointModal.value = true },
-    openMapLocal:     () => { showMapModal.value = true },
-    openMapRemote:    () => { showMapRemoteModal.value = true },
-    openHighlight:    () => { showHighlightModal.value = true },
-    openScripting:    () => { showScriptingModal.value = true },
-    openCertSetup:    (type) => { deviceSetupType.value = type; showDeviceSetupModal.value = true },
+    openBreakpoints:  () => { closeAllModals(); showBreakpointModal.value = true },
+    openMapLocal:     () => { closeAllModals(); showMapModal.value = true },
+    openMapRemote:    () => { closeAllModals(); showMapRemoteModal.value = true },
+    openHighlight:    () => { closeAllModals(); showHighlightModal.value = true },
+    openScripting:    () => { closeAllModals(); showScriptingModal.value = true },
+    openCertSetup:    (type) => { deviceSetupType.value = type; closeAllModals(); showDeviceSetupModal.value = true },
     setThrottle:      (profile) => { throttleProfile.value = profile },
     bustCache:        () => { disableCache.value = !disableCache.value },
     toggleMacProxy:   () => toggleMacProxy(),
     toggleProxyHttp2:       () => toggleProxyHttp2(),
     toggleProxyUpstreamCert: () => toggleProxyUpstreamCert(),
-    openIgnoreHosts:  () => { showIgnoreHostsModal.value = true },
+    openIgnoreHosts:  () => { closeAllModals(); showIgnoreHostsModal.value = true },
     checkForUpdates:  () => checkForUpdates(),
     toggleToolbarVisibility: (tool) => { toolbarVisibility.value[tool] = !toolbarVisibility.value[tool] },
     showAbout:        () => { showAboutModal.value = true },
@@ -145,11 +146,11 @@ onMounted(() => {
     else if (cmd && !shift && e.code === 'KeyK') { e.preventDefault(); requests.value.length = 0; wsMessages.value = {}; selectedRequest.value = null }
     else if (cmd && !shift && e.code === 'KeyN' && !isEditing) { e.preventDefault(); openComposeNew() }
     else if (cmd && !shift && e.code === 'KeyF') { e.preventDefault(); document.dispatchEvent(new CustomEvent('openproxy:focus-search')) }
-    else if (cmd && shift && e.code === 'KeyM') { e.preventDefault(); showMapModal.value = true }
-    else if (cmd && shift && e.code === 'KeyE') { e.preventDefault(); showMapRemoteModal.value = true }
-    else if (cmd && shift && e.code === 'KeyB') { e.preventDefault(); showBreakpointModal.value = true }
-    else if (cmd && shift && e.code === 'KeyH') { e.preventDefault(); showHighlightModal.value = true }
-    else if (cmd && shift && e.code === 'KeyS') { e.preventDefault(); showScriptingModal.value = true }
+    else if (cmd && shift && e.code === 'KeyM') { e.preventDefault(); closeAllModals(); showMapModal.value = true }
+    else if (cmd && shift && e.code === 'KeyE') { e.preventDefault(); closeAllModals(); showMapRemoteModal.value = true }
+    else if (cmd && shift && e.code === 'KeyB') { e.preventDefault(); closeAllModals(); showBreakpointModal.value = true }
+    else if (cmd && shift && e.code === 'KeyH') { e.preventDefault(); closeAllModals(); showHighlightModal.value = true }
+    else if (cmd && shift && e.code === 'KeyS') { e.preventDefault(); closeAllModals(); showScriptingModal.value = true }
     else if (cmd && shift && e.code === 'KeyV') { e.preventDefault(); openVpnMode() }
     else if (cmd && shift && e.code === 'Slash') { e.preventDefault(); showShortcutsModal.value = true }
     else if (e.key === 'Escape') {
@@ -287,6 +288,7 @@ const openMapRemoteModalFromContext = () => {
     selectedMapRemoteId.value = mapRemoteRules.value[0].id;
   }
   
+  closeAllModals()
   showMapRemoteModal.value = true;
 }
 
@@ -322,6 +324,7 @@ const openMapLocalModalFromContext = () => {
   } else if (mapLocalRules.value.length > 0 && !selectedRuleId.value) {
     selectedRuleId.value = mapLocalRules.value[0].id;
   }
+  closeAllModals()
   showMapModal.value = true;
 }
 
@@ -346,6 +349,7 @@ const openBreakpointModalFromContext = () => {
     selectedBreakpointId.value = breakpointRules.value[0].id;
   }
   
+  closeAllModals()
   showBreakpointModal.value = true;
 }
 </script>
