@@ -618,11 +618,15 @@ export const repeatRequest = () => {
 }
 
 export const openComposeModal = (req) => {
+    let body = req.req_is_image ? '' : (req.req_body || '')
+    if (body) {
+        try { body = JSON.stringify(JSON.parse(body), null, 2) } catch (e) { /* not JSON, leave as-is */ }
+    }
     composeData.value = {
         method: req.method,
         url: req.url,
         req_headers: JSON.stringify(req.req_headers || {}, null, 2),
-        req_body: req.req_is_image ? '' : (req.req_body || '')
+        req_body: body
     }
     showComposeModal.value = true
 }
