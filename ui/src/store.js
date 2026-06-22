@@ -19,6 +19,7 @@ export const openComposeNew = () => {
         req_headers: '{\n  "Accept": "*/*",\n  "User-Agent": "OpenProxy/1.0"\n}',
         req_body: ''
     }
+    closeAllModals()
     showComposeModal.value = true
 }
 
@@ -202,6 +203,7 @@ export const addDeviceHighlightRule = (ip, label) => {
     const newRule = { id: Date.now(), active: true, name: `${label} traffic`, type: 'client_ip', pattern: ip, color: 'blue' }
     highlightRules.value.unshift(newRule)
     pendingHighlightRuleId.value = newRule.id
+    closeAllModals()
     showHighlightModal.value = true
 }
 
@@ -265,10 +267,10 @@ export const showOsProxyBtn     = computed(() => toolbarVisibility.value.osProxy
 // Opens DeviceSetupModal directly on the VPN Mode view
 export const openVpnMode = () => {
     deviceSetupType.value = 'vpn_mode'
+    closeAllModals()
     showDeviceSetupModal.value = true
 }
 
-// ---- NEW: ADB device state ----
 // List of { serial, model, type, state } objects returned by the backend
 export const adbDevices = ref([])
 // Whether a LIST_ADB_DEVICES fetch is in-flight
@@ -346,6 +348,17 @@ export const proxyHostFilterMode = ref(loadState('proxyHostFilterMode', 'ignore'
 // UI modal visibility (shared so sidebar can trigger it)
 export const showIgnoreHostsModal = ref(false)
 
+
+export const closeAllModals = () => {
+    showMapModal.value          = false
+    showMapRemoteModal.value    = false
+    showBreakpointModal.value   = false
+    showHighlightModal.value    = false
+    showComposeModal.value      = false
+    showDeviceSetupModal.value  = false
+    showScriptingModal.value    = false
+    showIgnoreHostsModal.value  = false
+}
 
 // ============================================================================
 // 4. ACTIONS & LOGIC
@@ -628,6 +641,7 @@ export const openComposeModal = (req) => {
         req_headers: JSON.stringify(req.req_headers || {}, null, 2),
         req_body: body
     }
+    closeAllModals()
     showComposeModal.value = true
 }
 
