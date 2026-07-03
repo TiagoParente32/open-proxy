@@ -184,8 +184,10 @@ const showUpdateModal = computed(() =>
 )
 
 const showAboutModal  = ref(false)
-const showOnboardingModal  = ref(!localStorage.getItem('openproxyOnboardingDone'))
 const showShortcutsModal = ref(false)
+
+const _storedOnboardingVersion = localStorage.getItem('openproxyOnboardingVersion')
+const showOnboardingModal = ref(!_storedOnboardingVersion || _storedOnboardingVersion !== appVersion)
 
 const contextMenuEl = ref(null)
 watch(() => [contextMenu.value.x, contextMenu.value.y, contextMenu.value.show], ([,, visible]) => {
@@ -560,7 +562,7 @@ const openBreakpointModalFromContext = () => {
     <DeviceSetupModal />
     <ScriptingModal />
     <IgnoreHostsModal :show="showIgnoreHostsModal" @close="showIgnoreHostsModal = false" />
-    <OnboardingModal v-if="showOnboardingModal" @done="showOnboardingModal = false" />
+    <OnboardingModal v-if="showOnboardingModal" :app-version="appVersion" @done="showOnboardingModal = false" />
     <KeyboardShortcutsModal v-if="showShortcutsModal" @close="showShortcutsModal = false" />
   </div>
 </template>

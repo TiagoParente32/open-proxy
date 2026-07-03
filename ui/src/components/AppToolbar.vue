@@ -268,7 +268,7 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         :class="{ active: disableCache }"
         title="Disable caching for all requests"
       >
-        <span class="toggle-label">Bust Cache</span>
+        <span class="toggle-label">No Cache</span>
         <div class="switch"></div>
       </div>
 
