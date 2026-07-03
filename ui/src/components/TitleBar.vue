@@ -25,7 +25,7 @@ const MENUS = [
       ...(window.electronAPI?.platform === 'darwin' ? [
         { label: 'OS Proxy',   action: () => op()?.toggleMacProxy(), checked: () => macosProxyActive.value },
       ] : []),
-      { label: 'Bust Cache', action: () => op()?.bustCache(), checked: () => disableCache.value },
+      { label: 'No Cache', action: () => op()?.bustCache(), checked: () => disableCache.value },
       { type: 'separator' },
       { label: 'HTTP/2',        action: () => op()?.toggleProxyHttp2(),        checked: () => proxyHttp2.value },
       { label: 'Upstream Cert', action: () => op()?.toggleProxyUpstreamCert(), checked: () => proxyUpstreamCert.value },
@@ -97,7 +97,7 @@ const MENUS = [
           { type: 'separator' },
           { label: 'Certificates',  action: () => op()?.toggleToolbarVisibility('certificates'),  checked: () => toolbarVisibility.value.certificates },
           { label: 'Throttle',      action: () => op()?.toggleToolbarVisibility('throttle'),      checked: () => toolbarVisibility.value.throttle },
-          { label: 'Bust Cache',    action: () => op()?.toggleToolbarVisibility('bustCache'),     checked: () => toolbarVisibility.value.bustCache },
+          { label: 'No Cache',      action: () => op()?.toggleToolbarVisibility('bustCache'),     checked: () => toolbarVisibility.value.bustCache },
           ...(window.electronAPI?.platform === 'darwin' ? [
             { label: 'OS Proxy',    action: () => op()?.toggleToolbarVisibility('osProxy'),       checked: () => toolbarVisibility.value.osProxy },
           ] : []),

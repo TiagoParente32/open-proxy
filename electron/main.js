@@ -307,7 +307,7 @@ function setupMenu () {
           click:   () => js('toggleMacProxy()'),
         }] : []),
         {
-          label:   'Bust Cache',
+          label:   'No Cache',
           type:    'checkbox',
           checked: bustCacheEnabled,
           click:   () => {
@@ -416,7 +416,7 @@ function setupMenu () {
               'bustCache',
               ...(process.platform === 'darwin' ? ['osProxy'] : []),
             ].map((key) => ({
-              label: { certificates: 'Certificates', throttle: 'Throttle', bustCache: 'Bust Cache', osProxy: 'OS Proxy' }[key],
+              label: { certificates: 'Certificates', throttle: 'Throttle', bustCache: 'No Cache', osProxy: 'OS Proxy' }[key],
               type: 'checkbox', checked: toolbarVisibility[key],
               click: () => {
                 toolbarVisibility[key] = !toolbarVisibility[key]

@@ -1416,6 +1416,7 @@ export const resetPreferences = () => {
         .filter(k => k.startsWith('openproxy_') || k === 'openproxy-theme')
         .forEach(k => localStorage.removeItem(k))
     localStorage.removeItem('openproxyOnboardingDone')
+    localStorage.removeItem('openproxyOnboardingVersion')
 
     location.reload()
 }
@@ -1443,8 +1444,10 @@ export const exportSettings = async () => {
         catch { settings[key] = localStorage.getItem(storageKey) }
     }
 
-    // Onboarding flag uses a non-standard key (no openproxy_ prefix) — handle explicitly
+    // Onboarding flags use non-standard keys — handle explicitly
     if (localStorage.getItem('openproxyOnboardingDone')) settings.onboardingDone = true
+    const _obv = localStorage.getItem('openproxyOnboardingVersion')
+    if (_obv) settings.onboardingVersion = _obv
 
     // Include scripts from the backend (already loaded into reactive state)
     settings.scripts = scripts.value.map(({ id, name, content, enabled }) => ({ id, name, content, enabled }))
@@ -1501,8 +1504,9 @@ export const importSettings = async () => {
         }
     }
 
-    // Onboarding flag
+    // Onboarding flag (legacy key kept for compatibility; version key takes precedence)
     if (settings.onboardingDone) localStorage.setItem('openproxyOnboardingDone', '1')
+    if (settings.onboardingVersion) localStorage.setItem('openproxyOnboardingVersion', settings.onboardingVersion)
 
     // Restore scripts via WebSocket so the Python backend persists them
     if (Array.isArray(settings.scripts) && wsConnection?.readyState === WebSocket.OPEN) {

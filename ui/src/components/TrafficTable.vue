@@ -52,12 +52,19 @@ const visibleRows = computed(() => filteredRequests.value.slice(startIdx.value, 
 const topPad      = computed(() => startIdx.value * ROW_HEIGHT)
 const bottomPad   = computed(() => Math.max(0, (totalRows.value - endIdx.value) * ROW_HEIGHT))
 
-// When new items are prepended and the user is scrolled down, compensate so
-// the visible rows don't jump (keeps the current view stable).
+// In "newest first" (desc): items are prepended — compensate scroll so visible rows don't jump.
+// In "oldest first" (asc): items are appended — auto-scroll to bottom when already near it.
 watch(totalRows, (newLen, oldLen) => {
   const added = newLen - oldLen
-  if (added > 0 && containerRef.value && containerRef.value.scrollTop > 0) {
-    containerRef.value.scrollTop += added * ROW_HEIGHT
+  if (added <= 0 || !containerRef.value) return
+  const el = containerRef.value
+  if (sortOrder.value === 'asc') {
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (distFromBottom <= ROW_HEIGHT * 3) {
+      nextTick(() => { el.scrollTop = el.scrollHeight })
+    }
+  } else {
+    if (el.scrollTop > 0) el.scrollTop += added * ROW_HEIGHT
   }
 })
 
