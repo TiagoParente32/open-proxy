@@ -881,7 +881,20 @@ const modalTitle = () => {
             <li>Install the <strong>WireGuard</strong> app on your device.</li>
             <li>Tap <strong>+</strong> → <strong>Create from QR code</strong> and scan above, <em>or</em> import the config file.</li>
             <li>Activate the tunnel — all traffic will route through this proxy.</li>
+            <li>With the tunnel active, open a browser on the device and go to <code class="ic">http://mitm.it</code> to download the CA certificate needed to decrypt HTTPS traffic.</li>
+            <li>
+              Install the certificate:
+              <ul class="instruction-sublist">
+                <li><strong>Android</strong> — tap the <strong>Android</strong> button on mitm.it, then go to <strong>Settings › Security › Encryption &amp; Credentials › Install a certificate › CA Certificate</strong> and install the downloaded file.</li>
+                <li><strong>iOS</strong> — tap the <strong>iOS</strong> button on mitm.it to download the profile, install it via <strong>Settings › General › VPN &amp; Device Management</strong>, then enable it under <strong>Settings › General › About › Certificate Trust Settings</strong>.</li>
+              </ul>
+            </li>
           </ol>
+
+          <div class="alert warning" style="margin-top:14px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            The certificate must be installed <strong>and</strong> trusted (on iOS) for HTTPS traffic to be decrypted — without it, secure sites will fail to load while VPN Mode is active.
+          </div>
         </template>
 
         <!-- Info box -->
@@ -889,7 +902,7 @@ const modalTitle = () => {
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
           </svg>
-          <span>VPN Mode intercepts <strong>all</strong> device traffic — no manual proxy configuration needed per app.</span>
+          <span>VPN Mode intercepts <strong>all</strong> device traffic — no manual proxy configuration needed per app. You'll still need to install the CA certificate from <code class="ic">http://mitm.it</code> to inspect HTTPS traffic.</span>
         </div>
 
       </div>
@@ -1388,6 +1401,12 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 }
 .instruction-list li { padding-left: 4px; }
 .instruction-list strong { color: var(--fg-secondary); }
+
+.instruction-sublist {
+  list-style: disc; padding-left: 18px; margin: 8px 0 0;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.instruction-sublist li { padding-left: 0; }
 
 .info-box {
   margin-top: 8px; padding: 9px 12px; background: rgba(0,0,0,0.2);
