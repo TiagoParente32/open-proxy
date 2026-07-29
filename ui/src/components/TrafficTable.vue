@@ -42,8 +42,23 @@ const BUFFER     = 12   // extra rows rendered above and below the visible windo
 const containerRef   = ref(null)
 const scrollTop      = ref(0)
 const containerHeight = ref(600)
+const isAutoScrollPaused = ref(false)
 
-const onScroll = () => { scrollTop.value = containerRef.value?.scrollTop ?? 0 }
+const onScroll = () => {
+  scrollTop.value = containerRef.value?.scrollTop ?? 0
+  if (sortOrder.value === 'asc' && containerRef.value) {
+    const el = containerRef.value
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    isAutoScrollPaused.value = distFromBottom > ROW_HEIGHT * 3
+  }
+}
+
+const scrollToBottom = () => {
+  if (!containerRef.value) return
+  containerRef.value.scrollTop = containerRef.value.scrollHeight
+  scrollTop.value = containerRef.value.scrollTop
+  isAutoScrollPaused.value = false
+}
 
 const totalRows   = computed(() => filteredRequests.value.length)
 const startIdx    = computed(() => Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - BUFFER))
@@ -52,19 +67,32 @@ const visibleRows = computed(() => filteredRequests.value.slice(startIdx.value, 
 const topPad      = computed(() => startIdx.value * ROW_HEIGHT)
 const bottomPad   = computed(() => Math.max(0, (totalRows.value - endIdx.value) * ROW_HEIGHT))
 
+// Show the "more requests below" jump button only in "oldest first" mode, once
+// auto-scroll has paused because the user scrolled away from the bottom.
+const showJumpToBottom = computed(() => sortOrder.value === 'asc' && isAutoScrollPaused.value && totalRows.value > 0)
+
 // In "newest first" (desc): items are prepended — compensate scroll so visible rows don't jump.
 // In "oldest first" (asc): items are appended — auto-scroll to bottom when already near it.
-watch(totalRows, (newLen, oldLen) => {
+// Both branches read the pre-update scroll state synchronously, then wait for Vue to patch
+// the DOM (nextTick) before touching el.scrollTop — otherwise the browser clamps the new
+// scrollTop against the *old* (smaller) scrollHeight, producing a visible jump/flicker that
+// only gets corrected once the native `scroll` event lands and re-syncs scrollTop.value.
+watch(totalRows, async (newLen, oldLen) => {
   const added = newLen - oldLen
   if (added <= 0 || !containerRef.value) return
   const el = containerRef.value
   if (sortOrder.value === 'asc') {
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    if (distFromBottom <= ROW_HEIGHT * 3) {
-      nextTick(() => { el.scrollTop = el.scrollHeight })
-    }
+    const wasNearBottom = distFromBottom <= ROW_HEIGHT * 3
+    if (!wasNearBottom) return
+    await nextTick()
+    el.scrollTop = el.scrollHeight
+    scrollTop.value = el.scrollTop
   } else {
-    if (el.scrollTop > 0) el.scrollTop += added * ROW_HEIGHT
+    if (el.scrollTop <= 0) return
+    await nextTick()
+    el.scrollTop += added * ROW_HEIGHT
+    scrollTop.value = el.scrollTop
   }
 })
 
@@ -357,11 +385,42 @@ onUnmounted(() => {
         <span v-else>Waiting for traffic…</span>
       </div>
     </div>
+
+    <button
+      v-if="showJumpToBottom"
+      class="jump-bottom-btn"
+      @click="scrollToBottom"
+    >
+      ↓ More requests below
+    </button>
   </div>
 </template>
 
 <style scoped>
-.traffic-layout { display: flex; flex-direction: column; height: 100%; background: var(--bg-main); }
+.traffic-layout { display: flex; flex-direction: column; height: 100%; background: var(--bg-main); position: relative; }
+
+.jump-bottom-btn {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(59,130,246,0.9);
+  color: white;
+  border: 1px solid var(--accent-hover);
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(4px);
+  z-index: 10;
+  transition: all 0.2s ease;
+}
+.jump-bottom-btn:hover {
+  background-color: var(--accent);
+  transform: translateX(-50%) translateY(-2px);
+}
 
 /* ── Search bar ───────────────────────────────────── */
 .table-toolbar {

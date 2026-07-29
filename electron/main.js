@@ -144,6 +144,14 @@ function createWindow () {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // The app minimizes to tray (see win.on('close') below) instead of quitting,
+      // so the window is often hidden for long periods while still capturing
+      // traffic. Chromium's background timer throttling — and especially its
+      // "intensive throttling" that clamps timers to ~once/minute after 5 minutes
+      // hidden — would otherwise stall the renderer's WS reconnect backoff and
+      // the batched traffic-ingestion timer in store.js, making capture appear
+      // to stop. Keep the renderer running at full speed regardless of visibility.
+      backgroundThrottling: false,
     },
   })
 

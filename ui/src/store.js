@@ -1086,7 +1086,7 @@ function _flushBatch() {
     if (_pendingNew.length) {
         const toAdd = _pendingNew.reverse()   // newest-first
         _pendingNew = []
-        toAdd.forEach(r => applyHighlightRules(r))
+        toAdd.forEach(r => { applyHighlightRules(r); _knownRequestIds.add(String(r.id)) })
         requests.value.unshift(...toAdd)
         if (requests.value.length > MAX_LIVE_REQUESTS) requests.value.splice(MAX_LIVE_REQUESTS)
     }
@@ -1102,6 +1102,25 @@ function _flushBatch() {
 
 function _scheduleBatchFlush() {
     if (!_batchTimer) _batchTimer = setTimeout(_flushBatch, 50)
+}
+
+// Tracks every request id we've ever shown, so a WebSocket connection that's
+// still streaming messages after "Clear All Traffic" doesn't get resurrected
+// as a fake "[Missed Handshake]" row — only truly-never-seen ids get one.
+const _knownRequestIds = new Set()
+
+// Cancels any in-flight batched NEW_REQUEST/UPDATE_REQUEST payloads and wipes
+// all traffic state. Used by the trash-icon "Clear All Traffic" action —
+// mutating requests.value directly isn't enough because a batch flush
+// scheduled just before the click can land right after and re-add the
+// requests that were queued in that ~50ms window.
+export const clearTraffic = () => {
+    if (_batchTimer) { clearTimeout(_batchTimer); _batchTimer = null }
+    _pendingNew = []
+    _pendingUpdate = []
+    requests.value = []
+    wsMessages.value = {}
+    selectedRequest.value = null
 }
 
 export const initWebSocket = () => {
@@ -1304,6 +1323,15 @@ export const initWebSocket = () => {
 
         else if (payload.type === 'WS_MESSAGE') {
             const reqId = String(payload.id);
+            let parentReq = requests.value.find(r => String(r.id) === reqId);
+
+            // Only fabricate a "[Missed Handshake]" placeholder the first time we
+            // ever see this id. If it's already in _knownRequestIds, the parent
+            // was intentionally removed (e.g. "Clear All Traffic") — don't let a
+            // still-open WS connection resurrect it (or its message log) in the UI.
+            if (!parentReq && _knownRequestIds.has(reqId)) {
+                return;
+            }
 
             if (!wsMessages.value[reqId]) {
                 wsMessages.value[reqId] = [];
@@ -1316,9 +1344,8 @@ export const initWebSocket = () => {
                 time: payload.timestamp
             });
 
-            let parentReq = requests.value.find(r => String(r.id) === reqId);
-
             if (!parentReq) {
+                _knownRequestIds.add(reqId);
                 parentReq = {
                     id: reqId,
                     method: payload.method || 'GET',
