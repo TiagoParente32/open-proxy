@@ -4,14 +4,12 @@ import {
   isRecording, 
   toggleRecording, 
   proxyHost, 
-  requests, 
   showMapModal, 
   showBreakpointModal,
   disableCache,
   showMapRemoteModal,
   throttleProfile,
   showHighlightModal,
-  wsMessages,
   showDeviceSetupModal,
   deviceSetupType,
   openComposeNew,
@@ -37,8 +35,8 @@ import {
   macosProxyActive,
   macosProxyLoading,
   toggleMacProxy,
-  selectedRequest,
   closeAllModals,
+  clearTraffic,
 } from '../store.js'
 
 const isMac = () => window.electronAPI?.platform === 'darwin'
@@ -61,12 +59,6 @@ const openDeviceSetup = (type) => {
 
 const toggleCache = () => {
   disableCache.value = !disableCache.value
-}
-
-const clearTraffic = () => {
-  requests.value.length = 0
-  wsMessages.value = {}
-  selectedRequest.value = null
 }
 
 const showThrottleMenu = ref(false)
