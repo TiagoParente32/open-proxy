@@ -61,7 +61,7 @@ const finish = () => {
   const hosts = raw.map(normalizeEntry).filter(Boolean)
   syncProxyIgnoreHosts(hosts, selected.value || 'ignore')
   localStorage.setItem('openproxyOnboardingVersion', props.appVersion)
-  localStorage.removeItem('openproxyOnboardingDone')
+  localStorage.setItem('openproxyOnboardingDone', '1')
   emit('done')
 }
 </script>
