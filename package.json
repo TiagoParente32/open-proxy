@@ -15,6 +15,9 @@
   "build": {
     "appId": "com.openproxy.app",
     "productName": "OpenProxy",
+    "directories": {
+      "output": "dist-electron"
+    },
     "files": [
       "electron/**/*"
     ],
