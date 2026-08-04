@@ -186,8 +186,7 @@ const showUpdateModal = computed(() =>
 const showAboutModal  = ref(false)
 const showShortcutsModal = ref(false)
 
-const _storedOnboardingVersion = localStorage.getItem('openproxyOnboardingVersion')
-const showOnboardingModal = ref(!_storedOnboardingVersion || _storedOnboardingVersion !== appVersion)
+const showOnboardingModal = ref(!localStorage.getItem('openproxyOnboardingDone'))
 
 const contextMenuEl = ref(null)
 watch(() => [contextMenu.value.x, contextMenu.value.y, contextMenu.value.show], ([,, visible]) => {
