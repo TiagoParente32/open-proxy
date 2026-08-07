@@ -14,6 +14,12 @@ Set-Location $PSScriptRoot
 $version = node -p "require('./package.json').version"
 Write-Host "Building OpenProxy v$version"
 
+# Generate version.json so the packaged app can read its own version at
+# runtime (see main.py::_read_app_version). Named distinctly from
+# package.json to avoid electron-builder's special-cased handling of that
+# filename when copied via extraResources.
+node -e "require('fs').writeFileSync('version.json', JSON.stringify({ version: require('./package.json').version }))"
+
 # ── 1. Vue UI ────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "→ [1/3] Building Vue UI..."
