@@ -3,3 +3,4 @@ websockets
 psutil
 Pillow
 pyinstaller
+certifi
