@@ -332,10 +332,11 @@ export const iosRevertProgress = ref({
 })
 
 // macOS system proxy state
-export const macosProxyActive = ref(false)
-export const macosProxyLoading = ref(false)
-export const macosProxyError = ref(null)
-export const macosProxyServices = ref([])
+export const macosProxyActive       = ref(false)
+export const macosProxyLoading      = ref(false)
+export const macosProxyFirstTimeSetup = ref(false)   // true while the one-time sudoers install runs
+export const macosProxyError        = ref(null)
+export const macosProxyServices     = ref([])
 
 // Proxy engine options (persisted)
 export const proxyHttp2        = ref(loadState('proxyHttp2', true))
@@ -1323,9 +1324,14 @@ export const initWebSocket = () => {
             }
         }
 
+        else if (payload.type === "MACOS_PROXY_FIRST_TIME_SETUP") {
+            macosProxyFirstTimeSetup.value = true
+        }
+
         else if (payload.type === "MACOS_PROXY_STATUS") {
             const status = payload.data ?? payload
             macosProxyLoading.value = false
+            macosProxyFirstTimeSetup.value = false
             macosProxyActive.value = status.active ?? false
             macosProxyServices.value = status.services ?? []
             if (status.error && status.error !== 'cancelled') {
