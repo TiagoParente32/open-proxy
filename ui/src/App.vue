@@ -245,6 +245,10 @@ const openGitHub = () => {
   window.electronAPI?.openExternal('https://github.com/TiagoParente32/open-proxy')
 }
 
+const openReleasesManually = () => {
+  window.electronAPI?.openExternal('https://github.com/TiagoParente32/open-proxy/releases/latest')
+}
+
 const startUpdate = () => {
   if (updateInfo.value?.download_url) applyUpdate(updateInfo.value.download_url)
 }
@@ -473,7 +477,12 @@ const openBreakpointModalFromContext = () => {
               </div>
               <h3 class="update-modal-title">Update Failed</h3>
               <p class="update-modal-error-msg">{{ updateError }}</p>
+              <p class="update-modal-hint">
+                If this keeps happening, you can download and install the latest
+                version manually from GitHub.
+              </p>
               <div class="update-modal-actions">
+                <button class="update-btn-skip" @click="openReleasesManually">Download Manually</button>
                 <button class="update-btn-install" @click="dismissUpdate">Dismiss</button>
               </div>
             </template>

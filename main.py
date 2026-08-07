@@ -271,6 +271,19 @@ def _get_ssl_context():
         return ssl.create_default_context()
 
 
+def _friendly_update_error(e):
+    """Translate low-level exceptions from check_for_updates() into a message
+    that gives the user something actionable, instead of a raw traceback."""
+    msg = str(e)
+    if 'CERTIFICATE_VERIFY_FAILED' in msg or isinstance(e, ssl.SSLCertVerificationError):
+        return (
+            "Could not verify GitHub's SSL certificate (missing local root "
+            "certificates). Please download the latest version manually from "
+            "the Releases page below."
+        )
+    return msg
+
+
 def check_for_updates():
     """
     Query GitHub Releases API. Returns a dict if a newer version is available, else None.
@@ -2250,7 +2263,7 @@ class ProxyUIBridge:
                         except Exception as e:
                             await websocket.send(json.dumps({
                                 "type": "UPDATE_CHECK_ERROR",
-                                "data": {"error": str(e)},
+                                "data": {"error": _friendly_update_error(e)},
                             }))
                             return
                         if info:
