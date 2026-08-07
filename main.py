@@ -361,8 +361,10 @@ def check_for_updates():
             'release_url': f"https://github.com/{GITHUB_REPO}/releases/tag/{latest}",
         }
     except Exception as e:
+        # Re-raise so callers can tell "check failed" apart from "no update
+        # available" instead of both silently resolving to no-update.
         print(f"[Update] Check failed: {e}")
-        return None
+        raise
 
 
 def _launch_linux_script(script, needs_elevation):
@@ -2226,7 +2228,14 @@ class ProxyUIBridge:
 
                 elif payload.get("type") == "CHECK_FOR_UPDATES":
                     async def _check():
-                        info = await asyncio.get_event_loop().run_in_executor(None, check_for_updates)
+                        try:
+                            info = await asyncio.get_event_loop().run_in_executor(None, check_for_updates)
+                        except Exception as e:
+                            await websocket.send(json.dumps({
+                                "type": "UPDATE_CHECK_ERROR",
+                                "data": {"error": str(e)},
+                            }))
+                            return
                         if info:
                             await websocket.send(json.dumps({"type": "UPDATE_AVAILABLE", "data": info}))
                         else:
@@ -2470,16 +2479,20 @@ async def run_ws_forever(bridge):
             print(f"[ERROR] WebSocket server crashed: {e}. Restarting in 3 seconds...")
             await asyncio.sleep(3)
 
+UPDATE_CHECK_INTERVAL_SECS = 6 * 60 * 60  # re-check every 6 hours for long-running sessions
+
 async def _auto_check_update(bridge):
-    """Wait for the UI to connect, then check for updates in the background."""
+    """Wait for the UI to connect, then periodically check for updates in the background."""
     await asyncio.sleep(8)
-    try:
-        info = await asyncio.get_event_loop().run_in_executor(None, check_for_updates)
-        if info:
-            bridge.pending_update_info = info
-            await bridge.broadcast_to_ui("UPDATE_AVAILABLE", info)
-    except Exception as e:
-        print(f"[Update] Auto-check error: {e}")
+    while True:
+        try:
+            info = await asyncio.get_event_loop().run_in_executor(None, check_for_updates)
+            if info:
+                bridge.pending_update_info = info
+                await bridge.broadcast_to_ui("UPDATE_AVAILABLE", info)
+        except Exception as e:
+            print(f"[Update] Auto-check error: {e}")
+        await asyncio.sleep(UPDATE_CHECK_INTERVAL_SECS)
 
 
 def run_async_loop(bridge, proxy_port):

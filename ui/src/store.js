@@ -1414,6 +1414,13 @@ export const initWebSocket = () => {
             upToDate.value = true
             setTimeout(() => { upToDate.value = false }, 4000)
         }
+        else if (payload.type === 'UPDATE_CHECK_ERROR') {
+            // A failed check (network error, rate limit, etc.) is NOT the
+            // same as "you're up to date" — surface it so it isn't silently
+            // mistaken for "no update available".
+            updateError.value = payload.data?.error || 'Could not check for updates.'
+            upToDate.value = false
+        }
         else if (payload.type === 'UPDATE_PROGRESS') {
             updateProgress.value = payload.data.pct
         }
