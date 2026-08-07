@@ -829,7 +829,7 @@ def list_ios_simulators():
 # MACOS SYSTEM PROXY HELPERS  (macOS only)
 # ============================================================================
 def get_active_network_services():
-    """Returns list of network service names that are currently active (have an IP)."""
+    """Returns all enabled (non-asterisk) network service names."""
     if sys.platform != "darwin":
         return []
     try:
@@ -842,17 +842,7 @@ def get_active_network_services():
             line = line.strip()
             if not line or line.startswith("An asterisk") or line.startswith("*"):
                 continue
-            # Check if the service has an active IP
-            info = subprocess.run(
-                ["networksetup", "-getinfo", line],
-                capture_output=True, text=True, timeout=5
-            )
-            for info_line in info.stdout.splitlines():
-                if info_line.startswith("IP address:"):
-                    ip = info_line.split(":", 1)[1].strip()
-                    if ip and ip.lower() != "none":
-                        services.append(line)
-                    break
+            services.append(line)
         return services
     except Exception:
         return []
