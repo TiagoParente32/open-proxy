@@ -1,9 +1,9 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { syncProxyIgnoreHosts, sortOrder, disableCache } from '../store.js'
+import { ref, computed, watch } from 'vue'
+import { syncProxyIgnoreHosts, sortOrder, disableCache, proxyHostFilterMode, proxyIgnoreHosts, proxyAllowHosts } from '../store.js'
 import { themes, applyTheme, currentThemeId } from '../composables/useTheme.js'
 
-const props = defineProps({ appVersion: String })
+const props = defineProps({ appVersion: String, prefill: Boolean })
 const emit = defineEmits(['done'])
 
 const TOTAL_STEPS = 4
@@ -14,10 +14,21 @@ const selectedTheme = ref(currentThemeId.value)
 const pickTheme = (id) => { selectedTheme.value = id; applyTheme(id) }
 
 // Step 2 – intercept mode
-const selected = ref(null)
+const selected = ref(props.prefill ? proxyHostFilterMode.value : null)
 
-// Step 3 – add hosts
-const draft = ref('')
+// Step 3 – add hosts (Selective Interception only — "Intercept Everything" skips this step,
+// but the underlying ignore-list draft still tracks any existing exclusions so finishing
+// onboarding without touching this step doesn't silently wipe them out).
+const draft = ref(props.prefill
+  ? (proxyHostFilterMode.value === 'allow' ? proxyAllowHosts.value : proxyIgnoreHosts.value).join('\n')
+  : '')
+// Keep the draft in sync with whichever host list belongs to the newly chosen
+// mode, so switching between modes on step 2 never mixes up or silently
+// discards previously-saved hosts.
+watch(selected, (mode) => {
+  if (!props.prefill) { draft.value = ''; return }
+  draft.value = (mode === 'allow' ? proxyAllowHosts.value : proxyIgnoreHosts.value).join('\n')
+})
 const normalizeEntry = (input) => {
   const s = input.trim()
   if (!s) return null
@@ -43,16 +54,33 @@ const addPreset = (value) => {
   if (!lines.includes(value)) lines.push(value)
   draft.value = lines.join('\n')
 }
+const draftHosts = computed(() => draft.value.split('\n').map(l => l.trim()).filter(Boolean))
+// Selective Interception only intercepts listed hosts, so it needs at least
+// one — otherwise nothing would ever be intercepted, which isn't a state a
+// user would knowingly want to finish onboarding in.
+const needsHost = computed(() => selected.value === 'allow' && draftHosts.value.length === 0)
 
 // Step 4 – quick settings
-const selectedSortOrder = ref('desc')
-const enableNoCache = ref(false)
+const selectedSortOrder = ref(props.prefill ? sortOrder.value : 'desc')
+const enableNoCache = ref(props.prefill ? disableCache.value : false)
 
 // Navigation
-const canProceed = computed(() => step.value !== 2 || selected.value !== null)
-const goNext = () => { if (canProceed.value && step.value < TOTAL_STEPS) step.value++ }
-const goBack = () => { if (step.value > 1) step.value-- }
-const skipHosts = () => { step.value++ }  // skip to settings without hosts
+const canProceed = computed(() => {
+  if (step.value === 2) return selected.value !== null
+  if (step.value === 3) return !needsHost.value
+  return true
+})
+// "Intercept Everything" has nothing to configure on step 3 (no hosts
+// required), so jump straight from step 2 to step 4 for that mode.
+const goNext = () => {
+  if (!canProceed.value) return
+  if (step.value === 2 && selected.value === 'ignore') { step.value = 4; return }
+  if (step.value < TOTAL_STEPS) step.value++
+}
+const goBack = () => {
+  if (step.value === 4 && selected.value === 'ignore') { step.value = 2; return }
+  if (step.value > 1) step.value--
+}
 
 const finish = () => {
   sortOrder.value = selectedSortOrder.value
@@ -148,17 +176,11 @@ const finish = () => {
           </div>
         </template>
 
-        <!-- ── STEP 3: Add hosts ── -->
+        <!-- ── STEP 3: Add hosts (Selective Interception only) ── -->
         <template v-else-if="step === 3">
           <div class="ob-step2-header">
-            <div v-if="selected === 'allow'">
-              <h2 class="ob-title" style="font-size:18px">Add hosts to intercept</h2>
-              <p class="ob-subtitle">Only these hosts will be intercepted. Add the apps you want to debug.</p>
-            </div>
-            <div v-else>
-              <h2 class="ob-title" style="font-size:18px">Any hosts to skip? <span style="font-weight:400;font-size:14px;color:var(--fg-muted)">(optional)</span></h2>
-              <p class="ob-subtitle">These hosts will pass through without interception — useful for apps with strict certificate pinning.</p>
-            </div>
+            <h2 class="ob-title" style="font-size:18px">Add hosts to intercept</h2>
+            <p class="ob-subtitle">Only these hosts will be intercepted. Add the apps you want to debug.</p>
           </div>
 
           <div class="ob-presets-label">Quick add</div>
@@ -171,20 +193,20 @@ const finish = () => {
           <textarea
             v-model="draft"
             class="ob-textarea"
-            :placeholder="selected === 'allow'
-              ? 'api.example.com\nhttps://app.myservice.com\n*.mycompany.com'
-              : 'api.example.com\nhttps://app.myservice.com\n*.googleapis.com'"
+            placeholder="api.example.com&#10;https://app.myservice.com&#10;*.mycompany.com"
             spellcheck="false"
           />
           <p class="ob-hint">
             Enter hostnames, URLs, or use <code>*.example.com</code> to match all subdomains.
           </p>
+          <p v-if="needsHost" class="ob-hint ob-hint-warn">
+            Add at least one host — Selective Interception only intercepts hosts you list here.
+          </p>
 
           <div class="ob-footer">
             <button class="ob-btn-back" @click="goBack">← Back</button>
             <div style="flex:1"/>
-            <button v-if="selected === 'ignore'" class="ob-btn-skip" @click="skipHosts">Skip</button>
-            <button class="ob-btn" @click="goNext">Next →</button>
+            <button class="ob-btn" :disabled="needsHost" @click="goNext">Next →</button>
           </div>
         </template>
 
@@ -345,6 +367,7 @@ const finish = () => {
 }
 .ob-textarea:focus { border-color: var(--accent); }
 .ob-hint { font-size: 11px; color: var(--fg-muted); margin: 0; width: 100%; }
+.ob-hint-warn { color: var(--warning, #d29922); margin-top: -4px; }
 .ob-hint code {
   background: var(--bg-deepest); border: 1px solid var(--border);
   padding: 1px 5px; border-radius: 3px; font-size: 10px;
@@ -387,11 +410,6 @@ const finish = () => {
   color: var(--fg-muted); padding: 8px 14px; border-radius: 6px; cursor: pointer; transition: all 0.15s;
 }
 .ob-btn-back:hover { color: var(--fg-primary); border-color: var(--fg-muted); }
-.ob-btn-skip {
-  font-size: 12px; background: transparent; border: none;
-  color: var(--fg-muted); padding: 8px 14px; border-radius: 6px; cursor: pointer; transition: color 0.15s;
-}
-.ob-btn-skip:hover { color: var(--fg-secondary); }
 .ob-btn {
   background: var(--accent); color: #fff; border: none;
   border-radius: 8px; padding: 9px 28px; font-size: 13px;

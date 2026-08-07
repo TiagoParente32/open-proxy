@@ -131,7 +131,7 @@ export const searchQuery = ref('')
 export const searchScope = ref('All')
 export const searchMatchType = ref('Contains')
 export const sortKey = ref('time')
-export const sortOrder = ref('desc')
+export const sortOrder = ref(loadState('sortOrder', 'desc'))
 
 const normalizePinnedSource = (source) => String(source ?? '').trim()
 
@@ -346,7 +346,8 @@ export const proxyAllowHosts   = ref(loadState('proxyAllowHosts', []))
 export const proxyHostFilterMode = ref(loadState('proxyHostFilterMode', 'ignore'))
 
 // UI modal visibility (shared so sidebar can trigger it)
-export const showIgnoreHostsModal = ref(false)
+export const showIgnoreHostsModal   = ref(false)
+export const showOsProxyWarning     = ref(false)
 
 
 export const closeAllModals = () => {
@@ -506,6 +507,15 @@ export const toggleMacProxy = () => {
     }))
 }
 
+// mitmproxy treats an empty allow_hosts (together with an empty ignore_hosts)
+// as "no filter configured" and intercepts everything. That's the right
+// default for "Intercept Everything" mode, but for "Selective Interception"
+// with zero hosts added, the user expects nothing to be intercepted — so we
+// send a sentinel regex that never matches any hostname, which makes
+// mitmproxy's allow-list check fail for every host and pass all traffic
+// through untouched.
+const NEVER_MATCH_HOST = '(?!)'
+
 const _sendProxyOptions = () => {
     if (wsConnection?.readyState === WebSocket.OPEN) {
         const mode = proxyHostFilterMode.value
@@ -514,7 +524,7 @@ const _sendProxyOptions = () => {
             http2: proxyHttp2.value,
             upstream_cert: proxyUpstreamCert.value,
             ignore_hosts: mode === 'ignore' ? proxyIgnoreHosts.value : [],
-            allow_hosts:  mode === 'allow'  ? proxyAllowHosts.value  : [],
+            allow_hosts:  mode === 'allow'  ? (proxyAllowHosts.value.length ? proxyAllowHosts.value : [NEVER_MATCH_HOST]) : [],
         }))
     }
 }
@@ -1031,6 +1041,10 @@ watch(disableCache, (newVal) => {
     }
 })
 
+watch(sortOrder, (newVal) => {
+    saveState('sortOrder', newVal)
+})
+
 watch(toolbarVisibility, (val) => {
     saveState('toolbarVisibility', { ...val })
     window.electronAPI?.toolbarSyncToMain?.({ ...val })
@@ -1319,6 +1333,11 @@ export const initWebSocket = () => {
             } else if (!status.error) {
                 macosProxyError.value = null
             }
+            // Warn if the OS proxy was just enabled while no host-filter is active
+            // (mode is 'ignore' with an empty list means all traffic is intercepted)
+            if (macosProxyActive.value && proxyHostFilterMode.value === 'ignore' && proxyIgnoreHosts.value.length === 0) {
+                showOsProxyWarning.value = true
+            }
         }
 
         else if (payload.type === 'WS_MESSAGE') {
@@ -1513,7 +1532,7 @@ export const importSettings = async () => {
     // Restore localStorage-backed settings
     const LS_KEYS = [
         'theme', 'toolbarVisibility', 'throttleProfile', 'disableCache',
-        'isFocusMode', 'pinnedSources', 'activeChips',
+        'isFocusMode', 'pinnedSources', 'activeChips', 'sortOrder',
         'mapLocalRules', 'enableMapLocal',
         'mapRemoteRules', 'enableMapRemote',
         'breakpointRules', 'breakpointsEnabled',

@@ -25,6 +25,7 @@ import ProgressOverlay from './components/ProgressOverlay.vue'
 import IgnoreHostsModal from './components/IgnoreHostsModal.vue'
 import OnboardingModal from './components/OnboardingModal.vue'
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal.vue'
+import OsProxyWarningModal from './components/OsProxyWarningModal.vue'
 // Import just the logic needed for the top-level app overlay (WebSockets & Context Menu)
 import { 
   initWebSocket, 
@@ -134,6 +135,7 @@ onMounted(() => {
     importHostFilter: () => importHostFilter(),
     focusSearch:      () => document.dispatchEvent(new CustomEvent('openproxy:focus-search')),
     openShortcuts:    () => { showShortcutsModal.value = true },
+    showOnboarding:   () => { closeAllModals(); showOnboardingModal.value = true },
   }
 
   // ── Global keyboard shortcuts ────────────────────────────────────────────
@@ -186,7 +188,38 @@ const showUpdateModal = computed(() =>
 const showAboutModal  = ref(false)
 const showShortcutsModal = ref(false)
 
-const showOnboardingModal = ref(!localStorage.getItem('openproxyOnboardingDone'))
+// The onboarding flow was introduced in this app version. It should appear:
+//  1. On a brand-new install (no local data at all), or
+//  2. When updating from an older version that predates onboarding
+//     (app data/settings exist, but the onboarding flag was never set).
+// Once a user completes onboarding, `openproxyOnboardingDone` persists across
+// updates and it must never be shown again automatically.
+const ONBOARDING_INTRODUCED_VERSION = '1.0.5'
+
+const compareVersions = (a, b) => {
+  const pa = String(a).split('.').map(Number)
+  const pb = String(b).split('.').map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+const hasOnboarded = !!localStorage.getItem('openproxyOnboardingDone')
+const onboardedVersion = localStorage.getItem('openproxyOnboardingVersion')
+// Any pre-existing openproxy_* setting means this isn't a fresh install.
+const hasPriorInstallData = Object.keys(localStorage).some(k => k.startsWith('openproxy_') || k === 'openproxy-theme')
+
+const needsOnboarding = !hasOnboarded && (
+  !hasPriorInstallData || // fresh install
+  !onboardedVersion || compareVersions(onboardedVersion, ONBOARDING_INTRODUCED_VERSION) < 0 // updated from a version without onboarding
+)
+
+const showOnboardingModal = ref(needsOnboarding)
+// Whether there is pre-existing user data to prefill the onboarding steps with
+// (vs. a truly blank/fresh install where defaults make more sense).
+const onboardingPrefill = hasPriorInstallData
 
 const contextMenuEl = ref(null)
 watch(() => [contextMenu.value.x, contextMenu.value.y, contextMenu.value.show], ([,, visible]) => {
@@ -561,8 +594,9 @@ const openBreakpointModalFromContext = () => {
     <DeviceSetupModal />
     <ScriptingModal />
     <IgnoreHostsModal :show="showIgnoreHostsModal" @close="showIgnoreHostsModal = false" />
-    <OnboardingModal v-if="showOnboardingModal" :app-version="appVersion" @done="showOnboardingModal = false" />
+    <OnboardingModal v-if="showOnboardingModal" :app-version="appVersion" :prefill="onboardingPrefill" @done="showOnboardingModal = false" />
     <KeyboardShortcutsModal v-if="showShortcutsModal" @close="showShortcutsModal = false" />
+    <OsProxyWarningModal />
   </div>
 </template>
 

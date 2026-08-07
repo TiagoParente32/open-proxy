@@ -288,7 +288,25 @@ function setupMenu () {
     win?.webContents.executeJavaScript(`window.__op && window.__op.${code}`)
 
   const template = [
-    ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
+    ...(process.platform === 'darwin' ? [{
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        {
+          label: 'Check for Updates',
+          click: () => win?.webContents.executeJavaScript('window.__op?.checkForUpdates()'),
+        },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    }] : []),
     {
       label: 'Edit',
       submenu: [
@@ -439,15 +457,23 @@ function setupMenu () {
     {
       label: 'Help',
       submenu: [
-        {
-          label: 'Check for Updates',
-          click: () => win?.webContents.executeJavaScript('window.__op?.checkForUpdates()'),
-        },
-        { type: 'separator' },
+        // On macOS, "Check for Updates" lives in the OpenProxy app menu instead.
+        ...(process.platform !== 'darwin' ? [
+          {
+            label: 'Check for Updates',
+            click: () => win?.webContents.executeJavaScript('window.__op?.checkForUpdates()'),
+          },
+          { type: 'separator' },
+        ] : []),
         {
           label: 'Keyboard Shortcuts…',
           accelerator: 'CmdOrCtrl+Shift+/',
           click: () => win?.webContents.executeJavaScript('window.__op?.openShortcuts()'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Show Onboarding…',
+          click: () => win?.webContents.executeJavaScript('window.__op?.showOnboarding()'),
         },
         { type: 'separator' },
         {
