@@ -507,6 +507,15 @@ export const toggleMacProxy = () => {
     }))
 }
 
+// mitmproxy treats an empty allow_hosts (together with an empty ignore_hosts)
+// as "no filter configured" and intercepts everything. That's the right
+// default for "Intercept Everything" mode, but for "Selective Interception"
+// with zero hosts added, the user expects nothing to be intercepted — so we
+// send a sentinel regex that never matches any hostname, which makes
+// mitmproxy's allow-list check fail for every host and pass all traffic
+// through untouched.
+const NEVER_MATCH_HOST = '(?!)'
+
 const _sendProxyOptions = () => {
     if (wsConnection?.readyState === WebSocket.OPEN) {
         const mode = proxyHostFilterMode.value
@@ -515,7 +524,7 @@ const _sendProxyOptions = () => {
             http2: proxyHttp2.value,
             upstream_cert: proxyUpstreamCert.value,
             ignore_hosts: mode === 'ignore' ? proxyIgnoreHosts.value : [],
-            allow_hosts:  mode === 'allow'  ? proxyAllowHosts.value  : [],
+            allow_hosts:  mode === 'allow'  ? (proxyAllowHosts.value.length ? proxyAllowHosts.value : [NEVER_MATCH_HOST]) : [],
         }))
     }
 }
