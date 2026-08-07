@@ -346,7 +346,8 @@ export const proxyAllowHosts   = ref(loadState('proxyAllowHosts', []))
 export const proxyHostFilterMode = ref(loadState('proxyHostFilterMode', 'ignore'))
 
 // UI modal visibility (shared so sidebar can trigger it)
-export const showIgnoreHostsModal = ref(false)
+export const showIgnoreHostsModal   = ref(false)
+export const showOsProxyWarning     = ref(false)
 
 
 export const closeAllModals = () => {
@@ -1318,6 +1319,11 @@ export const initWebSocket = () => {
                 macosProxyError.value = status.error
             } else if (!status.error) {
                 macosProxyError.value = null
+            }
+            // Warn if the OS proxy was just enabled while no host-filter is active
+            // (mode is 'ignore' with an empty list means all traffic is intercepted)
+            if (macosProxyActive.value && proxyHostFilterMode.value === 'ignore' && proxyIgnoreHosts.value.length === 0) {
+                showOsProxyWarning.value = true
             }
         }
 
