@@ -31,6 +31,10 @@
         "to": "backend/"
       },
       {
+        "from": "version.json",
+        "to": "version.json"
+      },
+      {
         "from": "icon.png",
         "to": "icon.png"
       },

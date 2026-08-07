@@ -16,6 +16,12 @@ MODE="${1:-}"
 
 VERSION=$(node -p "require('./package.json').version")
 
+# Generate version.json so the packaged app can read its own version at
+# runtime (see main.py::_read_app_version). Named distinctly from
+# package.json to avoid electron-builder's special-cased handling of that
+# filename when copied via extraResources.
+node -e "require('fs').writeFileSync('version.json', JSON.stringify({ version: require('./package.json').version }))"
+
 # Determine target arch
 if [ "$MODE" = "--arm64" ]; then
   TARGET_ARCH="arm64"

@@ -29,11 +29,14 @@ def _read_app_version():
     """Read version from package.json so there's a single source of truth."""
     try:
         if getattr(sys, 'frozen', False):
-            # PyInstaller: exe is inside resources/backend/OpenProxy-server/
-            root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(sys.executable)), '..', '..', '..'))
+            # PyInstaller: exe is inside <resources>/backend/OpenProxy-server/
+            # Two levels up from the exe's dir lands on <resources> itself
+            # (same place electron/main.js copies icon.png etc. via extraResources).
+            root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(sys.executable)), '..', '..'))
         else:
             root = os.path.dirname(os.path.abspath(__file__))
-        with open(os.path.join(root, 'package.json')) as _f:
+        version_file = 'version.json' if getattr(sys, 'frozen', False) else 'package.json'
+        with open(os.path.join(root, version_file)) as _f:
             return json.load(_f)['version']
     except Exception:
         return "1.0.16"   # fallback — keep in sync if auto-read ever fails
