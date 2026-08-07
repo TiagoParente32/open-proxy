@@ -47,15 +47,6 @@ OPENPROXY_DATA_DIR = os.path.join(os.path.expanduser("~"), ".openproxy")
 SCRIPTS_DIR        = os.path.join(OPENPROXY_DATA_DIR, "scripts")
 SCRIPTS_META_FILE  = os.path.join(OPENPROXY_DATA_DIR, "scripts_meta.json")
 
-# Hosts that are always bypassed/ignored so Google Meet screen sharing works.
-# mitmproxy treats these as regex patterns matched against the request hostname.
-GOOGLE_IGNORE_HOSTS = [
-    r".*\.google\.com",
-    r".*\.googleapis\.com",
-    r".*\.googlevideo\.com",
-    r".*\.gstatic\.com",
-]
-
 # Global refs so background threads can reach the bridge and its event loop
 _global_bridge = None
 _global_loop   = None
@@ -1892,14 +1883,6 @@ class ProxyUIBridge:
         if result.get("ok"):
             self.is_mac_proxy_set = enable
             self.mac_proxy_services = result.get("services", []) if enable else []
-            if self._master:
-                current = list(self._master.options.ignore_hosts or [])
-                if enable:
-                    merged = GOOGLE_IGNORE_HOSTS + [h for h in current if h not in GOOGLE_IGNORE_HOSTS]
-                    self._master.options.update(ignore_hosts=merged)
-                else:
-                    stripped = [h for h in current if h not in GOOGLE_IGNORE_HOSTS]
-                    self._master.options.update(ignore_hosts=stripped)
 
         await self.broadcast_to_ui("MACOS_PROXY_STATUS", {
             "active": self.is_mac_proxy_set,
@@ -1950,13 +1933,7 @@ class ProxyUIBridge:
                             opts["upstream_cert"] = bool(payload["upstream_cert"])
                         if "ignore_hosts" in payload:
                             hosts = payload["ignore_hosts"]
-                            user_hosts = [h for h in hosts if h.strip()]
-                            if self.is_mac_proxy_set:
-                                # Keep Google domains ignored while OS proxy is on
-                                merged = GOOGLE_IGNORE_HOSTS + [h for h in user_hosts if h not in GOOGLE_IGNORE_HOSTS]
-                                opts["ignore_hosts"] = merged
-                            else:
-                                opts["ignore_hosts"] = user_hosts
+                            opts["ignore_hosts"] = [h for h in hosts if h.strip()]
                         if "allow_hosts" in payload:
                             hosts = payload["allow_hosts"]
                             opts["allow_hosts"] = [h for h in hosts if h.strip()]
