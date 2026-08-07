@@ -2,6 +2,8 @@ name: Release on PR merge
 
 # Fires when a pull request into `main` is closed. `merged == true` is what
 # distinguishes an actual (squash-)merge from a PR that was just closed.
+# Releases only happen when the merged PR carries the `release` label
+# (opt-in), or when manually triggered via workflow_dispatch.
 on:
   pull_request:
     types: [closed]
@@ -18,7 +20,10 @@ concurrency:
 jobs:
   # ── 1. Bump the version and tag the release ──────────────────────
   bump-version:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       contains(github.event.pull_request.labels.*.name, 'release'))
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.bump.outputs.version }}
