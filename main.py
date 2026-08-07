@@ -877,12 +877,7 @@ def set_macos_proxy(port: int) -> dict:
     if not services:
         return {'ok': False, 'services': [], 'error': 'No active network services found.'}
 
-    # Google Meet domains are excluded so screen sharing and WebRTC work correctly
-    bypass = (
-        "127.0.0.1 localhost ::1 *.local "
-        "192.168.0.0/16 10.0.0.0/8 172.16.0.0/12 "
-        "*.google.com *.googleapis.com *.googlevideo.com *.gstatic.com"
-    )
+    bypass = "127.0.0.1 localhost ::1 *.local 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12"
     cmds = []
     for svc in services:
         s = svc.replace('"', '\\"')
