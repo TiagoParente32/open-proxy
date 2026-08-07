@@ -187,7 +187,35 @@ const showUpdateModal = computed(() =>
 const showAboutModal  = ref(false)
 const showShortcutsModal = ref(false)
 
-const showOnboardingModal = ref(!localStorage.getItem('openproxyOnboardingDone'))
+// The onboarding flow was introduced in this app version. It should appear:
+//  1. On a brand-new install (no local data at all), or
+//  2. When updating from an older version that predates onboarding
+//     (app data/settings exist, but the onboarding flag was never set).
+// Once a user completes onboarding, `openproxyOnboardingDone` persists across
+// updates and it must never be shown again automatically.
+const ONBOARDING_INTRODUCED_VERSION = '1.0.5'
+
+const compareVersions = (a, b) => {
+  const pa = String(a).split('.').map(Number)
+  const pb = String(b).split('.').map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+const hasOnboarded = !!localStorage.getItem('openproxyOnboardingDone')
+const onboardedVersion = localStorage.getItem('openproxyOnboardingVersion')
+// Any pre-existing openproxy_* setting means this isn't a fresh install.
+const hasPriorInstallData = Object.keys(localStorage).some(k => k.startsWith('openproxy_') || k === 'openproxy-theme')
+
+const needsOnboarding = !hasOnboarded && (
+  !hasPriorInstallData || // fresh install
+  !onboardedVersion || compareVersions(onboardedVersion, ONBOARDING_INTRODUCED_VERSION) < 0 // updated from a version without onboarding
+)
+
+const showOnboardingModal = ref(needsOnboarding)
 
 const contextMenuEl = ref(null)
 watch(() => [contextMenu.value.x, contextMenu.value.y, contextMenu.value.show], ([,, visible]) => {
