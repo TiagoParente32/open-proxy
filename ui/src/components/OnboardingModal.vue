@@ -45,13 +45,22 @@ const addPreset = (value) => {
   if (!lines.includes(value)) lines.push(value)
   draft.value = lines.join('\n')
 }
+const draftHosts = computed(() => draft.value.split('\n').map(l => l.trim()).filter(Boolean))
+// Selective Interception only intercepts listed hosts, so it needs at least
+// one — otherwise nothing would ever be intercepted, which isn't a state a
+// user would knowingly want to finish onboarding in.
+const needsHost = computed(() => selected.value === 'allow' && draftHosts.value.length === 0)
 
 // Step 4 – quick settings
 const selectedSortOrder = ref(props.prefill ? sortOrder.value : 'desc')
 const enableNoCache = ref(props.prefill ? disableCache.value : false)
 
 // Navigation
-const canProceed = computed(() => step.value !== 2 || selected.value !== null)
+const canProceed = computed(() => {
+  if (step.value === 2) return selected.value !== null
+  if (step.value === 3) return !needsHost.value
+  return true
+})
 const goNext = () => { if (canProceed.value && step.value < TOTAL_STEPS) step.value++ }
 const goBack = () => { if (step.value > 1) step.value-- }
 
@@ -180,11 +189,14 @@ const finish = () => {
           <p class="ob-hint">
             Enter hostnames, URLs, or use <code>*.example.com</code> to match all subdomains.
           </p>
+          <p v-if="needsHost" class="ob-hint ob-hint-warn">
+            Add at least one host — Selective Interception only intercepts hosts you list here.
+          </p>
 
           <div class="ob-footer">
             <button class="ob-btn-back" @click="goBack">← Back</button>
             <div style="flex:1"/>
-            <button class="ob-btn" @click="goNext">Next →</button>
+            <button class="ob-btn" :disabled="needsHost" @click="goNext">Next →</button>
           </div>
         </template>
 
@@ -345,6 +357,7 @@ const finish = () => {
 }
 .ob-textarea:focus { border-color: var(--accent); }
 .ob-hint { font-size: 11px; color: var(--fg-muted); margin: 0; width: 100%; }
+.ob-hint-warn { color: var(--warning, #d29922); margin-top: -4px; }
 .ob-hint code {
   background: var(--bg-deepest); border: 1px solid var(--border);
   padding: 1px 5px; border-radius: 3px; font-size: 10px;
