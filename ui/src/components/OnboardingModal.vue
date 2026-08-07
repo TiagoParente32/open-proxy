@@ -54,7 +54,6 @@ const enableNoCache = ref(props.prefill ? disableCache.value : false)
 const canProceed = computed(() => step.value !== 2 || selected.value !== null)
 const goNext = () => { if (canProceed.value && step.value < TOTAL_STEPS) step.value++ }
 const goBack = () => { if (step.value > 1) step.value-- }
-const skipHosts = () => { step.value++ }  // skip to settings without hosts
 
 const finish = () => {
   sortOrder.value = selectedSortOrder.value
@@ -185,7 +184,6 @@ const finish = () => {
           <div class="ob-footer">
             <button class="ob-btn-back" @click="goBack">← Back</button>
             <div style="flex:1"/>
-            <button v-if="selected === 'ignore'" class="ob-btn-skip" @click="skipHosts">Skip</button>
             <button class="ob-btn" @click="goNext">Next →</button>
           </div>
         </template>
@@ -389,11 +387,6 @@ const finish = () => {
   color: var(--fg-muted); padding: 8px 14px; border-radius: 6px; cursor: pointer; transition: all 0.15s;
 }
 .ob-btn-back:hover { color: var(--fg-primary); border-color: var(--fg-muted); }
-.ob-btn-skip {
-  font-size: 12px; background: transparent; border: none;
-  color: var(--fg-muted); padding: 8px 14px; border-radius: 6px; cursor: pointer; transition: color 0.15s;
-}
-.ob-btn-skip:hover { color: var(--fg-secondary); }
 .ob-btn {
   background: var(--accent); color: #fff; border: none;
   border-radius: 8px; padding: 9px 28px; font-size: 13px;
