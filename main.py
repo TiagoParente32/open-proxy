@@ -865,14 +865,13 @@ def _sudoers_entry_for_user(username: str) -> str:
     return f'{username} ALL=(root) NOPASSWD: {NETWORKSETUP}\n'
 
 def _sudoers_ok() -> bool:
-    """Return True if a valid passwordless-networksetup sudoers entry already exists."""
+    """Return True if 'sudo -n networksetup' works without a password prompt."""
     try:
-        username = os.environ.get('USER') or os.environ.get('LOGNAME') or ''
-        if not username:
-            return False
-        with open(SUDOERS_PATH) as f:
-            content = f.read()
-        return _sudoers_entry_for_user(username).strip() in content
+        r = subprocess.run(
+            ['sudo', '-n', NETWORKSETUP, '-help'],
+            capture_output=True, timeout=5
+        )
+        return r.returncode == 0
     except Exception:
         return False
 
