@@ -254,6 +254,23 @@ def _parse_version(tag):
         return (0,)
 
 
+def _get_ssl_context():
+    """
+    Build an SSL context with a reliable CA bundle for outbound HTTPS requests
+    (e.g. the GitHub update check). Some Python installs (Homebrew, python.org
+    on macOS, PyInstaller-frozen builds) don't have access to the system CA
+    store, which causes:
+        [SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate
+    Using certifi's bundled CA file avoids that, falling back to the default
+    system context if certifi isn't available.
+    """
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
+
 def check_for_updates():
     """
     Query GitHub Releases API. Returns a dict if a newer version is available, else None.
@@ -276,7 +293,7 @@ def check_for_updates():
     try:
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         req = urllib.request.Request(url, headers={'User-Agent': f'OpenProxy/{APP_VERSION}'})
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10, context=_get_ssl_context()) as resp:
             data = json.loads(resp.read())
 
         latest = data.get('tag_name', '').strip()
