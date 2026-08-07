@@ -47,6 +47,15 @@ OPENPROXY_DATA_DIR = os.path.join(os.path.expanduser("~"), ".openproxy")
 SCRIPTS_DIR        = os.path.join(OPENPROXY_DATA_DIR, "scripts")
 SCRIPTS_META_FILE  = os.path.join(OPENPROXY_DATA_DIR, "scripts_meta.json")
 
+# Hosts that are always bypassed/ignored so Google Meet screen sharing works.
+# mitmproxy treats these as regex patterns matched against the request hostname.
+GOOGLE_IGNORE_HOSTS = [
+    r".*\.google\.com",
+    r".*\.googleapis\.com",
+    r".*\.googlevideo\.com",
+    r".*\.gstatic\.com",
+]
+
 # Global refs so background threads can reach the bridge and its event loop
 _global_bridge = None
 _global_loop   = None
@@ -868,7 +877,12 @@ def set_macos_proxy(port: int) -> dict:
     if not services:
         return {'ok': False, 'services': [], 'error': 'No active network services found.'}
 
-    bypass = "127.0.0.1 localhost ::1 *.local 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12"
+    # Google Meet domains are excluded so screen sharing and WebRTC work correctly
+    bypass = (
+        "127.0.0.1 localhost ::1 *.local "
+        "192.168.0.0/16 10.0.0.0/8 172.16.0.0/12 "
+        "*.google.com *.googleapis.com *.googlevideo.com *.gstatic.com"
+    )
     cmds = []
     for svc in services:
         s = svc.replace('"', '\\"')
@@ -1933,7 +1947,10 @@ class ProxyUIBridge:
                             opts["upstream_cert"] = bool(payload["upstream_cert"])
                         if "ignore_hosts" in payload:
                             hosts = payload["ignore_hosts"]
-                            opts["ignore_hosts"] = [h for h in hosts if h.strip()]
+                            # Always keep Google domains ignored so Meet screen sharing works
+                            user_hosts = [h for h in hosts if h.strip()]
+                            merged = GOOGLE_IGNORE_HOSTS + [h for h in user_hosts if h not in GOOGLE_IGNORE_HOSTS]
+                            opts["ignore_hosts"] = merged
                         if "allow_hosts" in payload:
                             hosts = payload["allow_hosts"]
                             opts["allow_hosts"] = [h for h in hosts if h.strip()]
@@ -2367,7 +2384,8 @@ async def run_proxy_forever(bridge, proxy_port):
             print(f"[INFO] Starting Mitmproxy on port {proxy_port}, modes={modes}...")
             print(f"[INFO] OpenProxy version: {APP_VERSION}")
             opts = options.Options(listen_host='', listen_port=proxy_port)
-            opts.update(mode=modes)
+            # Bypass Google domains so Google Meet screen sharing (WebRTC) works correctly
+            opts.update(mode=modes, ignore_hosts=GOOGLE_IGNORE_HOSTS)
             master = DumpMaster(opts, with_termlog=False, with_dumper=False)
             master.addons.add(bridge)
             bridge._master = master
