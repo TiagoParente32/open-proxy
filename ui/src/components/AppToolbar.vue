@@ -34,6 +34,7 @@ import {
   showOsProxyBtn,
   macosProxyActive,
   macosProxyLoading,
+  macosProxyFirstTimeSetup,
   toggleMacProxy,
   closeAllModals,
   clearTraffic,
@@ -245,9 +246,11 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         class="toggle"
         @click="toggleMacProxy()"
         :class="{ active: macosProxyActive, loading: macosProxyLoading }"
-        :title="macosProxyActive
-          ? 'macOS system proxy is ON — click to disable (will prompt for admin password)'
-          : 'Route all macOS traffic through this proxy. Will prompt for admin password.'"
+        :title="macosProxyFirstTimeSetup
+          ? 'One-time setup — enter your admin password once to enable passwordless toggling in future'
+          : macosProxyActive
+            ? 'macOS system proxy is ON — click to disable'
+            : 'Route all macOS traffic through this proxy'"
       >
         <span class="toggle-label">OS Proxy</span>
         <div class="switch"></div>
