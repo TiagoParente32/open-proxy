@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { syncProxyIgnoreHosts, sortOrder, disableCache, proxyHostFilterMode, proxyIgnoreHosts, proxyAllowHosts } from '../store.js'
 import { themes, applyTheme, currentThemeId } from '../composables/useTheme.js'
 
@@ -16,10 +16,19 @@ const pickTheme = (id) => { selectedTheme.value = id; applyTheme(id) }
 // Step 2 – intercept mode
 const selected = ref(props.prefill ? proxyHostFilterMode.value : null)
 
-// Step 3 – add hosts
+// Step 3 – add hosts (Selective Interception only — "Intercept Everything" skips this step,
+// but the underlying ignore-list draft still tracks any existing exclusions so finishing
+// onboarding without touching this step doesn't silently wipe them out).
 const draft = ref(props.prefill
   ? (proxyHostFilterMode.value === 'allow' ? proxyAllowHosts.value : proxyIgnoreHosts.value).join('\n')
   : '')
+// Keep the draft in sync with whichever host list belongs to the newly chosen
+// mode, so switching between modes on step 2 never mixes up or silently
+// discards previously-saved hosts.
+watch(selected, (mode) => {
+  if (!props.prefill) { draft.value = ''; return }
+  draft.value = (mode === 'allow' ? proxyAllowHosts.value : proxyIgnoreHosts.value).join('\n')
+})
 const normalizeEntry = (input) => {
   const s = input.trim()
   if (!s) return null
@@ -61,8 +70,17 @@ const canProceed = computed(() => {
   if (step.value === 3) return !needsHost.value
   return true
 })
-const goNext = () => { if (canProceed.value && step.value < TOTAL_STEPS) step.value++ }
-const goBack = () => { if (step.value > 1) step.value-- }
+// "Intercept Everything" has nothing to configure on step 3 (no hosts
+// required), so jump straight from step 2 to step 4 for that mode.
+const goNext = () => {
+  if (!canProceed.value) return
+  if (step.value === 2 && selected.value === 'ignore') { step.value = 4; return }
+  if (step.value < TOTAL_STEPS) step.value++
+}
+const goBack = () => {
+  if (step.value === 4 && selected.value === 'ignore') { step.value = 2; return }
+  if (step.value > 1) step.value--
+}
 
 const finish = () => {
   sortOrder.value = selectedSortOrder.value
@@ -158,17 +176,11 @@ const finish = () => {
           </div>
         </template>
 
-        <!-- ── STEP 3: Add hosts ── -->
+        <!-- ── STEP 3: Add hosts (Selective Interception only) ── -->
         <template v-else-if="step === 3">
           <div class="ob-step2-header">
-            <div v-if="selected === 'allow'">
-              <h2 class="ob-title" style="font-size:18px">Add hosts to intercept</h2>
-              <p class="ob-subtitle">Only these hosts will be intercepted. Add the apps you want to debug.</p>
-            </div>
-            <div v-else>
-              <h2 class="ob-title" style="font-size:18px">Any hosts to skip? <span style="font-weight:400;font-size:14px;color:var(--fg-muted)">(optional)</span></h2>
-              <p class="ob-subtitle">These hosts will pass through without interception — useful for apps with strict certificate pinning.</p>
-            </div>
+            <h2 class="ob-title" style="font-size:18px">Add hosts to intercept</h2>
+            <p class="ob-subtitle">Only these hosts will be intercepted. Add the apps you want to debug.</p>
           </div>
 
           <div class="ob-presets-label">Quick add</div>
@@ -181,9 +193,7 @@ const finish = () => {
           <textarea
             v-model="draft"
             class="ob-textarea"
-            :placeholder="selected === 'allow'
-              ? 'api.example.com\nhttps://app.myservice.com\n*.mycompany.com'
-              : 'api.example.com\nhttps://app.myservice.com\n*.googleapis.com'"
+            placeholder="api.example.com&#10;https://app.myservice.com&#10;*.mycompany.com"
             spellcheck="false"
           />
           <p class="ob-hint">
