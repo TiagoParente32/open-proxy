@@ -135,6 +135,7 @@ onMounted(() => {
     importHostFilter: () => importHostFilter(),
     focusSearch:      () => document.dispatchEvent(new CustomEvent('openproxy:focus-search')),
     openShortcuts:    () => { showShortcutsModal.value = true },
+    showOnboarding:   () => { closeAllModals(); showOnboardingModal.value = true },
   }
 
   // ── Global keyboard shortcuts ────────────────────────────────────────────
@@ -216,6 +217,9 @@ const needsOnboarding = !hasOnboarded && (
 )
 
 const showOnboardingModal = ref(needsOnboarding)
+// Whether there is pre-existing user data to prefill the onboarding steps with
+// (vs. a truly blank/fresh install where defaults make more sense).
+const onboardingPrefill = hasPriorInstallData
 
 const contextMenuEl = ref(null)
 watch(() => [contextMenu.value.x, contextMenu.value.y, contextMenu.value.show], ([,, visible]) => {
@@ -590,7 +594,7 @@ const openBreakpointModalFromContext = () => {
     <DeviceSetupModal />
     <ScriptingModal />
     <IgnoreHostsModal :show="showIgnoreHostsModal" @close="showIgnoreHostsModal = false" />
-    <OnboardingModal v-if="showOnboardingModal" :app-version="appVersion" @done="showOnboardingModal = false" />
+    <OnboardingModal v-if="showOnboardingModal" :app-version="appVersion" :prefill="onboardingPrefill" @done="showOnboardingModal = false" />
     <KeyboardShortcutsModal v-if="showShortcutsModal" @close="showShortcutsModal = false" />
     <OsProxyWarningModal />
   </div>

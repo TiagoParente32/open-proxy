@@ -1,9 +1,9 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { syncProxyIgnoreHosts, sortOrder, disableCache } from '../store.js'
+import { syncProxyIgnoreHosts, sortOrder, disableCache, proxyHostFilterMode, proxyIgnoreHosts, proxyAllowHosts } from '../store.js'
 import { themes, applyTheme, currentThemeId } from '../composables/useTheme.js'
 
-const props = defineProps({ appVersion: String })
+const props = defineProps({ appVersion: String, prefill: Boolean })
 const emit = defineEmits(['done'])
 
 const TOTAL_STEPS = 4
@@ -14,10 +14,12 @@ const selectedTheme = ref(currentThemeId.value)
 const pickTheme = (id) => { selectedTheme.value = id; applyTheme(id) }
 
 // Step 2 – intercept mode
-const selected = ref(null)
+const selected = ref(props.prefill ? proxyHostFilterMode.value : null)
 
 // Step 3 – add hosts
-const draft = ref('')
+const draft = ref(props.prefill
+  ? (proxyHostFilterMode.value === 'allow' ? proxyAllowHosts.value : proxyIgnoreHosts.value).join('\n')
+  : '')
 const normalizeEntry = (input) => {
   const s = input.trim()
   if (!s) return null
@@ -45,8 +47,8 @@ const addPreset = (value) => {
 }
 
 // Step 4 – quick settings
-const selectedSortOrder = ref('desc')
-const enableNoCache = ref(false)
+const selectedSortOrder = ref(props.prefill ? sortOrder.value : 'desc')
+const enableNoCache = ref(props.prefill ? disableCache.value : false)
 
 // Navigation
 const canProceed = computed(() => step.value !== 2 || selected.value !== null)

@@ -131,7 +131,7 @@ export const searchQuery = ref('')
 export const searchScope = ref('All')
 export const searchMatchType = ref('Contains')
 export const sortKey = ref('time')
-export const sortOrder = ref('desc')
+export const sortOrder = ref(loadState('sortOrder', 'desc'))
 
 const normalizePinnedSource = (source) => String(source ?? '').trim()
 
@@ -1032,6 +1032,10 @@ watch(disableCache, (newVal) => {
     }
 })
 
+watch(sortOrder, (newVal) => {
+    saveState('sortOrder', newVal)
+})
+
 watch(toolbarVisibility, (val) => {
     saveState('toolbarVisibility', { ...val })
     window.electronAPI?.toolbarSyncToMain?.({ ...val })
@@ -1519,7 +1523,7 @@ export const importSettings = async () => {
     // Restore localStorage-backed settings
     const LS_KEYS = [
         'theme', 'toolbarVisibility', 'throttleProfile', 'disableCache',
-        'isFocusMode', 'pinnedSources', 'activeChips',
+        'isFocusMode', 'pinnedSources', 'activeChips', 'sortOrder',
         'mapLocalRules', 'enableMapLocal',
         'mapRemoteRules', 'enableMapRemote',
         'breakpointRules', 'breakpointsEnabled',

@@ -472,6 +472,11 @@ function setupMenu () {
         },
         { type: 'separator' },
         {
+          label: 'Show Onboarding…',
+          click: () => win?.webContents.executeJavaScript('window.__op?.showOnboarding()'),
+        },
+        { type: 'separator' },
+        {
           label: 'Export Settings…',
           click: () => win?.webContents.executeJavaScript('window.__op?.exportSettings()'),
         },
