@@ -467,7 +467,7 @@ button,
   transition: color 0.2s; height: 20px;
   -webkit-app-region: no-drag;
 }
-.toggle.active { color: var(--method-put); }
+.toggle.active { color: var(--accent); }
 .toggle:hover  { color: var(--fg-secondary); }
 .toggle-label  { font-size: 10px; letter-spacing: -0.2px; white-space: nowrap; }
 .switch {
@@ -480,8 +480,8 @@ button,
   width: 8px; height: 8px; background: var(--fg-muted); border-radius: 50%;
   transition: transform 0.3s, background 0.3s;
 }
-.toggle.active .switch { background: rgba(245,158,11,.15); border-color: #f59e0b; }
-.toggle.active .switch::after { transform: translateX(10px); background: var(--method-put); }
+.toggle.active .switch { background: var(--accent-muted); border-color: var(--accent); }
+.toggle.active .switch::after { transform: translateX(10px); background: var(--accent); }
 .toggle.loading { pointer-events: none; animation: wg-pulse 1s ease-in-out infinite; }
 
 </style>

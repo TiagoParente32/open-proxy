@@ -111,23 +111,36 @@ const importFilter = async () => {
           </div>
 
           <div class="ih-body">
-            <!-- Mode toggle -->
-            <div class="ih-mode-toggle">
+            <!-- Mode selection: explicit "pick one" radio cards, not a subtle tab switcher -->
+            <div class="ih-mode-select-label">Filter Mode — choose one</div>
+            <div class="ih-mode-select">
               <button
-                class="ih-mode-btn"
-                :class="{ active: draftMode === 'ignore' }"
-                @click="draftMode = 'ignore'"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-                Ignore listed hosts
-              </button>
-              <button
-                class="ih-mode-btn"
+                class="ih-mode-card"
                 :class="{ active: draftMode === 'allow' }"
                 @click="draftMode = 'allow'"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                Only intercept listed hosts
+                <span class="ih-mode-radio"><span class="ih-mode-radio-dot" /></span>
+                <span class="ih-mode-icon">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </span>
+                <span class="ih-mode-text">
+                  <span class="ih-mode-title">Allow Mode</span>
+                  <span class="ih-mode-sub"><strong>Only</strong> the hosts listed below are intercepted</span>
+                </span>
+              </button>
+              <button
+                class="ih-mode-card"
+                :class="{ active: draftMode === 'ignore' }"
+                @click="draftMode = 'ignore'"
+              >
+                <span class="ih-mode-radio"><span class="ih-mode-radio-dot" /></span>
+                <span class="ih-mode-icon">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                </span>
+                <span class="ih-mode-text">
+                  <span class="ih-mode-title">Ignore Mode</span>
+                  <span class="ih-mode-sub">Intercept everything <strong>except</strong> the hosts listed below</span>
+                </span>
               </button>
             </div>
 
@@ -194,21 +207,44 @@ const importFilter = async () => {
 
 .ih-body { padding: 16px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
 
-.ih-mode-toggle {
-  display: flex; gap: 6px; background: var(--bg-deepest);
-  border: 1px solid var(--border); border-radius: 8px; padding: 4px;
+.ih-mode-select-label {
+  font-size: 10px; font-weight: 600; color: var(--fg-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
 }
-.ih-mode-btn {
-  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
-  font-size: 12px; font-weight: 500; padding: 7px 10px; border-radius: 6px;
-  background: transparent; border: none; color: var(--fg-muted); cursor: pointer;
+.ih-mode-select { display: flex; gap: 10px; }
+.ih-mode-card {
+  flex: 1; display: flex; align-items: flex-start; gap: 10px;
+  text-align: left; padding: 12px; border-radius: 10px;
+  background: var(--bg-deepest); border: 1.5px solid var(--border);
+  cursor: pointer; transition: all 0.15s;
+}
+.ih-mode-card:hover { border-color: var(--fg-placeholder); }
+.ih-mode-card.active {
+  background: var(--accent-muted); border-color: var(--accent);
+}
+.ih-mode-radio {
+  width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; margin-top: 1px;
+  border: 1.5px solid var(--fg-placeholder); background: var(--bg-card);
+  display: flex; align-items: center; justify-content: center;
   transition: all 0.15s;
 }
-.ih-mode-btn:hover { color: var(--fg-secondary); }
-.ih-mode-btn.active {
-  background: var(--bg-card); border: 1px solid var(--border);
-  color: var(--fg-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+.ih-mode-radio-dot { width: 8px; height: 8px; border-radius: 50%; background: transparent; transition: background 0.15s; }
+.ih-mode-card.active .ih-mode-radio { border-color: var(--accent); background: var(--bg-card); }
+.ih-mode-card.active .ih-mode-radio-dot { background: var(--accent); }
+.ih-mode-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0; margin-top: 1px;
+  color: var(--fg-muted); background: var(--bg-card); border: 1px solid var(--border);
+  transition: all 0.15s;
 }
+.ih-mode-card.active .ih-mode-icon {
+  color: var(--accent); background: var(--accent-muted); border-color: var(--accent-border);
+}
+.ih-mode-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ih-mode-title { font-size: 12.5px; font-weight: 700; color: var(--fg-primary); }
+.ih-mode-card.active .ih-mode-title { color: var(--accent); }
+.ih-mode-sub { font-size: 11px; color: var(--fg-muted); line-height: 1.4; }
+.ih-mode-sub strong { color: var(--fg-secondary); }
 .ih-desc { font-size: 12px; color: var(--fg-muted); line-height: 1.55; margin: 0; }
 .ih-desc strong { color: var(--fg-secondary); }
 
