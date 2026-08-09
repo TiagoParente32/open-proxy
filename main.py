@@ -496,7 +496,18 @@ def apply_update(download_url, progress_cb=None):
     set -e
     set -x
 
-    sleep 4
+    # Wait for the running AppImage (and backend) to fully exit (up to 15s)
+    # instead of a blind sleep, so we do not overwrite it out from under
+    # itself. Match on the install path rather than a process name, since we
+    # cannot know the AppImage's internal binary name ahead of time.
+    for i in $(seq 1 15); do
+      if ! pgrep -f "{install_path}" > /dev/null 2>&1 && ! pgrep -f "OpenProxy-server" > /dev/null 2>&1; then
+        break
+      fi
+      echo "Waiting for app to exit... ($i/15)"
+      sleep 1
+    done
+    sleep 1
 
     APP="{install_path}"
     NEW_APP="{dl_path}"
@@ -535,7 +546,16 @@ def apply_update(download_url, progress_cb=None):
     set -e
     set -x
 
-    sleep 4
+    # Wait for the app to fully exit (up to 15s) instead of a blind sleep, so
+    # dpkg does not hit "text file busy" trying to overwrite a running binary.
+    for i in $(seq 1 15); do
+      if ! pgrep -f "{APP_LINUX_EXE_NAME}" > /dev/null 2>&1 && ! pgrep -f "OpenProxy-server" > /dev/null 2>&1; then
+        break
+      fi
+      echo "Waiting for app to exit... ($i/15)"
+      sleep 1
+    done
+    sleep 1
 
     DEB="{dl_path}"
 
@@ -601,6 +621,7 @@ def apply_update(download_url, progress_cb=None):
                 install_path,
                 APP_LINUX_EXE_NAME
             )
+            backup_path = install_path + '.old'
 
             needs_elevation = not os.access(
                 install_path,
@@ -614,20 +635,44 @@ def apply_update(download_url, progress_cb=None):
     set -e
     set -x
 
-    sleep 4
+    # Restore the previous install if anything below fails after we have
+    # moved it aside — this runs detached, after the app has already quit,
+    # so a mid-swap failure would otherwise leave nothing to launch and no
+    # way for the user to find out until they try to open the app.
+    trap 'echo "Update failed - restoring previous version..."; if [ -e "{backup_path}" ] && [ ! -e "{install_path}" ]; then mv -f "{backup_path}" "{install_path}"; fi' ERR
+
+    # Wait for the app to fully exit (up to 15s) instead of a blind sleep, so
+    # we do not swap files out from under a still-running process. Use -f
+    # (matches full cmdline) since Linux truncates /proc comm names at 15
+    # chars and "OpenProxy-server" is 16.
+    for i in $(seq 1 15); do
+      if ! pgrep -f "{APP_LINUX_EXE_NAME}" > /dev/null 2>&1 && ! pgrep -f "OpenProxy-server" > /dev/null 2>&1; then
+        break
+      fi
+      echo "Waiting for app to exit... ($i/15)"
+      sleep 1
+    done
+    sleep 1
 
     SRC="{new_dir}"
     DEST="{install_path}"
 
-    echo "Copying updated files..."
+    echo "Swapping in updated files..."
 
-    mkdir -p "$DEST"
-
-    cp -rf "$SRC"/. "$DEST"/
+    # Rename (not merge-copy) so a partially-updated directory can never be
+    # left in place: either DEST ends up fully new, or the trap above puts
+    # the fully-old version back.
+    rm -rf "{backup_path}"
+    if [ -e "$DEST" ]; then
+      mv -f "$DEST" "{backup_path}"
+    fi
+    mv -f "$SRC" "$DEST"
 
     echo "Fixing executable permissions..."
 
     chmod +x "{executable_path}"
+
+    rm -rf "{backup_path}"
 
     echo "Files updated successfully."
 
@@ -682,6 +727,12 @@ xattr -cr "{old_support_dir}" 2>/dev/null || true"""
 exec >"{log}" 2>&1
 set -e
 set -x
+
+# If anything below fails after the old app has been moved aside, put it back
+# and relaunch it instead of silently leaving the user with no app at all —
+# this script runs detached, after the app has already quit, so a mid-swap
+# failure would otherwise be invisible until the user tries to open the app.
+trap 'echo "Update failed - restoring previous version..."; if [ -e "{backup_path}" ] && [ ! -e "{install_path}" ]; then mv -f "{backup_path}" "{install_path}"; fi; if [ -e "{install_path}" ]; then open -n "{install_path}"; fi' ERR
 
 # Wait for the app process to fully exit (up to 15 s) instead of a blind sleep.
 # This covers cases where Spotlight/Finder holds the .app directory open —
@@ -741,6 +792,7 @@ open -n "{install_path}"
         script = os.path.join(tmp_dir, 'do_update.ps1')
 
         exe_path = os.path.join(install_path, exe_name)
+        backup_path = install_path + '.old'
 
         with open(script, 'w', encoding='utf-8') as f:
             f.write(f'''
@@ -748,16 +800,45 @@ open -n "{install_path}"
 
     Start-Transcript -Path "{log}" -Append
 
-    Write-Host "Waiting for app to close..."
-    Start-Sleep -Seconds 5
-
-    Write-Host "Copying update files..."
+    # Wait for the app (and backend) to fully exit (up to 30s) instead of a
+    # blind sleep. A locked OpenProxy-server.exe/DLL turns the swap below into
+    # a partial update, since Move-Item aborts mid-copy with $ErrorActionPreference
+    # set to Stop.
+    Write-Host "Waiting for app to exit..."
+    for ($i = 0; $i -lt 30; $i++) {{
+        $proc = Get-Process -Name "OpenProxy-server","OpenProxy" -ErrorAction SilentlyContinue
+        if (-not $proc) {{ break }}
+        Write-Host "Waiting for app to exit... ($i/30)"
+        Start-Sleep -Seconds 1
+    }}
+    Get-Process -Name "OpenProxy-server","OpenProxy" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
 
     $source = "{new_dir}"
     $dest = "{install_path}"
+    $backup = "{backup_path}"
 
-    # Copy all files recursively
-    Copy-Item "$source\\*" "$dest" -Recurse -Force
+    # Swap by renaming directories instead of copying files into a live tree.
+    # A directory rename doesn't require every file inside it to be unlocked
+    # (unlike overwriting each file in place), and if anything goes wrong we
+    # still have the old install under $backup to restore instead of being
+    # left with a half-old/half-new app.
+    try {{
+        if (Test-Path $backup) {{ Remove-Item $backup -Recurse -Force }}
+        if (Test-Path $dest) {{ Move-Item $dest $backup -Force }}
+        Move-Item $source $dest -Force
+        Remove-Item $backup -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "Update applied successfully."
+    }} catch {{
+        Write-Host "Update failed: $_"
+        if ((Test-Path $backup) -and (-not (Test-Path $dest))) {{
+            Write-Host "Restoring previous version..."
+            Move-Item $backup $dest -Force
+        }}
+        Start-Process "{exe_path}"
+        Stop-Transcript
+        exit 1
+    }}
 
     Write-Host "Launching app..."
 
