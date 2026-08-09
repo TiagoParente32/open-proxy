@@ -2,18 +2,20 @@
 # test-update.sh — End-to-end auto-update test on macOS
 #
 # What this does:
-#   1. Builds the app (skipped if a zip already exists in dist-electron/)
+#   1. Builds the app (always, unless --no-build is passed — main.py and the
+#      UI are compiled/bundled at build time, so a stale dist-electron/ zip
+#      silently tests old code otherwise)
 #   2. Finds the built zip for your architecture (arm64 or x64)
 #   3. Starts a local HTTP server serving that zip as the "new version"
 #   4. Opens the built .app with OPENPROXY_UPDATE_TEST_URL set so it
 #      immediately sees a fake v99.9.9 update pointing at your local server
 #
 # Usage:
-#   ./test-update.sh          → build if needed, then run the test
+#   ./test-update.sh          → build, then run the test
 #   ./test-update.sh --no-build → skip build, use existing dist-electron/ zip
 #
 # When the app opens:
-#   - The update banner should appear within ~10 seconds
+#   - The update banner should appear within a couple of seconds
 #   - Click "Update Now" to test the full download + replace flow
 #   - The app will quit and relaunch from /Applications/OpenProxy.app
 #   - Check /tmp/openproxy_update_*/update.log if anything goes wrong
@@ -25,14 +27,8 @@ NO_BUILD="${1:-}"
 
 # ── 1. Build (unless skipped) ─────────────────────────────────────────────────
 if [ "$NO_BUILD" != "--no-build" ]; then
-  EXISTING_ZIP=$(ls dist-electron/*-mac*.zip 2>/dev/null | head -1)
-  if [ -n "$EXISTING_ZIP" ]; then
-    echo "✓ Found existing zip: $EXISTING_ZIP"
-    echo "  (pass --no-build to skip the build check, or delete dist-electron/ to force rebuild)"
-  else
-    echo "→ No zip found in dist-electron/ — building now..."
-    bash build.sh
-  fi
+  echo "→ Building (pass --no-build to reuse the existing dist-electron/ zip)..."
+  bash build.sh
 fi
 
 # ── 2. Find the right zip for this machine ────────────────────────────────────
@@ -89,7 +85,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  Opening: $APP"
 echo "  Fake update URL: $UPDATE_URL"
 echo ""
-echo "  The update banner should appear in ~10 seconds."
+echo "  The update banner should appear within a couple of seconds."
 echo "  Click 'Update Now' to test the full replace flow."
 echo ""
 echo "  Logs (if update fails): /tmp/openproxy_update_*/update.log"

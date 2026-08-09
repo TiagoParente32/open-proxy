@@ -464,12 +464,23 @@ def apply_update(download_url, progress_cb=None):
     extract_dir = os.path.join(tmp_dir, 'extracted')
     os.makedirs(extract_dir, exist_ok=True)
 
-    def reporthook(block_num, block_size, total_size):
-        if progress_cb and total_size > 0:
-            pct = min(100, int(block_num * block_size * 100 / total_size))
-            progress_cb(pct)
-
-    urllib.request.urlretrieve(download_url, dl_path, reporthook)
+    # Not urllib.request.urlretrieve(): it uses the default opener (no certifi
+    # CA bundle — the same CERTIFICATE_VERIFY_FAILED risk check_for_updates()
+    # was fixed for) and has no timeout, so a stalled connection would hang
+    # the download forever with the UI stuck on "Downloading Update".
+    req = urllib.request.Request(download_url, headers={'User-Agent': f'OpenProxy/{APP_VERSION}'})
+    with urllib.request.urlopen(req, timeout=30, context=_get_ssl_context()) as resp:
+        total_size = int(resp.headers.get('Content-Length', 0))
+        downloaded = 0
+        with open(dl_path, 'wb') as out:
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                out.write(chunk)
+                downloaded += len(chunk)
+                if progress_cb and total_size > 0:
+                    progress_cb(min(100, int(downloaded * 100 / total_size)))
     if progress_cb:
         progress_cb(100)
 
@@ -616,6 +627,14 @@ def apply_update(download_url, progress_cb=None):
                 (p for p in extracted_items if os.path.isdir(p)),
                 extract_dir
             )
+
+            # Verify the extracted build has actual contents before we touch
+            # the installed app — a truncated/corrupt download should fail
+            # loudly here, not after the old install has already been moved aside.
+            if not os.path.isfile(os.path.join(new_dir, APP_LINUX_EXE_NAME)):
+                raise RuntimeError(
+                    f"Downloaded update appears empty or corrupt (missing {APP_LINUX_EXE_NAME}): {new_dir}"
+                )
 
             executable_path = os.path.join(
                 install_path,
@@ -786,6 +805,14 @@ open -n "{install_path}"
                     if os.path.isdir(os.path.join(extract_dir, f))
                 ),
                 extract_dir
+            )
+
+        # Verify the extracted build has actual contents before we touch the
+        # installed app — a truncated/corrupt download should fail loudly
+        # here, not after the old install has already been moved aside.
+        if not os.path.isfile(os.path.join(new_dir, exe_name)):
+            raise RuntimeError(
+                f"Downloaded update appears empty or corrupt (missing {exe_name}): {new_dir}"
             )
 
         log = os.path.join(tmp_dir, 'update.log')
@@ -2596,8 +2623,15 @@ async def run_ws_forever(bridge):
 UPDATE_CHECK_INTERVAL_SECS = 6 * 60 * 60  # re-check every 6 hours for long-running sessions
 
 async def _auto_check_update(bridge):
-    """Wait for the UI to connect, then periodically check for updates in the background."""
-    await asyncio.sleep(8)
+    """Periodically check for updates in the background, starting almost immediately.
+
+    No need to wait for the UI to connect first: check_for_updates() runs on a
+    worker thread via run_in_executor and never touches the websocket, and if
+    it finishes before any client has connected, bridge.pending_update_info
+    caches the result for the on-connect handler to flush (see the
+    CONNECTED_CLIENTS handler's `if self.pending_update_info` check).
+    """
+    await asyncio.sleep(0.5)
     while True:
         try:
             info = await asyncio.get_event_loop().run_in_executor(None, check_for_updates)
