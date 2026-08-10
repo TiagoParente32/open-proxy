@@ -1,7 +1,7 @@
 {
   "name": "open-proxy",
   "productName": "OpenProxy",
-  "version": "1.0.24",
+  "version": "1.0.25",
   "description": "OpenProxy — HTTP intercept proxy with a native desktop UI",
   "main": "electron/main.js",
   "scripts": {
