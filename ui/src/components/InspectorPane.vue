@@ -43,6 +43,8 @@ const getMethodColor = (method) => {
 const activeCodeLang = ref('cURL')
 const codeLangs = ['cURL', 'Python', 'Node.js', 'Go', 'Rust']
 const copyLabel = ref('Copy')
+const copyUrlLabel = ref('Copy URL')
+const copyCurlLabel = ref('Copy cURL')
 
 const dynamicCodeExtensions = computed(() => {
   const base = [
@@ -144,6 +146,36 @@ const copyCode = () => {
   setTimeout(() => { copyLabel.value = 'Copy' }, 2000)
 }
 
+const copyUrl = () => {
+  const req = selectedRequest.value;
+  if (!req) return;
+  navigator.clipboard.writeText(req.url)
+  copyUrlLabel.value = 'Copied!'
+  setTimeout(() => { copyUrlLabel.value = 'Copy URL' }, 2000)
+}
+
+const copyCurl = () => {
+  const req = selectedRequest.value;
+  if (!req) return;
+  const method = req.method.toUpperCase();
+  const url = req.url;
+  const headers = req.req_headers || {};
+  let body = req.req_body || '';
+  const hasValidBody = body && !req.req_is_image && !body.startsWith('// [');
+  let cmd = `curl -X ${method} "${url}"`;
+  for (const [k, v] of Object.entries(headers)) {
+    const safeVal = String(v).replace(/"/g, '\\"');
+    cmd += ` \\\n  -H "${k}: ${safeVal}"`;
+  }
+  if (hasValidBody) {
+    const safeBody = body.replace(/'/g, "'\\''");
+    cmd += ` \\\n  -d '${safeBody}'`;
+  }
+  navigator.clipboard.writeText(cmd)
+  copyCurlLabel.value = 'Copied!'
+  setTimeout(() => { copyCurlLabel.value = 'Copy cURL' }, 2000)
+}
+
 // --- STRUCTURED HEX GENERATOR ---
 const getHexRows = (req, type) => {
   if (!req) return { rows: [], truncated: false, total: 0 };
@@ -204,6 +236,8 @@ const getHexRows = (req, type) => {
           {{ selectedRequest.method }}
         </span>
         <span class="url-text" :title="selectedRequest.url">{{ selectedRequest.url }}</span>
+        <button class="url-action-btn" @click="copyUrl">{{ copyUrlLabel }}</button>
+        <button class="url-action-btn" @click="copyCurl">{{ copyCurlLabel }}</button>
       </div>
 
       <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
@@ -355,6 +389,8 @@ const getHexRows = (req, type) => {
   text-align: left;
 }
 .method-badge { padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10px; }
+.url-action-btn { background: var(--accent); color: var(--fg-primary); border: none; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.2s; flex-shrink: 0; white-space: nowrap; }
+.url-action-btn:hover { background: var(--accent-hover); }
 
 /* --- Code Tab Styles --- */
 .code-tab-container { height: 100%; display: flex; flex-direction: column; }
