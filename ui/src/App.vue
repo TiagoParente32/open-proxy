@@ -297,6 +297,28 @@ const copyUrl = () => {
   closeContextMenu()
 }
 
+const copyCurl = () => {
+  const req = contextMenu.value.request;
+  if (req) {
+    const method = req.method.toUpperCase();
+    const url = req.url;
+    const headers = req.req_headers || {};
+    let body = req.req_body || '';
+    const hasValidBody = body && !req.req_is_image && !body.startsWith('// [');
+    let cmd = `curl -X ${method} "${url}"`;
+    for (const [k, v] of Object.entries(headers)) {
+      const safeVal = String(v).replace(/"/g, '\\"');
+      cmd += ` \\\n  -H "${k}: ${safeVal}"`;
+    }
+    if (hasValidBody) {
+      const safeBody = body.replace(/'/g, "'\\''");
+      cmd += ` \\\n  -d '${safeBody}'`;
+    }
+    navigator.clipboard.writeText(cmd)
+  }
+  closeContextMenu()
+}
+
 const pinFromContextMenu = () => {
   if (contextMenu.value.request) {
     const host = formatUrl(contextMenu.value.request.url).host
@@ -561,6 +583,7 @@ const openBreakpointModalFromContext = () => {
       <div class="context-menu-item" @click="handleRepeatFromContext">Repeat</div>
       <div class="context-menu-item" @click="handleEditAndRepeatFromContext">Edit &amp; Repeat</div>
       <div class="context-menu-item" @click="copyUrl">Copy URL</div>
+      <div class="context-menu-item" @click="copyCurl">Copy cURL</div>
 
       <div class="context-menu-divider"></div>
 
