@@ -3,7 +3,8 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { 
   filteredRequests, requests, selectedRequest, isFocusMode, pinnedSources, 
   formatUrl, contextMenu, searchQuery, searchScope, searchMatchType,
-  sortKey, sortOrder, toggleSort, formatTime, formatBytes 
+  sortKey, sortOrder, toggleSort, formatTime, formatBytes,
+  showMapModal, mapLocalRules, selectedRuleId, closeAllModals
 } from '../store.js'
 
 // ── Column resizing ──────────────────────────────────────────────────────────
@@ -186,6 +187,18 @@ const openContextMenu = (e, req) => {
   contextMenu.value = { show: true, x: e.clientX, y: e.clientY, request: req }
 }
 
+const openMapLocalForRequest = (e, req) => {
+  e.stopPropagation()
+  const match = mapLocalRules.value.find(r => r.pattern === req.url || req.url.startsWith(r.pattern.split('?')[0]))
+  if (match) {
+    selectedRuleId.value = match.id
+  } else if (mapLocalRules.value.length > 0) {
+    selectedRuleId.value = mapLocalRules.value[0].id
+  }
+  closeAllModals()
+  showMapModal.value = true
+}
+
 const sortIcon = (key) => {
   if (sortKey.value !== key) return ''
   return sortOrder.value === 'asc' ? ' ↑' : ' ↓'
@@ -365,7 +378,7 @@ onUnmounted(() => {
               <span v-else class="status-badge" :class="{'text-green': req.status < 400, 'text-red': req.status >= 400}">{{ req.status }}</span>
             </td>
             <td class="font-semibold truncate" :title="req.url" style="font-family: monospace; font-size: 10.5px; letter-spacing: -0.2px;">
-              <svg v-if="req.map_local" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline; vertical-align: middle; margin-right: 6px; margin-bottom: 1px; flex-shrink: 0;" title="Response modified by Map Local">
+              <svg v-if="req.map_local" @click="openMapLocalForRequest($event, req)" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline; vertical-align: middle; margin-right: 6px; margin-bottom: 1px; flex-shrink: 0; cursor: pointer;" title="Edit Map Local rule">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
               </svg>{{ req.url }}
             </td>
