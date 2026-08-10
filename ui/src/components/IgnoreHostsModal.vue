@@ -5,7 +5,7 @@ import { proxyIgnoreHosts, proxyAllowHosts, proxyHostFilterMode, syncProxyIgnore
 const props = defineProps({ show: Boolean })
 const emit  = defineEmits(['close'])
 
-const draftMode   = ref('ignore')
+const draftMode   = ref('allow')
 const draftIgnore = ref('')
 const draftAllow  = ref('')
 

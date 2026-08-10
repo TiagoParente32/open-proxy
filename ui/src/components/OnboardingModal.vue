@@ -142,21 +142,11 @@ const finish = () => {
           <p class="ob-subtitle" style="margin-top:4px">How would you like to intercept traffic?</p>
 
           <div class="ob-cards">
-            <div class="ob-card" :class="{ selected: selected === 'ignore' }" @click="selected = 'ignore'">
-              <div class="ob-card-icon">🌐</div>
-              <div class="ob-card-title">Intercept Everything</div>
-              <div class="ob-card-desc">All traffic goes through the proxy. Apps that don't trust the certificate may fail to connect.</div>
-              <ul class="ob-card-pros">
-                <li>✓ See all requests from all apps</li>
-                <li>✓ Best for full traffic inspection</li>
-                <li>⚠ Some apps may break</li>
-              </ul>
-              <div v-if="selected === 'ignore'" class="ob-card-check">✓</div>
-            </div>
-
             <div class="ob-card" :class="{ selected: selected === 'allow' }" @click="selected = 'allow'">
-              <div class="ob-card-icon">🎯</div>
-              <div class="ob-card-title">Selective Interception</div>
+              <div class="ob-card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="ob-card-title">Allow Mode</div>
               <div class="ob-card-desc">Only hosts you add are intercepted. Everything else passes through untouched.</div>
               <ul class="ob-card-pros">
                 <li>✓ Other apps keep working normally</li>
@@ -165,9 +155,26 @@ const finish = () => {
               </ul>
               <div v-if="selected === 'allow'" class="ob-card-check">✓</div>
             </div>
+
+            <div class="ob-card" :class="{ selected: selected === 'ignore' }" @click="selected = 'ignore'">
+              <div class="ob-card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+              </div>
+              <div class="ob-card-title">Ignore Mode</div>
+              <div class="ob-card-desc">All traffic goes through the proxy, except any hosts you add. Apps that don't trust the certificate may fail to connect.</div>
+              <ul class="ob-card-pros">
+                <li>✓ See all requests from all apps</li>
+                <li>✓ Best for full traffic inspection</li>
+                <li class="ob-card-con">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  Some apps may break
+                </li>
+              </ul>
+              <div v-if="selected === 'ignore'" class="ob-card-check">✓</div>
+            </div>
           </div>
 
-          <p class="ob-note">You can change this any time from <strong>Proxy → Host Filtering…</strong> in the menu.</p>
+          <p class="ob-note">You can change this any time from the <strong>Proxy</strong> menu, or the Host Filter panel in the sidebar.</p>
 
           <div class="ob-footer">
             <button class="ob-btn-back" @click="goBack">← Back</button>
@@ -200,7 +207,7 @@ const finish = () => {
             Enter hostnames, URLs, or use <code>*.example.com</code> to match all subdomains.
           </p>
           <p v-if="needsHost" class="ob-hint ob-hint-warn">
-            Add at least one host — Selective Interception only intercepts hosts you list here.
+            Add at least one host — Allow Mode only intercepts hosts you list here.
           </p>
 
           <div class="ob-footer">
@@ -224,7 +231,9 @@ const finish = () => {
                 :class="{ selected: selectedSortOrder === 'desc' }"
                 @click="selectedSortOrder = 'desc'"
               >
-                <div class="ob-card-icon" style="font-size:18px">🆕</div>
+                <div class="ob-card-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="4"/><polyline points="6 10 12 4 18 10"/></svg>
+                </div>
                 <div class="ob-card-title">Newest First</div>
                 <div class="ob-card-desc">Latest requests appear at the top.</div>
                 <div v-if="selectedSortOrder === 'desc'" class="ob-card-check">✓</div>
@@ -234,7 +243,9 @@ const finish = () => {
                 :class="{ selected: selectedSortOrder === 'asc' }"
                 @click="selectedSortOrder = 'asc'"
               >
-                <div class="ob-card-icon" style="font-size:18px">📜</div>
+                <div class="ob-card-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="4" x2="12" y2="20"/><polyline points="6 14 12 20 18 14"/></svg>
+                </div>
                 <div class="ob-card-title">Oldest First</div>
                 <div class="ob-card-desc">Requests build up from the top down.</div>
                 <div v-if="selectedSortOrder === 'asc'" class="ob-card-check">✓</div>
@@ -335,11 +346,13 @@ const finish = () => {
 .ob-card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,0.15); }
 .ob-card--sm { padding: 12px 12px; }
 .ob-card--sm .ob-card-desc { font-size: 11px; }
-.ob-card-icon { font-size: 24px; }
+.ob-card-icon { color: var(--fg-secondary); }
 .ob-card-title { font-size: 13px; font-weight: 600; color: var(--fg-primary); }
 .ob-card-desc { font-size: 11.5px; color: var(--fg-muted); line-height: 1.5; }
 .ob-card-pros { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .ob-card-pros li { font-size: 11px; color: var(--fg-secondary); }
+.ob-card-con { display: flex; align-items: center; gap: 5px; color: var(--warning) !important; }
+.ob-card-con svg { flex-shrink: 0; }
 .ob-card-check { position: absolute; top: 10px; right: 12px; color: var(--accent); font-weight: 700; font-size: 15px; }
 
 .ob-note { font-size: 12px; color: var(--fg-muted); text-align: center; margin: 0; }
