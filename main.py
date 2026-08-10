@@ -829,6 +829,14 @@ open -n "{install_path}"
 
     Start-Transcript -Path "{log}" -Append
 
+    # This script's own process inherits its working directory from the Python
+    # backend that spawned it, which Electron launches with cwd = <install>\resources
+    # — i.e. *inside* the install folder we're about to rename. Windows refuses
+    # to rename/move a directory while any process (including this one) has it
+    # or a subfolder of it as its current directory, so Move-Item below would
+    # fail with a sharing violation unless we step out of it first.
+    Set-Location $env:SystemRoot
+
     # Wait for the app (and backend) to fully exit (up to 30s) instead of a
     # blind sleep. A locked OpenProxy-server.exe/DLL turns the swap below into
     # a partial update, since Move-Item aborts mid-copy with $ErrorActionPreference
@@ -883,6 +891,9 @@ open -n "{install_path}"
                 '-ExecutionPolicy', 'Bypass',
                 '-File', script
             ],
+            # Without an explicit cwd, Popen inherits ours (resourcesPath, inside
+            # install_path) — see the Set-Location note in the script above.
+            cwd=tmp_dir,
             creationflags=subprocess.CREATE_NO_WINDOW,
             close_fds=True
         )
