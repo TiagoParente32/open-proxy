@@ -88,11 +88,11 @@ jobs:
         with:
           ref: ${{ needs.bump-version.outputs.tag }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -117,7 +117,7 @@ jobs:
         run: ${{ matrix.script }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.artifact }}
           path: |
@@ -136,13 +136,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist-electron
           merge-multiple: true
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.5.3
         with:
           tag_name: ${{ needs.bump-version.outputs.tag }}
           name: ${{ needs.bump-version.outputs.tag }}
