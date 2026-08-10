@@ -25,6 +25,8 @@ from mitmproxy import http, options
 from mitmproxy.tools.dump import DumpMaster
 from mitmproxy.proxy.mode_servers import WireGuardServerInstance
 
+
+# this comment is to test if the update is working
 def _read_app_version():
     """Read version from package.json so there's a single source of truth."""
     try:
