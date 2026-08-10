@@ -127,7 +127,6 @@ jobs:
             dist-electron/*.deb
             dist-electron/*.AppImage
             dist-electron/*.tar.gz
-            dist-electron/*.blockmap
           if-no-files-found: ignore
 
   # ── 3. Publish the GitHub Release ─────────────────────────────────
