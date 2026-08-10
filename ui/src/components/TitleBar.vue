@@ -1,6 +1,5 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { version as appVersion } from '../../../package.json'
 import { disableCache, toolbarVisibility, macosProxyActive, proxyHttp2, proxyUpstreamCert, proxyHostFilterMode } from '../store.js'
 import { currentThemeId, applyTheme } from '../composables/useTheme.js'
 
@@ -116,7 +115,7 @@ const MENUS = [
       { label: 'Import Settings…',  action: () => op()?.importSettings() },
       { label: 'Reset All Preferences…', action: () => op()?.resetPreferences() },
       { type: 'separator' },
-      { label: `About OpenProxy v${appVersion ?? ''}`, action: () => op()?.showAbout() },
+      { label: 'About OpenProxy', action: () => op()?.showAbout() },
     ],
   },
 ]

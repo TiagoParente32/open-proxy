@@ -299,7 +299,10 @@ function setupMenu () {
     ...(process.platform === 'darwin' ? [{
       label: app.name,
       submenu: [
-        { role: 'about' },
+        {
+          label: 'About OpenProxy',
+          click: () => win?.webContents.executeJavaScript('window.__op?.showAbout()'),
+        },
         { type: 'separator' },
         {
           label: 'Check for Updates',
@@ -509,7 +512,7 @@ function setupMenu () {
         },
         { type: 'separator' },
         {
-          label: `About OpenProxy v${app.getVersion()}`,
+          label: 'About OpenProxy',
           click: () => win?.webContents.executeJavaScript('window.__op?.showAbout()'),
         },
       ],
