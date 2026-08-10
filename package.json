@@ -45,6 +45,10 @@
       {
         "from": "icon.ico",
         "to": "icon.ico"
+      },
+      {
+        "from": "icons",
+        "to": "icons"
       }
     ],
     "mac": {

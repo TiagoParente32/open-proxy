@@ -252,12 +252,14 @@ function setupIPC () {
 }
 
 // ── Tray ─────────────────────────────────────────────────────────────────────
-function setupTray () {
-  const iconPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'icon.png')
-    : path.join(__dirname, '..', 'icon.png')
+function getTrayIconPath () {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'icons', 'tray-icon.png')
+    : path.join(__dirname, '..', 'icons', 'tray-icon.png')
+}
 
-  let img = nativeImage.createFromPath(iconPath)
+function loadTrayIcon () {
+  let img = nativeImage.createFromPath(getTrayIconPath())
 
   // Fallback: if icon not found, create a plain coloured image
   if (img.isEmpty()) {
@@ -266,10 +268,16 @@ function setupTray () {
     )
   }
 
-  if (process.platform === 'darwin') img = img.resize({ width: 16, height: 16 })
+  // macOS menu bar treats the raw pixel size as the point size (no implicit
+  // Retina halving), so 16x16 rendered tiny. 40x40 shows ~2.5x larger while
+  // still fitting the menu bar row without clipping.
+  if (process.platform === 'darwin') img = img.resize({ width: 40, height: 40, quality: 'best' })
+  return img
+}
 
+function setupTray () {
   try {
-    tray = new Tray(img)
+    tray = new Tray(loadTrayIcon())
     tray.setToolTip('OpenProxy')
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: 'Open OpenProxy', click: showWindow },

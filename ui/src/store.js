@@ -344,7 +344,7 @@ export const proxyUpstreamCert = ref(loadState('proxyUpstreamCert', true))
 export const proxyIgnoreHosts  = ref(loadState('proxyIgnoreHosts', []))
 export const proxyAllowHosts   = ref(loadState('proxyAllowHosts', []))
 // 'ignore' = pass listed hosts through | 'allow' = only intercept listed hosts
-export const proxyHostFilterMode = ref(loadState('proxyHostFilterMode', 'ignore'))
+export const proxyHostFilterMode = ref(loadState('proxyHostFilterMode', 'allow'))
 
 // UI modal visibility (shared so sidebar can trigger it)
 export const showIgnoreHostsModal   = ref(false)
