@@ -830,7 +830,7 @@ open -n "{install_path}"
     Start-Transcript -Path "{log}" -Append
 
     # This script's own process inherits its working directory from the Python
-    # backend that spawned it, which Electron launches with cwd = <install>\resources
+    # backend that spawned it, which Electron launches with cwd = <install>\\resources
     # — i.e. *inside* the install folder we're about to rename. Windows refuses
     # to rename/move a directory while any process (including this one) has it
     # or a subfolder of it as its current directory, so Move-Item below would
@@ -894,7 +894,16 @@ open -n "{install_path}"
             # Without an explicit cwd, Popen inherits ours (resourcesPath, inside
             # install_path) — see the Set-Location note in the script above.
             cwd=tmp_dir,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            # CREATE_BREAKAWAY_FROM_JOB is essential here: Electron/Chromium puts
+            # every process it spawns (this Python backend) into a Windows Job
+            # Object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, and child processes
+            # inherit that same job by default. When the UI tells Electron to
+            # quit after APPLY_UPDATE, Electron kills the Python process — which
+            # also force-kills this "detached" PowerShell script (and everything
+            # else in the job tree) before it can swap files and relaunch the
+            # app, since it's still part of that same job. Without breaking away,
+            # the update silently disappears: app closes and never reopens.
+            creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_BREAKAWAY_FROM_JOB,
             close_fds=True
         )
 
