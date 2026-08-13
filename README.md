@@ -9,6 +9,7 @@ Whether you need to mock API responses, rewrite routing rules on the fly, thrott
 ## 📑 Table of Contents
 
 - [✨ Key Features](#-key-features)
+- [📥 Installation](#-installation)
 - [🤖 Android Setup](#-android-setup)
 - [🍎 iOS Setup](#-ios-setup)
 - [🖥️ Desktop & Browser Setup](#️-desktop--browser-setup)
@@ -34,17 +35,39 @@ Whether you need to mock API responses, rewrite routing rules on the fly, thrott
 
 ---
 
+## 📥 Installation
+
+Download the latest release for your platform from the [GitHub Releases](https://github.com/TiagoParente32/open-proxy/releases) page.
+
+### macOS
+
+OpenProxy isn't currently signed with an Apple Developer certificate, so macOS Gatekeeper will refuse to open it and show **"OpenProxy is damaged and can't be opened"** (or a similar warning) after you drag it into `/Applications`. This is expected for an unsigned app downloaded from the internet — not actual corruption. To fix it, run the following in Terminal to remove the quarantine flag macOS applies to downloaded files:
+
+```bash
+xattr -cr /Applications/OpenProxy.app
+```
+
+Then open the app normally. You only need to do this once per install/update.
+
+### Windows
+
+Windows SmartScreen may warn that the app is from an unrecognized publisher (also due to the lack of code signing). Click **More info → Run anyway** to proceed.
+
+### Linux
+
+Install the `.deb`/`.rpm` package with your system's package manager, or make the `.AppImage` executable (`chmod +x`) and run it directly.
+
+---
+
 ## 🤖 Android Setup
 
 OpenProxy supports both **Android emulators** and **physical Android devices**. Full step-by-step guides are also available in-app — open **Devices** in the toolbar.
 
 ### Android Emulator (recommended for development)
 
-1. **Automated (root) setup**: Create a "Google APIs" emulator (**not** "Google Play" — those images are non-rooted). Launch it from the terminal with:
-   ```bash
-   emulator -avd <name> -writable-system
-   ```
-   Then in OpenProxy, open the **Devices** setup and click your emulator — it will automatically inject the mitmproxy certificate as a trusted System Certificate.
+1. **Automated (root) setup**: Create a "Google APIs" emulator (**not** "Google Play" — those images are non-rooted). Start it normally from Android Studio or the command line — no special flags needed. Then in OpenProxy, open the **Devices** setup and click your emulator — it runs `adb root` and pushes the mitmproxy certificate directly, so no writable-system remount is required.
+
+   > If the automated install fails (e.g. `adb root` is rejected, or the image turns out not to be rooted), fall back to visiting `http://mitm.it` in the emulator browser and installing the certificate manually as described in step 2 below — just in case.
 2. **Manual (non-root) setup**: In the emulator, go to **Settings → Network & Internet → Internet**, long-press your Wi-Fi network → **Modify network → Advanced options**, and set **Proxy** to **Manual** using host `10.0.2.2` and the port shown in OpenProxy's toolbar (starts at `9090`). Then visit `http://mitm.it` in the emulator browser to download and install the certificate under **Settings → Security → Encryption & Credentials → Install a certificate → CA Certificate**.
 3. **App-level HTTPS interception**: Modern Android (API 24+) ignores user-installed certificates by default for apps you build yourself. Add a `network_security_config.xml` referenced from `AndroidManifest.xml` to explicitly trust user certificates in debug builds — OpenProxy's **App Config** tab generates both files for you (with notes for React Native / Flutter / Expo projects).
 
@@ -70,14 +93,23 @@ Instead of setting a manual proxy, enable **VPN Mode** in OpenProxy (toolbar or 
 
 ### iOS Simulator (macOS only)
 
-The iOS Simulator shares your Mac's network stack, so you configure the Mac's proxy settings — the simulator inherits them automatically.
+The iOS Simulator shares your Mac's network stack, so setup is almost entirely automated — no manual `mitm.it` visit or profile install needed.
 
-1. Start OpenProxy — note the proxy port (starts at `9090`) and your local IP shown in the toolbar.
-2. Set your Mac's HTTP/HTTPS proxy: **System Settings → Network → Wi-Fi → Details → Proxies** — enable **Web Proxy (HTTP)** and **Secure Web Proxy (HTTPS)**, using your local IP (e.g. `192.168.1.x`) or `127.0.0.1` and the port shown in OpenProxy.
-3. In the iOS Simulator, open Safari and go to `http://mitm.it`, then download and install the mitmproxy certificate profile.
-4. Enable certificate trust: **Settings → General → About → Certificate Trust Settings** — toggle the mitmproxy cert **ON**.
+1. Start OpenProxy, open **Devices** in the toolbar, and select the **iOS Simulator** option.
+2. Toggle the **macOS system proxy** switch on — OpenProxy prompts for your admin password once (via `networksetup`) and routes all Mac (and simulator) traffic through itself.
+3. Pick a **Booted** simulator from the list and click it — OpenProxy runs `xcrun simctl keychain <udid> add-root-cert` to install and trust the mitmproxy certificate directly, with no manual profile download or Certificate Trust Settings toggle required.
 
-> When you're done, remember to disable the Mac's proxy settings so your regular traffic stops routing through OpenProxy.
+   > If the automated install ever fails or HTTPS requests still show certificate errors, visit `http://mitm.it` in Safari inside the simulator and install the profile manually (see the fallback steps below) — just in case.
+
+> **Note:** `simctl` only trusts the certificate inside the **simulator's** own TrustStore — it does not touch the Mac's System keychain. Turning on the macOS system proxy routes **all** Mac traffic through OpenProxy, so if you also browse HTTPS sites in Safari/Chrome on the Mac itself (outside the simulator), you'll need to separately install and trust the cert on macOS: visit `http://mitm.it` in a Mac browser, download the macOS certificate, then trust it via Keychain Access (**Always Trust**).
+
+> Remember to turn the macOS system proxy back off when you're done, so your regular traffic stops routing through OpenProxy.
+
+If you'd rather not enable the system-wide proxy (or need it for a real device instead), you can still do it manually:
+
+1. Set your Mac's HTTP/HTTPS proxy: **System Settings → Network → Wi-Fi → Details → Proxies** — enable **Web Proxy (HTTP)** and **Secure Web Proxy (HTTPS)**, using your local IP (e.g. `192.168.1.x`) or `127.0.0.1` and the port shown in OpenProxy.
+2. In the iOS Simulator, open Safari and go to `http://mitm.it`, then download and install the mitmproxy certificate profile.
+3. Enable certificate trust: **Settings → General → About → Certificate Trust Settings** — toggle the mitmproxy cert **ON**.
 
 The full setup guide is also available in-app — open **Devices** in the toolbar and select the iOS Simulator tab.
 
@@ -190,13 +222,7 @@ The build is a **3-step pipeline**: Vue UI → Python binary (PyInstaller) → E
 
 #### ⚠️ "OpenProxy is damaged and can't be opened"
 
-macOS Gatekeeper blocks apps that aren't signed with an Apple Developer certificate. If you see this error, run the following in Terminal — it removes the quarantine flag macOS sets on downloaded files:
-
-```bash
-xattr -cr /Applications/OpenProxy.app
-```
-
-Then open the app normally. You only need to do this once.
+The build isn't code-signed, so macOS Gatekeeper will quarantine it just like a downloaded release. See [Installation → macOS](#-installation) for the `xattr -cr` fix.
 
 ### Windows
 
