@@ -389,7 +389,7 @@ const getHexRows = (req, type) => {
   text-align: left;
 }
 .method-badge { padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10px; }
-.url-action-btn { background: var(--accent); color: var(--fg-primary); border: none; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.2s; flex-shrink: 0; white-space: nowrap; }
+.url-action-btn { background: var(--accent); color: #fff; border: none; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.2s; flex-shrink: 0; white-space: nowrap; }
 .url-action-btn:hover { background: var(--accent-hover); }
 
 /* --- Code Tab Styles --- */
@@ -400,7 +400,7 @@ const getHexRows = (req, type) => {
 .lang-pill { background: transparent; border: 1px solid transparent; color: var(--fg-muted); padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.2s; white-space: nowrap;}
 .lang-pill:hover { color: var(--fg-secondary); background: var(--surface-hover); }
 .lang-pill.active { background: var(--bg-active); color: var(--fg-primary); border-color: var(--border); }
-.copy-btn { background: var(--accent); color: var(--fg-primary); border: none; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.2s; min-width: 60px; text-align: center; flex-shrink: 0; }
+.copy-btn { background: var(--accent); color: #fff; border: none; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.2s; min-width: 60px; text-align: center; flex-shrink: 0; }
 .copy-btn:hover { background: var(--accent-hover); }
 
 

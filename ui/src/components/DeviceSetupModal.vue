@@ -1370,14 +1370,14 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 }
 .alert.error   { color: #fca5a5; background: rgba(239,68,68,0.07);  border-color: rgba(239,68,68,0.16); }
 .alert.success { color: #6ee7b7; background: rgba(52,211,153,0.06); border-color: rgba(52,211,153,0.15); }
-.alert.warning { color: #fcd34d; background: rgba(245,158,11,0.06); border-color: rgba(245,158,11,0.15); }
+.alert.warning { color: var(--method-put); background: var(--warning-muted); border-color: rgba(245,158,11,0.15); }
 
 /* ── OS Proxy banner (iOS Simulator picker) ───────── */
 .os-proxy-banner {
   display: flex; align-items: center; gap: 9px;
   font-size: 12px; padding: 9px 12px; border-radius: 6px;
-  border: 1px solid rgba(245,158,11,0.18); background: rgba(245,158,11,0.07);
-  color: #fcd34d; line-height: 1.45;
+  border: 1px solid rgba(245,158,11,0.18); background: var(--warning-muted);
+  color: var(--method-put); line-height: 1.45;
   margin-bottom: 12px;
 }
 .os-proxy-banner.active {
@@ -1389,7 +1389,7 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
   font-size: 11px; font-weight: 600;
   padding: 4px 10px; border-radius: 4px;
   background: rgba(245,158,11,0.18); border: 1px solid rgba(245,158,11,0.28);
-  color: #fcd34d; cursor: pointer; transition: background 0.15s;
+  color: var(--method-put); cursor: pointer; transition: background 0.15s;
 }
 .os-proxy-banner .banner-action:hover:not(:disabled) { background: rgba(245,158,11,0.28); }
 .os-proxy-banner .banner-action:disabled { opacity: 0.6; cursor: progress; }
@@ -1409,7 +1409,7 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .instruction-sublist li { padding-left: 0; }
 
 .info-box {
-  margin-top: 8px; padding: 9px 12px; background: rgba(0,0,0,0.2);
+  margin-top: 8px; padding: 9px 12px; background: var(--bg-deepest);
   border-radius: 6px; border: 1px solid var(--border);
   display: flex; flex-direction: column; gap: 6px;
 }

@@ -688,7 +688,7 @@ body { margin: 0; padding: 0; }
   text-align: left;
 }
 .ctx-star-item { display: flex; align-items: center; gap: 7px; }
-.context-menu-item:hover { background: var(--accent); color: var(--fg-primary); }
+.context-menu-item:hover { background: var(--accent); color: #fff; }
 .context-menu-divider { height: 1px; background: var(--border); margin: 3px 4px; }
 
 .context-menu-colors {
