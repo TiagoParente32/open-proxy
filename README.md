@@ -262,14 +262,3 @@ sudo apt install fakeroot dpkg rpm
 | macOS | `.dmg`, `.zip` (arm64 + x64) | DMG for fresh install, ZIP used by auto-update |
 | Windows | NSIS `.exe`, `.zip` | EXE for fresh install, ZIP used by auto-update |
 | Linux | `.deb`, `.rpm`, `.AppImage`, `.tar.gz` (x64) | DEB/RPM install to app launcher; AppImage used by auto-update |
-
----
-
-## 🔄 Auto-Update
-
-The app checks GitHub Releases on startup (after an 8-second delay). If a newer version is found, a banner appears at the top of the window.
-
-- **Update Now** — downloads the release zip/AppImage for your platform and architecture, launches a background script that replaces the app and relaunches it.
-- The update check is also accessible from the native app menu → **Check for Updates**.
-
-To publish a release, upload all distribution targets to a GitHub Release tagged `vX.Y.Z`. The version is read from `APP_VERSION` in `main.py` — bump that and `version` in `package.json` together before building.
