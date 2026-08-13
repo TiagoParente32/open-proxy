@@ -52,7 +52,6 @@ const wgStatusLabel = computed(() => ({
   error:    { text: 'Error',     cls: 'pill-error'    },
 }[wgStatus.value] || { text: wgStatus.value, cls: '' }))
 
-// True whenever the VPN Mode content panel is visible to the user
 const isVpnVisible = computed(() =>
   showDeviceSetupModal.value && (
     deviceSetupType.value === 'vpn_mode' ||
@@ -71,7 +70,6 @@ const copyWgConf = async () => {
   } catch {}
 }
 
-// Render QR only when VPN panel is visible, WG is ready, and we have a config
 watch([isVpnVisible, wgClientConf, () => wgStatus.value], async () => {
   if (!isVpnVisible.value || wgStatus.value !== 'ready' || !wgClientConf.value) return
   await nextTick()
@@ -86,12 +84,10 @@ watch([isVpnVisible, wgClientConf, () => wgStatus.value], async () => {
   }
 })
 
-// Request fresh config whenever VPN panel becomes visible and WG is enabled
 watch(isVpnVisible, (visible) => {
   if (visible && wgEnabled.value) requestWgConf()
 })
 
-// Keep port input in sync if backend reports a different port while panel is open
 watch([isVpnVisible, wgPort], ([visible]) => {
   if (visible) localPort.value = wgPort.value
 })
@@ -129,7 +125,6 @@ const androidManifest = `<manifest ...>
 
 // ── XML syntax highlighter (no deps) ─────────────────────────────────────────
 function highlightXml(code) {
-    // Escape HTML first
     const escaped = code
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -330,7 +325,6 @@ watch(() => iosSetupProgress.value.steps.map(s => s.status).join(), () => {
     }
 })
 
-// Clear queues when navigating back to the picker
 watch(activePane, (pane) => {
     if (pane === 'pick') {
         installAllQueue.value    = []
@@ -381,7 +375,6 @@ const modalTitle = () => {
       <!-- ── Header ──────────────────────────────────── -->
       <div class="modal-header">
         <div class="header-left">
-          <!-- VPN icon for vpn_mode, Android robot icon otherwise -->
           <svg v-if="deviceSetupType === 'vpn_mode'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--setup-success)" stroke-width="1.8">
             <rect x="3" y="11" width="18" height="11" rx="2"/>
             <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -472,7 +465,6 @@ const modalTitle = () => {
                 Install All ({{ filteredAdbDevices.length }})
               </button>
               <button class="refresh-btn" :disabled="adbDevicesLoading" @click="listAdbDevices()" title="Refresh devices">
-                <!-- Refresh / rotate-cw icon -->
                 <svg :class="{ spinning: adbDevicesLoading }"
                      width="13" height="13" viewBox="0 0 24 24"
                      fill="none" stroke="currentColor" stroke-width="2.2"
@@ -492,7 +484,6 @@ const modalTitle = () => {
             {{ adbDevicesError }}
           </div>
 
-          <!-- Skeletons -->
           <div v-if="adbDevicesLoading && adbDevices.length === 0" class="device-list">
             <div class="device-row" v-for="n in 2" :key="n" style="pointer-events:none">
               <div class="sk" style="width:32px;height:32px;border-radius:7px;flex-shrink:0"/>
@@ -503,7 +494,6 @@ const modalTitle = () => {
             </div>
           </div>
 
-          <!-- Empty state -->
           <div v-else-if="!adbDevicesLoading && filteredAdbDevices.length === 0 && !adbDevicesError"
                class="empty-state">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="1.5">
@@ -514,7 +504,6 @@ const modalTitle = () => {
             <p class="empty-sub">Requires <code>adb</code> and <code>openssl</code> in PATH.</p>
           </div>
 
-          <!-- Device rows -->
           <div v-else class="device-list">
             <div v-for="device in filteredAdbDevices" :key="device.serial" class="device-row">
               <div class="device-thumb">
@@ -616,7 +605,6 @@ const modalTitle = () => {
             {{ iosSimulatorsError }}
           </div>
 
-          <!-- Skeletons -->
           <div v-if="iosSimulatorsLoading && iosSimulators.length === 0" class="device-list">
             <div class="device-row" v-for="n in 2" :key="n" style="pointer-events:none">
               <div class="sk" style="width:32px;height:32px;border-radius:7px;flex-shrink:0"/>
@@ -627,7 +615,6 @@ const modalTitle = () => {
             </div>
           </div>
 
-          <!-- Empty state -->
           <div v-else-if="!iosSimulatorsLoading && iosSimulators.length === 0 && !iosSimulatorsError"
                class="empty-state">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="1.5">
@@ -638,7 +625,6 @@ const modalTitle = () => {
             <p class="empty-sub">Open Xcode → Window → Devices and Simulators to create one.</p>
           </div>
 
-          <!-- Simulator rows -->
           <div v-else class="device-list">
             <div v-for="sim in iosSimulators" :key="sim.udid" class="device-row">
               <div class="device-thumb">
@@ -816,7 +802,6 @@ const modalTitle = () => {
       ══════════════════════════════════════════════ -->
       <div v-if="isVpnVisible" class="modal-body wg-body">
 
-        <!-- Toggle row -->
         <div class="wg-toggle-row">
           <div class="wg-toggle-info">
             <span class="wg-toggle-title">WireGuard VPN Mode</span>
@@ -831,7 +816,6 @@ const modalTitle = () => {
           </button>
         </div>
 
-        <!-- Port input (only when disabled) -->
         <div v-if="!wgEnabled" class="wg-port-row">
           <label class="wg-port-label">WireGuard Port</label>
           <input class="wg-port-input" type="number" v-model.number="localPort"
@@ -839,7 +823,6 @@ const modalTitle = () => {
                  @change="wgPort.value = localPort" />
         </div>
 
-        <!-- Error -->
         <div v-if="wgError" class="alert error">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
@@ -847,7 +830,6 @@ const modalTitle = () => {
           {{ wgError }}
         </div>
 
-        <!-- Starting spinner -->
         <div v-if="wgStatus === 'starting'" class="wg-starting">
           <svg class="spinning" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round">
             <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
@@ -855,7 +837,6 @@ const modalTitle = () => {
           <span>Starting WireGuard…</span>
         </div>
 
-        <!-- QR + config (ready state) -->
         <template v-if="wgEnabled && wgStatus === 'ready' && wgClientConf">
           <div class="wg-qr-section">
             <canvas ref="qrCanvas" class="wg-qr-canvas" />
@@ -897,7 +878,6 @@ const modalTitle = () => {
           </div>
         </template>
 
-        <!-- Info box -->
         <div class="alert info" style="margin-top:16px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
@@ -1174,7 +1154,6 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 </template>
 
 <style scoped>
-/* ── Layout shell ─────────────────────────────────── */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.78);
   z-index: 99999; display: flex; justify-content: center; align-items: center;
@@ -1189,7 +1168,6 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
   overflow: hidden;
 }
 
-/* ── Header ───────────────────────────────────────── */
 .modal-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 16px; border-bottom: 1px solid var(--border);
@@ -1205,7 +1183,6 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 }
 .close-btn:hover { background: rgba(255,255,255,0.07); color: var(--fg-muted); }
 
-/* ── Tab bar ──────────────────────────────────────── */
 .tab-bar {
   display: flex; padding: 6px 10px;
   border-bottom: 1px solid var(--border);
@@ -1223,19 +1200,16 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .tab-btn.active { color: var(--fg-primary); background: rgba(255,255,255,0.09); }
 .tab-btn.active svg { opacity: 1; }
 
-/* ── Scrollable body ──────────────────────────────── */
 .modal-body {
   padding: 16px; font-size: 13px; color: var(--fg-secondary);
   line-height: 1.55; overflow-y: auto; flex: 1;
   text-align: left;
-  /* Custom scrollbar */
   scrollbar-width: thin; scrollbar-color: var(--border) transparent;
 }
 .modal-body::-webkit-scrollbar { width: 5px; }
 .modal-body::-webkit-scrollbar-track { background: transparent; }
 .modal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-/* ── Picker ───────────────────────────────────────── */
 .picker-top {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; margin-bottom: 12px;
@@ -1261,7 +1235,6 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 }
 .install-all-btn:hover { background: rgba(59,130,246,0.2); border-color: rgba(59,130,246,0.4); }
 
-/* ── Device list ──────────────────────────────────── */
 .device-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
 
 .device-row {
@@ -1304,20 +1277,17 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .pill.revert  { background: rgba(239,68,68,0.09);  color: var(--setup-error); border-color: rgba(239,68,68,0.18); }
 .pill.revert:hover  { background: rgba(239,68,68,0.2); }
 
-/* ── Skeleton ─────────────────────────────────────── */
 @keyframes shimmer { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
 .sk {
   background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-active) 50%, var(--bg-card) 75%);
   background-size: 800px 100%; animation: shimmer 1.4s infinite linear;
 }
 
-/* ── Empty state ──────────────────────────────────── */
 .empty-state { text-align: center; padding: 24px 0; color: var(--fg-placeholder); display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .empty-title { color: var(--fg-placeholder); font-size: 13px; font-weight: 500; margin: 6px 0 0; }
 .empty-sub   { font-size: 11.5px; color: var(--fg-placeholder); margin: 0; }
 .empty-sub code { color: var(--fg-muted); background: var(--bg-card); padding: 1px 4px; border-radius: 3px; }
 
-/* ── Prereq note ──────────────────────────────────── */
 .prereq-note {
   display: flex; align-items: flex-start; gap: 7px;
   font-size: 11.5px; color: var(--fg-muted); line-height: 1.5;
@@ -1326,7 +1296,6 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 }
 .prereq-note strong { color: var(--fg-muted); }
 
-/* macOS proxy toggle row */
 .proxy-toggle-row {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   border-top: 1px solid var(--border-subtle); padding-top: 10px; margin-top: 6px;
@@ -1340,7 +1309,6 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .proxy-off { color: var(--fg-muted); }
 .proxy-services { color: var(--fg-muted); font-size: 10.5px; }
 
-/* ── Progress ─────────────────────────────────────── */
 .progress-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .progress-title  { color: var(--fg-secondary); font-size: 14px; font-weight: 600; text-align: left; }
 .progress-sub    { color: var(--fg-placeholder); font-size: 11px; margin-top: 2px; text-align: left; }
@@ -1362,7 +1330,6 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .step-icon  { width: 18px; display: flex; justify-content: center; flex-shrink: 0; }
 .step-label { flex: 1; }
 
-/* ── Alerts ───────────────────────────────────────── */
 .alert {
   display: flex; align-items: flex-start; gap: 8px;
   font-size: 12px; padding: 9px 12px; border-radius: 6px;
@@ -1372,7 +1339,6 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .alert.success { color: #6ee7b7; background: rgba(52,211,153,0.06); border-color: rgba(52,211,153,0.15); }
 .alert.warning { color: var(--method-put); background: var(--warning-muted); border-color: rgba(245,158,11,0.15); }
 
-/* ── OS Proxy banner (iOS Simulator picker) ───────── */
 .os-proxy-banner {
   display: flex; align-items: center; gap: 9px;
   font-size: 12px; padding: 9px 12px; border-radius: 6px;
@@ -1394,7 +1360,6 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .os-proxy-banner .banner-action:hover:not(:disabled) { background: rgba(245,158,11,0.28); }
 .os-proxy-banner .banner-action:disabled { opacity: 0.6; cursor: progress; }
 
-/* ── Manual instructions ──────────────────────────── */
 .instruction-list {
   padding-left: 20px; display: flex; flex-direction: column;
   gap: 10px; color: var(--fg-muted); margin: 0; text-align: left;
@@ -1430,7 +1395,6 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
   border: 1px solid var(--border-subtle);
 }
 
-/* ── Config tab ───────────────────────────────────── */
 .config-body { gap: 0; }
 
 .config-intro {
@@ -1477,7 +1441,6 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .copy-btn:hover { background: var(--surface-hover-strong); color: var(--fg-secondary); }
 .copy-btn.copied { color: #34d399; border-color: rgba(52,211,153,0.28); background: rgba(52,211,153,0.06); }
 
-/* Scrollable code block */
 .code-scroll {
   overflow-x: auto; overflow-y: auto;
   max-height: 260px;
@@ -1498,15 +1461,13 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
   min-width: max-content;
 }
 
-/* XML syntax token colours */
 :deep(.xt-comment) { color: var(--syntax-green); font-style: italic; }
-:deep(.xt-tag)     { color: var(--syntax-cyan); }   /* light blue — tag names */
-:deep(.xt-attr)    { color: var(--accent); }   /* softer blue — attribute names */
-:deep(.xt-attrval) { color: var(--syntax-green); }   /* green — attribute values */
-:deep(.xt-punct)   { color: var(--fg-muted); }   /* grey — < > / */
-:deep(.xt-decl)    { color: var(--syntax-purple); }   /* purple — <?xml */
+:deep(.xt-tag)     { color: var(--syntax-cyan); }
+:deep(.xt-attr)    { color: var(--accent); }
+:deep(.xt-attrval) { color: var(--syntax-green); }
+:deep(.xt-punct)   { color: var(--fg-muted); }
+:deep(.xt-decl)    { color: var(--syntax-purple); }
 
-/* ── Note cards ───────────────────────────────────── */
 .note-card {
   font-size: 12px; color: var(--fg-muted); line-height: 1.6; text-align: left;
   padding: 9px 12px; background: rgba(255,255,255,0.015);
@@ -1516,7 +1477,6 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .note-card p { margin: 0; }
 .note-card .ic { color: var(--fg-muted); }
 
-/* ── Footer ───────────────────────────────────────── */
 .modal-footer {
   padding: 10px 16px; border-top: 1px solid var(--border);
   display: flex; justify-content: flex-end; align-items: center; gap: 7px;
@@ -1532,11 +1492,9 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .footer-btn.ghost { background: transparent; border-color: var(--bg-active); color: var(--fg-muted); }
 .footer-btn.ghost:hover { background: rgba(255,255,255,0.04); color: var(--fg-muted); }
 
-/* ── Spinner ──────────────────────────────────────── */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinning { animation: spin 0.8s linear infinite; }
 
-/* ── VPN Mode / WireGuard ─────────────────────────── */
 .wg-body { gap: 12px; }
 
 .wg-status-pill {
@@ -1622,7 +1580,6 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
   margin: 0;
 }
 
-/* ── Alert variants ───────────────────────────────── */
 .alert.info {
   background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.2); color: var(--accent);
 }

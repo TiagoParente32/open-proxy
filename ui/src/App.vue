@@ -6,7 +6,6 @@ initTheme()
 import { Splitpanes, Pane } from 'splitpanes'
 import 'splitpanes/dist/splitpanes.css'
 
-// Import our new components!
 import TitleBar from './components/TitleBar.vue'
 import AppToolbar from './components/AppToolbar.vue'
 import AppSidebar from './components/AppSidebar.vue'
@@ -26,8 +25,7 @@ import IgnoreHostsModal from './components/IgnoreHostsModal.vue'
 import OnboardingModal from './components/OnboardingModal.vue'
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal.vue'
 import OsProxyWarningModal from './components/OsProxyWarningModal.vue'
-// Import just the logic needed for the top-level app overlay (WebSockets & Context Menu)
-import { 
+import {
   initWebSocket, 
   closeContextMenu, 
   contextMenu, 
@@ -138,7 +136,6 @@ onMounted(() => {
     showOnboarding:   () => { closeAllModals(); showOnboardingModal.value = true },
   }
 
-  // ── Global keyboard shortcuts ────────────────────────────────────────────
   const handleGlobalKey = (e) => {
     const tag = document.activeElement?.tagName
     const isEditing = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable
@@ -274,10 +271,8 @@ const handleRepeatFromContext = () => {
 }
 
 
-// --- COLOR & STAR LOGIC ---
 const toggleStar = () => {
   if (contextMenu.value.request) {
-    // Flip the boolean
     contextMenu.value.request.starred = !contextMenu.value.request.starred;
   }
   closeContextMenu();
@@ -579,7 +574,6 @@ const openBreakpointModalFromContext = () => {
 
    <div v-if="contextMenu.show" ref="contextMenuEl" class="context-menu" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
       
-      <!-- Group: Request actions -->
       <div class="ctx-group-label">Request</div>
       <div class="context-menu-item" @click="handleRepeatFromContext">Repeat</div>
       <div class="context-menu-item" @click="handleEditAndRepeatFromContext">Edit &amp; Repeat</div>
@@ -588,7 +582,6 @@ const openBreakpointModalFromContext = () => {
 
       <div class="context-menu-divider"></div>
 
-      <!-- Group: Mark -->
       <div class="ctx-group-label">Mark</div>
       <div class="context-menu-item ctx-star-item" @click="toggleStar">
         <svg width="13" height="13" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -610,7 +603,6 @@ const openBreakpointModalFromContext = () => {
 
       <div class="context-menu-divider"></div>
 
-      <!-- Group: Tools -->
       <div class="ctx-group-label">Tools</div>
       <div class="context-menu-item" @click="pinFromContextMenu">Pin Domain</div>
       <div class="context-menu-item" @click="openMapLocalModalFromContext">Map Local</div>

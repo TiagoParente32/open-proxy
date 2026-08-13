@@ -261,7 +261,6 @@ function getTrayIconPath () {
 function loadTrayIcon () {
   let img = nativeImage.createFromPath(getTrayIconPath())
 
-  // Fallback: if icon not found, create a plain coloured image
   if (img.isEmpty()) {
     img = nativeImage.createFromDataURL(
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABmJLR0QA/wD/AP+gvaeTAAAAMElEQVQ4jWNgGAWDHfwnIJ6hAT8YGBj+E6MZBaMGjBowasCoAaMGjBowGAEAAAD//wMABdsC9QplbtIAAAAASUVORK5CYII='

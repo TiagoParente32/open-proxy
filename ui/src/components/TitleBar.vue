@@ -10,7 +10,6 @@ const eAPI = window.electronAPI
 const isMaximized = ref(false)
 onMounted(() => eAPI?.onMaximizeChange?.(v => isMaximized.value = v))
 
-// ── Menu structure ────────────────────────────────────────────────────────────
 const op = () => window.__op
 
 const MENUS = [
@@ -120,7 +119,6 @@ const MENUS = [
   },
 ]
 
-// ── Menu state ────────────────────────────────────────────────────────────────
 const openMenu    = ref(null)
 const openSubmenu = ref(null)
 
@@ -159,7 +157,6 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   <div v-if="!isMac()" class="titlebar-win">
     
     <div class="win-left-side">
-      <!-- Added specific padding to this wrapper -->
       <div class="win-app-header" @dblclick.stop>
         <img src="../../../icon.png" class="win-app-icon" alt="" />
       </div>
@@ -244,7 +241,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   align-items: center;
   height: 30px;
   background: var(--bg-sidebar);
-  padding: 0; /* Removing outer padding to control internal spacing precisely */
+  padding: 0;
   flex-shrink: 0;
   user-select: none;
   -webkit-app-region: drag;
@@ -253,8 +250,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
 .win-left-side {
   display: flex;
   align-items: center;
-  /* This ensures the icon has distance from the menu labels */
-  gap: 8px; 
+  gap: 8px;
   -webkit-app-region: no-drag;
 }
 
@@ -369,7 +365,7 @@ onUnmounted(() => document.removeEventListener('mousedown', handleOutsideClick))
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 0 8px; /* Padding for the window controls side */
+  padding: 0 8px;
   -webkit-app-region: no-drag;
 }
 

@@ -114,7 +114,6 @@ const deleteRule = (id) => {
         <span class="resize-edge resize-w"  @mousedown.prevent.stop="startResize('w',  $event)"></span>
         <span class="resize-edge resize-nw" @mousedown.prevent.stop="startResize('nw', $event)"></span>
         
-        <!-- Sidebar -->
         <div class="pm-sidebar">
           
           <div class="pm-sidebar-header">
@@ -173,7 +172,6 @@ const deleteRule = (id) => {
           </div>
         </div>
 
-        <!-- Main editor -->
         <div class="pm-main-area">
           
           <div v-if="activeRule" style="display: flex; flex-direction: column; height: 100%;">
@@ -191,7 +189,6 @@ const deleteRule = (id) => {
 
             <div class="pm-editor-area">
 
-              <!-- Rule name -->
               <div class="pm-field-group">
                 <span class="pm-routing-label">RULE NAME <span style="color:var(--fg-placeholder); font-weight:400;">(optional)</span></span>
                 <input type="text" v-model="activeRule.name" class="pm-routing-input" placeholder="e.g. Flag errors, Auth calls…" />
@@ -269,7 +266,6 @@ const deleteRule = (id) => {
 </template>
 
 <style scoped>
-/* OVERLAY & MODAL */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--overlay); z-index: 99999; display: flex; justify-content: center; align-items: center; }
 .pm-split-modal { background: var(--bg-main); border-radius: 10px; border: 1px solid var(--border); width: 1000px; height: 650px; min-width: 600px; min-height: 420px; max-width: calc(100vw - 20px); max-height: calc(100vh - 40px); display: flex; flex-direction: row; box-shadow: var(--shadow-lg); overflow: hidden; position: relative; }
 .resize-edge { position: absolute; z-index: 10; }
@@ -280,7 +276,6 @@ const deleteRule = (id) => {
 .resize-ne { top: 0; right: 0; cursor: nesw-resize; } .resize-nw { top: 0; left: 0; cursor: nwse-resize; }
 .resize-se { bottom: 0; right: 0; cursor: nwse-resize; } .resize-sw { bottom: 0; left: 0; cursor: nesw-resize; }
 
-/* Color custom properties */
 .pm-split-modal {
   --color-red: #ef4444;
   --color-orange: #f97316;
@@ -290,13 +285,11 @@ const deleteRule = (id) => {
   --color-purple: #8b5cf6;
 }
 
-/* SIDEBAR */
 .pm-sidebar { width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
 .pm-sidebar-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-sidebar); }
 .pm-add-btn { background: var(--accent-muted); color: var(--accent); border: 1px solid var(--accent-border); padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
 .pm-add-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-/* Sidebar list */
 .pm-rule-list { flex: 1; overflow-y: auto; }
 .pm-rule-item {
   height: 44px; padding: 0 12px 0 0;
@@ -309,7 +302,6 @@ const deleteRule = (id) => {
 .pm-rule-item.active { background: var(--accent-muted); }
 .pm-rule-item.disabled { opacity: 0.5; }
 
-/* Checkbox */
 .pm-checkbox-container { display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer; user-select: none; width: 16px; height: 16px; flex-shrink: 0; margin: 0 0 0 10px; }
 .pm-checkbox-container input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
 .pm-checkmark { position: absolute; top: 0; left: 0; height: 16px; width: 16px; background: var(--bg-deepest); border: 1px solid var(--fg-muted); border-radius: 4px; transition: all 0.2s; box-sizing: border-box; }
@@ -319,7 +311,6 @@ const deleteRule = (id) => {
 .pm-checkbox-container input:checked ~ .pm-checkmark:after { display: block; }
 .pm-checkbox-container .pm-checkmark:after { left: 50%; top: 45%; width: 4px; height: 9px; border: solid white; border-width: 0 2px 2px 0; transform: translate(-50%,-50%) rotate(45deg); }
 
-/* Rule text */
 .pm-rule-text-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; justify-content: center; gap: 3px; padding: 8px 0; }
 .pm-rule-name { font-size: 12px; color: var(--fg-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
 .pm-rule-item.active .pm-rule-name { color: var(--fg-primary); font-weight: 600; }
@@ -327,7 +318,6 @@ const deleteRule = (id) => {
 .pm-rule-item.active .pm-rule-target { color: var(--fg-muted); }
 .pm-rule-pattern-inline { color: var(--accent); }
 
-/* Rule action buttons */
 .pm-rule-action, .pm-rule-del {
   background: transparent; border: 1px solid transparent; color: var(--fg-muted);
   cursor: pointer; padding: 4px; border-radius: 5px;
@@ -339,7 +329,6 @@ const deleteRule = (id) => {
 
 .pm-empty-sidebar { padding: 40px 20px; text-align: center; color: var(--fg-placeholder); font-size: 12px; line-height: 1.6; }
 
-/* Sidebar footer */
 .pm-sidebar-footer { padding: 14px 16px; background: var(--bg-modal); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
 .toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--fg-muted); font-weight: 600; font-size: 12px; }
 .toggle.active { color: var(--accent); }
@@ -351,7 +340,6 @@ const deleteRule = (id) => {
 .ghost-btn { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; background: transparent; border: 1px solid var(--border); color: var(--fg-muted); border-radius: 5px; cursor: pointer; font-size: 11px; font-weight: 500; transition: all 0.15s; }
 .ghost-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); border-color: var(--fg-muted); }
 
-/* MAIN AREA */
 .pm-main-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-main); min-width: 0; }
 .pm-main-empty { flex: 1; display: flex; justify-content: center; align-items: center; color: var(--fg-placeholder); font-size: 13px; }
 .pm-header { display: flex; justify-content: space-between; align-items: center; padding: 0 16px; height: 44px; background: var(--bg-sidebar); border-bottom: 1px solid var(--border); flex-shrink: 0; }
@@ -371,7 +359,6 @@ const deleteRule = (id) => {
 .pm-routing-input { width: 100%; background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-primary); padding: 9px 12px; border-radius: 6px; font-size: 13px; font-family: 'Consolas', monospace; outline: none; transition: border-color 0.2s, box-shadow 0.2s; box-sizing: border-box; }
 .pm-routing-input:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
 
-/* Custom select */
 .pm-custom-select-wrapper { position: relative; width: 100%; user-select: none; }
 .pm-custom-select-display { width: 100%; background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-primary); padding: 9px 12px; border-radius: 6px; font-size: 13px; font-family: 'Consolas', monospace; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: border-color 0.2s; box-sizing: border-box; }
 .pm-custom-select-display:hover { border-color: var(--fg-muted); }
@@ -386,7 +373,6 @@ const deleteRule = (id) => {
 
 .pm-routing-arrow { display: flex; justify-content: center; align-items: center; padding: 2px 0; flex-shrink: 0; }
 
-/* Color picker */
 .pm-color-picker { display: flex; gap: 12px; margin-top: 4px; padding: 4px 0; flex-wrap: wrap; }
 .pm-color-dot { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s; }
 .pm-color-dot:hover { transform: scale(1.1); }
