@@ -948,6 +948,10 @@ def list_ios_simulators():
         ["xcrun", "simctl", "list", "devices", "--json"],
         capture_output=True, text=True, timeout=10
     )
+    if not result.stdout.strip():
+        # simctl prints nothing (instead of an empty devices list) when no iOS
+        # runtime is installed — treat that as "no simulators", not a crash.
+        return []
     data = json.loads(result.stdout)
     simulators = []
     for runtime, devices in data.get("devices", {}).items():
