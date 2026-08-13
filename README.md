@@ -4,7 +4,7 @@ OpenProxy is a fast, modern, lightweight network debugging proxy built for devel
 
 Whether you need to mock API responses, rewrite routing rules on the fly, throttle your network, or automatically inject SSL certificates into an Android emulator, OpenProxy handles it without the bloat of traditional Java-based proxies.
 
-![OpenProxy Interface](screenshots/example2.png)
+![OpenProxy Interface](screenshots/example.png)
 
 ## 📑 Table of Contents
 
