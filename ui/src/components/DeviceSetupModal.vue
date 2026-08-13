@@ -1409,7 +1409,7 @@ export https_proxy=http://{{ proxyIP }}:{{ proxyPort }}</pre>
 .instruction-sublist li { padding-left: 0; }
 
 .info-box {
-  margin-top: 8px; padding: 9px 12px; background: rgba(0,0,0,0.2);
+  margin-top: 8px; padding: 9px 12px; background: var(--bg-deepest);
   border-radius: 6px; border: 1px solid var(--border);
   display: flex; flex-direction: column; gap: 6px;
 }
