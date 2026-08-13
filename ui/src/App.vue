@@ -158,7 +158,7 @@ onMounted(() => {
     else if (e.key === 'Escape') {
       // Close the topmost open modal first
       if      (showShortcutsModal.value)    showShortcutsModal.value    = false
-      else if (showOnboardingModal.value)   showOnboardingModal.value   = false
+      else if (showOnboardingModal.value)   onboardingModalRef.value ? onboardingModalRef.value.finish() : (showOnboardingModal.value = false)
       else if (showIgnoreHostsModal.value)  showIgnoreHostsModal.value  = false
       else if (showScriptingModal.value)    showScriptingModal.value    = false
       else if (showDeviceSetupModal.value)  showDeviceSetupModal.value  = false
@@ -217,6 +217,7 @@ const needsOnboarding = !hasOnboarded && (
 )
 
 const showOnboardingModal = ref(needsOnboarding)
+const onboardingModalRef = ref(null)
 // Whether there is pre-existing user data to prefill the onboarding steps with
 // (vs. a truly blank/fresh install where defaults make more sense).
 const onboardingPrefill = hasPriorInstallData
@@ -626,7 +627,7 @@ const openBreakpointModalFromContext = () => {
     <DeviceSetupModal />
     <ScriptingModal />
     <IgnoreHostsModal :show="showIgnoreHostsModal" @close="showIgnoreHostsModal = false" />
-    <OnboardingModal v-if="showOnboardingModal" :app-version="appVersion" :prefill="onboardingPrefill" @done="showOnboardingModal = false" />
+    <OnboardingModal v-if="showOnboardingModal" ref="onboardingModalRef" :app-version="appVersion" :prefill="onboardingPrefill" @done="showOnboardingModal = false" />
     <KeyboardShortcutsModal v-if="showShortcutsModal" @close="showShortcutsModal = false" />
     <OsProxyWarningModal />
   </div>

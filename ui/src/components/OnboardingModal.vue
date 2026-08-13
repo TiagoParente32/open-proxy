@@ -92,6 +92,11 @@ const finish = () => {
   localStorage.setItem('openproxyOnboardingDone', '1')
   emit('done')
 }
+
+// Exposed so the app-level Escape handler can treat dismissing early the same
+// as clicking through: whatever was picked (or the defaults for steps never
+// reached) is saved, and onboarding is marked done so it won't reappear.
+defineExpose({ finish })
 </script>
 
 <template>
