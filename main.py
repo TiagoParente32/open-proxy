@@ -24,6 +24,8 @@ from PIL import Image
 from mitmproxy import http, options
 from mitmproxy.tools.dump import DumpMaster
 from mitmproxy.proxy.mode_servers import WireGuardServerInstance
+from mitmproxy.addons import asgiapp
+from mitmproxy.addons.onboardingapp import app as _onboarding_wsgi_app
 
 
 # this comment is to test if the update is working
@@ -96,6 +98,24 @@ def get_executable_path(base_name):
                 "/usr/local/bin/adb"
             ]:
                 if os.path.exists(f): return f
+
+    if base_name == "emulator":
+        android_home = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
+        if android_home:
+            fallback = os.path.join(android_home, "emulator", exe_name)
+            if os.path.exists(fallback): return fallback
+
+        if os.name == "nt":
+            fallback = os.path.expandvars(rf"%LOCALAPPDATA%\Android\Sdk\emulator\{exe_name}")
+            if os.path.exists(fallback): return fallback
+
+        elif sys.platform == "darwin":
+            fallback = os.path.expanduser("~/Library/Android/sdk/emulator/emulator")
+            if os.path.exists(fallback): return fallback
+
+        else:
+            fallback = os.path.expanduser("~/Android/Sdk/emulator/emulator")
+            if os.path.exists(fallback): return fallback
 
     if base_name == "openssl" and os.name == "nt":
         fallbacks = [
@@ -199,6 +219,9 @@ async def _watch_local_ip(bridge):
             if new_ip != LOCAL_IP:
                 LOCAL_IP = new_ip
                 print(f"[INFO] Network change detected — new local IP: {LOCAL_IP}")
+                ip_onboarding = getattr(bridge, "_ip_onboarding_addon", None)
+                if ip_onboarding:
+                    ip_onboarding.host = LOCAL_IP
                 await bridge.broadcast_to_ui("SYSTEM_INFO", {
                     "ip": LOCAL_IP,
                     "port": bridge.proxy_port,
@@ -959,6 +982,29 @@ def list_adb_devices(adb_cmd):
     return devices
 
 
+def list_avds(emulator_cmd):
+    """Returns the names of all configured AVDs (running or not) via `emulator -list-avds`."""
+    result = subprocess.run(
+        [emulator_cmd, "-list-avds"],
+        capture_output=True, text=True, timeout=10
+    )
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def get_avd_name_for_serial(adb_cmd, serial):
+    """Returns the AVD name backing a running emulator serial, or None if it can't be determined."""
+    try:
+        result = subprocess.run(
+            [adb_cmd, "-s", serial, "emu", "avd", "name"],
+            capture_output=True, text=True, timeout=5
+        )
+        # Output is the AVD name on the first line, "OK" on the second.
+        lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+        return lines[0] if lines else None
+    except Exception:
+        return None
+
+
 # ============================================================================
 # IOS SIMULATOR HELPERS  (macOS only)
 # ============================================================================
@@ -1348,6 +1394,7 @@ class ProxyUIBridge:
         self.wg_enabled = False
         self.wg_port = 51820
         self._master = None     # set by run_proxy_forever; used for WG restart + inject
+        self._ip_onboarding_addon = None  # set by run_proxy_forever; serves mitm cert page on LOCAL_IP
         self._last_startup_error = ""   # captured from mitmproxy's log on startup failure
         self.pending_update_info = None  # cached until a client connects
 
@@ -1749,7 +1796,138 @@ class ProxyUIBridge:
             await ws.send(json.dumps({"type": "ADB_DEVICES", "devices": [], "error": str(e)}))
         except Exception as e:
             await ws.send(json.dumps({"type": "ADB_DEVICES", "devices": [], "error": f"Unexpected error: {e}"}))
-            
+
+    async def handle_list_avds(self, ws):
+        """Lists all configured AVDs (like Android Studio's Device Manager), flagging
+        which ones are already running so the UI can offer to boot the rest."""
+        try:
+            emulator_cmd = get_executable_path("emulator")
+            loop = asyncio.get_running_loop()
+            avd_names = await asyncio.wait_for(
+                loop.run_in_executor(None, list_avds, emulator_cmd),
+                timeout=10.0
+            )
+
+            running_by_avd = {}
+            try:
+                adb_cmd = get_executable_path("adb")
+                devices = await loop.run_in_executor(None, list_adb_devices, adb_cmd)
+                for d in devices:
+                    if d["type"] != "emulator":
+                        continue
+                    avd_name = await loop.run_in_executor(None, get_avd_name_for_serial, adb_cmd, d["serial"])
+                    if avd_name:
+                        running_by_avd[avd_name] = d["serial"]
+            except FileNotFoundError:
+                pass  # adb missing — still report the AVD list, just without running-state info
+
+            avds = [{"name": n, "running_serial": running_by_avd.get(n)} for n in avd_names]
+            await ws.send(json.dumps({"type": "AVD_LIST", "avds": avds}))
+        except asyncio.TimeoutError:
+            await ws.send(json.dumps({
+                "type": "AVD_LIST", "avds": [],
+                "error": "`emulator -list-avds` timed out after 10 seconds."
+            }))
+        except FileNotFoundError as e:
+            await ws.send(json.dumps({"type": "AVD_LIST", "avds": [], "error": str(e)}))
+        except Exception as e:
+            await ws.send(json.dumps({"type": "AVD_LIST", "avds": [], "error": f"Unexpected error: {e}"}))
+
+    async def boot_avd(self, ws, name: str):
+        """Launches an offline AVD (detached, like double-clicking it in Android Studio's
+        Device Manager) and waits for it to appear in adb and finish booting."""
+        async def send(status, **kw):
+            payload = {"type": "AVD_BOOT_PROGRESS", "name": name, "status": status}
+            payload.update(kw)
+            await ws.send(json.dumps(payload))
+
+        loop = asyncio.get_running_loop()
+
+        try:
+            emulator_cmd = get_executable_path("emulator")
+        except FileNotFoundError as e:
+            await send("error", error=str(e))
+            return
+
+        adb_cmd = None
+        before_serials = set()
+        try:
+            adb_cmd = get_executable_path("adb")
+            before = await loop.run_in_executor(None, list_adb_devices, adb_cmd)
+            before_serials = {d["serial"] for d in before}
+        except FileNotFoundError:
+            pass
+
+        def _launch():
+            kwargs = {}
+            if os.name == "nt":
+                kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            else:
+                kwargs["start_new_session"] = True
+            return subprocess.Popen(
+                [emulator_cmd, "-avd", name],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                **kwargs
+            )
+
+        try:
+            proc = await loop.run_in_executor(None, _launch)
+        except Exception as e:
+            await send("error", error=str(e))
+            return
+
+        await send("launching")
+        await asyncio.sleep(2.0)
+        if proc.poll() is not None:
+            await send("error", error=(
+                f"emulator process exited immediately (code {proc.returncode}). "
+                "It may already be running, or the AVD config may be broken."
+            ))
+            return
+
+        if not adb_cmd:
+            # Launched successfully but we can't verify boot completion without adb.
+            await send("success")
+            return
+
+        serial = None
+        deadline = loop.time() + 150  # cold boots can take well over a minute
+        while loop.time() < deadline:
+            try:
+                devices = await loop.run_in_executor(None, list_adb_devices, adb_cmd)
+            except Exception:
+                devices = []
+            new_serials = [d["serial"] for d in devices if d["serial"] not in before_serials]
+            if new_serials:
+                serial = new_serials[0]
+                break
+            await asyncio.sleep(3)
+
+        if not serial:
+            await send("error", error="Timed out waiting for the emulator to appear in `adb devices`.")
+            return
+
+        await send("booting", serial=serial)
+
+        deadline = loop.time() + 150
+        while loop.time() < deadline:
+            try:
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: subprocess.run(
+                        [adb_cmd, "-s", serial, "shell", "getprop", "sys.boot_completed"],
+                        capture_output=True, text=True, timeout=10
+                    )
+                )
+                if result.stdout.strip() == "1":
+                    await send("success", serial=serial)
+                    return
+            except Exception:
+                pass
+            await asyncio.sleep(3)
+
+        await send("error", error="Emulator appeared but never finished booting (sys.boot_completed check timed out).")
+
     async def setup_android_device(self, ws, serial: str, device_type: str):
         """
         Installs the mitmproxy cert and sets the proxy on a specific ADB device.
@@ -1853,6 +2031,89 @@ class ProxyUIBridge:
         except Exception as e:
             await update("current_active_step", "error", str(e))
 
+    async def push_cert_to_downloads(self, ws, serial: str):
+        """
+        Pushes the mitmproxy CA cert (.cer, Android-friendly extension) straight into
+        the device's Downloads folder via `adb push`, as an alternative to visiting
+        http://mitm.it (useful when the browser force-upgrades to https and fails to load).
+        The user still has to tap the file in Downloads/Files to install it as a CA.
+        """
+        serial_flag = ["-s", serial]
+        logs = []
+
+        async def log(msg):
+            print(f"[PUSH_CERT] {msg}", flush=True)
+            logs.append(msg)
+            await ws.send(json.dumps({"type": "CERT_PUSH_LOG", "serial": serial, "message": msg}))
+
+        await log(f"Starting push for serial={serial!r}")
+        try:
+            adb_cmd = get_executable_path("adb")
+            await log(f"Using adb at: {adb_cmd!r}")
+
+            cert_path = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.cer")
+            await log(f"Cert path: {cert_path!r} exists={os.path.exists(cert_path)}")
+            if not os.path.exists(cert_path):
+                error = "Certificate not found. Start the proxy first!"
+                await log(f"ERROR: {error}")
+                await ws.send(json.dumps({
+                    "type": "CERT_PUSHED", "serial": serial, "success": False,
+                    "error": error, "logs": logs
+                }))
+                return
+
+            dest_path = "/sdcard/Download/mitmproxy-ca-cert.cer"
+            cmd = [adb_cmd] + serial_flag + ["push", cert_path, dest_path]
+            await log(f"Running: {' '.join(cmd)}")
+
+            # Run adb off the event loop with a timeout, so a stuck/unauthorized
+            # device can't hang the whole websocket server.
+            loop = asyncio.get_event_loop()
+            try:
+                result = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: subprocess.run(cmd, capture_output=True, text=True)
+                    ),
+                    timeout=20
+                )
+            except asyncio.TimeoutError:
+                error = "adb push timed out after 20s. Is the device authorized (check for an 'Allow USB debugging' prompt)?"
+                await log(f"ERROR: {error}")
+                await ws.send(json.dumps({
+                    "type": "CERT_PUSHED", "serial": serial, "success": False,
+                    "error": error, "logs": logs
+                }))
+                return
+
+            await log(f"returncode={result.returncode}")
+            if result.stdout.strip():
+                await log(f"stdout: {result.stdout.strip()}")
+            if result.stderr.strip():
+                await log(f"stderr: {result.stderr.strip()}")
+            result.check_returncode()
+
+            await log(f"Success — pushed to {dest_path}")
+            await ws.send(json.dumps({
+                "type": "CERT_PUSHED", "serial": serial, "success": True,
+                "path": dest_path, "logs": logs
+            }))
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr.strip() if e.stderr else str(e)
+            await log(f"ERROR: Command failed: {error_msg}")
+            await ws.send(json.dumps({
+                "type": "CERT_PUSHED", "serial": serial, "success": False,
+                "error": f"Command failed: {error_msg}", "logs": logs
+            }))
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            await log(f"ERROR: Unexpected error: {e}\n{tb}")
+            await ws.send(json.dumps({
+                "type": "CERT_PUSHED", "serial": serial, "success": False,
+                "error": str(e), "logs": logs
+            }))
+
     async def revert_android_device(self, ws, serial: str):
         """Clears the proxy setting and removes the mitmproxy cert from a device."""
         serial_flag = ["-s", serial]
@@ -1920,6 +2181,39 @@ class ProxyUIBridge:
     # -------------------------------------------------------------------------
     # iOS SIMULATOR SETUP HELPERS  (macOS only)
     # -------------------------------------------------------------------------
+
+    async def boot_ios_simulator(self, ws, udid: str):
+        """Boots a Shutdown iOS Simulator and brings Simulator.app to the foreground."""
+        async def send(success, error=None):
+            await ws.send(json.dumps({
+                "type": "IOS_SIMULATOR_BOOTED", "udid": udid,
+                "success": success, "error": error
+            }))
+
+        try:
+            loop = asyncio.get_running_loop()
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: subprocess.run(["xcrun", "simctl", "boot", udid], capture_output=True, text=True)
+                ),
+                timeout=30
+            )
+            # simctl errors out if the device is already booted — that's not a real failure.
+            if result.returncode != 0 and "current state: Booted" not in (result.stderr or ""):
+                error_msg = result.stderr.strip() or result.stdout.strip() or "simctl boot failed"
+                await send(False, error_msg)
+                return
+
+            await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(["open", "-a", "Simulator"], capture_output=True, text=True)
+            )
+            await send(True)
+        except asyncio.TimeoutError:
+            await send(False, "xcrun simctl boot timed out after 30s.")
+        except Exception as e:
+            await send(False, str(e))
 
     async def handle_list_ios_simulators(self, ws):
         if sys.platform != "darwin":
@@ -2162,6 +2456,15 @@ class ProxyUIBridge:
                 elif payload.get("type") == "LIST_ADB_DEVICES":
                     asyncio.create_task(self.handle_list_adb_devices(websocket))
 
+                # ---- NEW: List AVDs (including offline ones) and boot them on demand ----
+                elif payload.get("type") == "LIST_AVDS":
+                    asyncio.create_task(self.handle_list_avds(websocket))
+
+                elif payload.get("type") == "BOOT_AVD":
+                    avd_name = payload.get("name")
+                    if avd_name:
+                        asyncio.create_task(self.boot_avd(websocket, avd_name))
+
                 # ---- NEW: Setup a specific device (replaces generic SETUP_ANDROID) ----
                 elif payload.get("type") == "SETUP_ANDROID_DEVICE":
                     serial = payload.get("serial")
@@ -2179,9 +2482,23 @@ class ProxyUIBridge:
                     if serial:
                         asyncio.create_task(self.revert_android_device(websocket, serial))
 
+                # ---- NEW: Push the CA cert straight into the device's Downloads folder ----
+                elif payload.get("type") == "PUSH_CERT_TO_DOWNLOADS":
+                    serial = payload.get("serial")
+                    print(f"[WS] Received PUSH_CERT_TO_DOWNLOADS serial={serial!r}", flush=True)
+                    if serial:
+                        asyncio.create_task(self.push_cert_to_downloads(websocket, serial))
+                    else:
+                        print("[WS] PUSH_CERT_TO_DOWNLOADS ignored: no serial provided", flush=True)
+
                 # ---- iOS Simulator setup ----
                 elif payload.get("type") == "LIST_IOS_SIMULATORS":
                     asyncio.create_task(self.handle_list_ios_simulators(websocket))
+
+                elif payload.get("type") == "BOOT_IOS_SIMULATOR":
+                    udid = payload.get("udid")
+                    if udid:
+                        asyncio.create_task(self.boot_ios_simulator(websocket, udid))
 
                 elif payload.get("type") == "SETUP_IOS_SIMULATOR":
                     udid = payload.get("udid")
@@ -2589,6 +2906,14 @@ async def run_proxy_forever(bridge, proxy_port):
             opts.update(mode=modes)
             master = DumpMaster(opts, with_termlog=False, with_dumper=False)
             master.addons.add(bridge)
+            # Chrome/Safari's "HTTPS-First" mode auto-upgrades http://mitm.it to https://
+            # (it's a public-looking hostname), which shows a cert warning instead of the
+            # cert download page. Private-network IPs are exempt from that upgrade, so we
+            # also serve the same onboarding app on the device's own LAN IP — used by the
+            # physical-device setup instructions/QR code. Kept in sync by _watch_local_ip().
+            ip_onboarding = asgiapp.WSGIApp(_onboarding_wsgi_app, LOCAL_IP, None)
+            master.addons.add(ip_onboarding)
+            bridge._ip_onboarding_addon = ip_onboarding
             bridge._master = master
             await master.run()
         except asyncio.CancelledError:

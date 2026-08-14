@@ -7,17 +7,27 @@ import {
     adbDevices,
     adbDevicesLoading,
     adbDevicesError,
+    avds,
+    avdsLoading,
+    avdsError,
+    avdBootStatus,
+    listAvds,
+    bootAvd,
     setupProgress,
     revertProgress,
     listAdbDevices,
     setupAndroidDevice,
     revertAndroidDevice,
+    certPushStatus,
+    pushCertToDownloads,
     iosSimulators,
     iosSimulatorsLoading,
     iosSimulatorsError,
     iosSetupProgress,
     iosRevertProgress,
+    iosBootStatus,
     listIosSimulators,
+    bootIosSimulator,
     setupIosSimulator,
     revertIosSimulator,
     wgEnabled,
@@ -36,6 +46,8 @@ import QRCode from 'qrcode'
 
 const selectedSerial = ref(null)
 const selectedUdid   = ref(null)
+// Device chosen for the "push cert to Downloads" manual-tab action (defaults to the first detected emulator)
+const pushTargetSerial = ref(null)
 const activeTab  = ref('devices')
 const activePane = ref('pick')
 const copiedKey  = ref(null)
@@ -44,6 +56,14 @@ const copiedKey  = ref(null)
 const qrCanvas   = ref(null)
 const localPort  = ref(51820)
 const wgCopied   = ref(false)
+
+// Chrome/Safari's "HTTPS-First" mode auto-upgrades http://mitm.it to https:// (it's a
+// public-looking hostname), which fails with a cert warning instead of the download page.
+// Private-network IPs are exempt from that upgrade, so we point the QR/instructions at
+// OpenProxy's own LAN IP instead (see main.py's second onboarding responder).
+const mitmCertUrl = computed(() => `http://${proxyIP.value}/`)
+const mitmQrCanvas = ref(null)
+const iosMitmQrCanvas = ref(null)
 
 const wgStatusLabel = computed(() => ({
   disabled: { text: 'Off',       cls: 'pill-off'      },
@@ -96,6 +116,30 @@ watch([isVpnVisible, wgPort], ([visible]) => {
   if (visible) localPort.value = wgPort.value
 })
 // ─────────────────────────────────────────────────────────────────────────────
+
+// True while a physical device's "Manual Proxy" tab is on screen —
+// used to (re)render the cert-install QR code only when it's actually visible.
+const isPhysicalDeviceManualVisible = computed(() =>
+  showDeviceSetupModal.value &&
+  (deviceSetupType.value === 'android_device' || deviceSetupType.value === 'ios_device') &&
+  activeTab.value === 'manual'
+)
+
+watch([isPhysicalDeviceManualVisible, deviceSetupType, mitmCertUrl], async ([visible]) => {
+  if (!visible) return
+  await nextTick()
+  const canvas = deviceSetupType.value === 'android_device' ? mitmQrCanvas.value : iosMitmQrCanvas.value
+  if (canvas) {
+    try {
+      await QRCode.toCanvas(canvas, mitmCertUrl.value, {
+        width: 140,
+        color: { dark: '#000000', light: '#ffffff' },
+        errorCorrectionLevel: 'M',
+      })
+    } catch (e) { console.error('[cert QR] failed:', e) }
+  }
+})
+
 
 // ── Raw code strings ──────────────────────────────────────────────────────────
 const networkSecurityConfig = `<?xml version="1.0" encoding="utf-8"?>
@@ -193,7 +237,7 @@ const initModal = ([open]) => {
         activeTab.value = 'chrome'
     } else {
         activeTab.value = 'devices'
-        if (deviceSetupType.value === 'android_emulator') listAdbDevices()
+        if (deviceSetupType.value === 'android_emulator') { listAdbDevices(); listAvds() }
         if (deviceSetupType.value === 'ios_simulator')    listIosSimulators()
     }
 }
@@ -254,6 +298,16 @@ const filteredAdbDevices = computed(() =>
         ? adbDevices.value.filter(d => d.type === 'emulator')
         : adbDevices.value
 )
+
+// AVDs that aren't currently running — offered with a "Boot" action, like Android Studio's Device Manager
+const offlineAvds = computed(() => avds.value.filter(a => !a.running_serial))
+
+// Keep the manual-tab "push to Downloads" target pointed at a valid, connected device
+watch(filteredAdbDevices, (devices) => {
+    if (!devices.some(d => d.serial === pushTargetSerial.value)) {
+        pushTargetSerial.value = devices[0]?.serial || null
+    }
+}, { immediate: true })
 
 // Only booted simulators can have the cert installed
 const bootedSimulators = computed(() => iosSimulators.value.filter(s => s.state === 'Booted'))
@@ -412,6 +466,14 @@ const modalTitle = () => {
           </svg>
           Devices
         </button>
+        <button class="tab-btn" :class="{ active: activeTab === 'manual' }"
+                @click="activeTab = 'manual'; if (deviceSetupType === 'android_emulator') listAdbDevices()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          Manual
+        </button>
         <button v-if="deviceSetupType === 'android_emulator'" class="tab-btn" :class="{ active: activeTab === 'config' }"
                 @click="activeTab = 'config'">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -419,14 +481,6 @@ const modalTitle = () => {
             <polyline points="8 6 2 12 8 18"/>
           </svg>
           App Config
-        </button>
-        <button class="tab-btn" :class="{ active: activeTab === 'manual' }"
-                @click="activeTab = 'manual'">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-          </svg>
-          Manual
         </button>
       </div>
 
@@ -471,16 +525,17 @@ const modalTitle = () => {
                 </svg>
                 Install All ({{ filteredAdbDevices.length }})
               </button>
-              <button class="refresh-btn" :disabled="adbDevicesLoading" @click="listAdbDevices()" title="Refresh devices">
+              <button class="refresh-btn" :disabled="adbDevicesLoading || avdsLoading"
+                      @click="listAdbDevices(); listAvds()" title="Refresh devices">
                 <!-- Refresh / rotate-cw icon -->
-                <svg :class="{ spinning: adbDevicesLoading }"
+                <svg :class="{ spinning: adbDevicesLoading || avdsLoading }"
                      width="13" height="13" viewBox="0 0 24 24"
                      fill="none" stroke="currentColor" stroke-width="2.2"
                      stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="23 4 23 10 17 10"/>
                   <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                 </svg>
-                <span>{{ adbDevicesLoading ? 'Scanning…' : 'Refresh' }}</span>
+                <span>{{ adbDevicesLoading || avdsLoading ? 'Scanning…' : 'Refresh' }}</span>
               </button>
             </div>
           </div>
@@ -504,7 +559,7 @@ const modalTitle = () => {
           </div>
 
           <!-- Empty state -->
-          <div v-else-if="!adbDevicesLoading && filteredAdbDevices.length === 0 && !adbDevicesError"
+          <div v-else-if="!adbDevicesLoading && filteredAdbDevices.length === 0 && offlineAvds.length === 0 && !adbDevicesError"
                class="empty-state">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="1.5">
               <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
@@ -550,6 +605,34 @@ const modalTitle = () => {
                     <path d="M3.51 15a9 9 0 1 0 .49-4.95"/>
                   </svg>
                   Revert
+                </button>
+              </div>
+            </div>
+
+            <!-- Offline AVDs (configured but not running) — boot them like Android Studio's Device Manager -->
+            <div v-for="avd in offlineAvds" :key="avd.name" class="device-row">
+              <div class="device-thumb">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <rect x="2" y="3" width="20" height="14" rx="2"/>
+                  <polyline points="8 21 12 17 16 21"/>
+                  <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+              </div>
+              <div class="device-info">
+                <span class="device-model">{{ avd.name.replace(/_/g, ' ') }}</span>
+              </div>
+              <span class="type-badge offline">
+                {{ avdBootStatus[avd.name]?.state === 'booting' ? 'Booting' : avdBootStatus[avd.name]?.state === 'launching' ? 'Launching' : 'Offline' }}
+              </span>
+              <div class="row-actions">
+                <button class="pill" :class="avdBootStatus[avd.name]?.state === 'error' ? 'revert' : 'install'"
+                        :disabled="avdBootStatus[avd.name]?.state === 'launching' || avdBootStatus[avd.name]?.state === 'booting'"
+                        :title="avdBootStatus[avd.name]?.error || ''"
+                        @click="bootAvd(avd.name)">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <path d="M12 2v6"/><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+                  </svg>
+                  {{ avdBootStatus[avd.name]?.state === 'launching' ? 'Launching…' : avdBootStatus[avd.name]?.state === 'booting' ? 'Booting…' : 'Boot' }}
                 </button>
               </div>
             </div>
@@ -655,6 +738,16 @@ const modalTitle = () => {
                 {{ sim.state }}
               </span>
               <div class="row-actions">
+                <button v-if="sim.state !== 'Booted'" class="pill"
+                        :class="iosBootStatus[sim.udid]?.state === 'error' ? 'revert' : 'install'"
+                        :disabled="iosBootStatus[sim.udid]?.state === 'booting'"
+                        :title="iosBootStatus[sim.udid]?.error || ''"
+                        @click="bootIosSimulator(sim.udid)">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <path d="M12 2v6"/><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+                  </svg>
+                  {{ iosBootStatus[sim.udid]?.state === 'booting' ? 'Booting…' : 'Boot' }}
+                </button>
                 <button class="pill install" :disabled="sim.state !== 'Booted'"
                         :title="sim.state !== 'Booted' ? 'Boot the simulator first' : ''"
                         @click="selectAndSetupIos(sim)">
@@ -779,13 +872,13 @@ const modalTitle = () => {
                 <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'and_dev_port' }" @click="copyInfo(proxyPort, 'and_dev_port')">{{ proxyPort }}</code></div>
               </div>
             </li>
-            <li>Open the browser on your phone and navigate to <code class="ic">http://mitm.it</code> — tap the <strong>Android</strong> button to download the certificate.</li>
+            <li>Open the browser on your phone and navigate to <code class="ic">{{ mitmCertUrl }}</code> or scan the QR code as a shortcut — tap the <strong>Android</strong> button to download the certificate.
+              <div class="info-box" style="align-items:center;gap:12px">
+                <canvas ref="mitmQrCanvas" style="border-radius:6px;flex-shrink:0" />
+              </div>
+            </li>
             <li>Go to <strong>Settings › Security › Encryption &amp; Credentials › Install a certificate › CA Certificate</strong> and install the downloaded file.</li>
           </ol>
-          <div class="alert warning" style="margin-top:14px">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            The <code class="ic">mitm.it</code> page only loads when the proxy is running and your phone is routing through it. Make sure OpenProxy is recording before visiting it.
-          </div>
         </div>
 
         <div v-if="deviceSetupType === 'ios_device'">
@@ -799,7 +892,11 @@ const modalTitle = () => {
                 <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'ios_dev_port' }" @click="copyInfo(proxyPort, 'ios_dev_port')">{{ proxyPort }}</code></div>
               </div>
             </li>
-            <li>Open Safari on your iPhone and go to <code class="ic">http://mitm.it</code> — tap the <strong>iOS</strong> button to download the profile.</li>
+            <li>Open Safari on your iPhone and go to <code class="ic">{{ mitmCertUrl }}</code> or scan the QR code as a shortcut — tap the <strong>iOS</strong> button to download the profile.
+              <div class="info-box" style="align-items:center;gap:12px">
+                <canvas ref="iosMitmQrCanvas" style="border-radius:6px;flex-shrink:0" />
+              </div>
+            </li>
             <li>Go to <strong>Settings › General › VPN &amp; Device Management</strong> and install the downloaded profile.</li>
             <li><strong>Crucial:</strong> <strong>Settings › General › About › Certificate Trust Settings</strong> — toggle mitmproxy <strong>ON</strong>.</li>
           </ol>
@@ -999,6 +1096,7 @@ const modalTitle = () => {
                 <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'sim_port' }" @click="copyInfo(proxyPort, 'sim_port')">{{ proxyPort }}</code></div>
               </div>
             </li>
+            <li>Open Safari and go to <code class="ic">{{ mitmCertUrl }}</code> — tap the <strong>iOS</strong> button to download the profile.</li>
             <li>Go to <strong>Settings → General → VPN &amp; Device Management</strong> and install the downloaded profile.</li>
             <li>
               <strong>Crucial:</strong> Go to <strong>Settings → General → About → Certificate Trust Settings</strong> and toggle the mitmproxy certificate <strong>ON</strong>.
@@ -1024,15 +1122,43 @@ const modalTitle = () => {
               </div>
               <em style="font-size:11px;color:var(--fg-placeholder);">The special address <code class="ic">10.0.2.2</code> routes from the emulator to your Mac's localhost.</em>
             </li>
-            <li>Open the emulator browser and go to <code class="ic">http://mitm.it</code>, then tap the Android certificate download.</li>
+            <li>
+              Open the emulator browser and go to <code class="ic">{{ mitmCertUrl }}</code>, then tap the Android certificate download.
+              <div style="margin-top:10px">
+                <strong>Or</strong> skip the browser entirely — push the certificate straight to the device's Downloads folder:
+              </div>
+              <div class="info-box" style="align-items:center">
+                <select v-if="filteredAdbDevices.length > 1" v-model="pushTargetSerial" class="info-val"
+                        style="cursor:pointer;background:transparent;border:none;font:inherit">
+                  <option v-for="d in filteredAdbDevices" :key="d.serial" :value="d.serial">{{ d.model }} ({{ d.serial }})</option>
+                </select>
+                <span v-else-if="filteredAdbDevices.length === 1" class="info-val">{{ filteredAdbDevices[0].model }}</span>
+                <span v-else class="info-val" style="color:var(--fg-placeholder)">No emulator detected</span>
+                <button class="pill install" :disabled="!pushTargetSerial || certPushStatus[pushTargetSerial]?.state === 'pushing'"
+                        @click="pushCertToDownloads(pushTargetSerial)">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  {{ pushTargetSerial && certPushStatus[pushTargetSerial]?.state === 'pushing' ? 'Pushing…' : 'Push to Downloads' }}
+                </button>
+              </div>
+              <em v-if="pushTargetSerial && certPushStatus[pushTargetSerial]?.state === 'success'" style="font-size:11px;color:var(--setup-success);display:block;margin-top:4px">
+                Pushed to {{ certPushStatus[pushTargetSerial].path }} — open Files/Downloads on the device and tap it to install.
+              </em>
+              <div v-else-if="pushTargetSerial && certPushStatus[pushTargetSerial]?.state === 'error'" class="alert error" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:6px">
+                <div style="display:flex;gap:6px;align-items:flex-start">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <span>{{ certPushStatus[pushTargetSerial].error }}</span>
+                </div>
+              </div>
+              <pre v-if="pushTargetSerial && certPushStatus[pushTargetSerial]?.logs?.length && (certPushStatus[pushTargetSerial].state === 'pushing' || certPushStatus[pushTargetSerial].state === 'error')"
+                   class="code-pre" style="margin-top:8px;max-height:140px;overflow-y:auto;font-size:10.5px;line-height:1.5">{{ certPushStatus[pushTargetSerial].logs.join('\n') }}</pre>
+            </li>
             <li>Go to <strong>Settings → Security → Encryption &amp; Credentials → Install a certificate → CA Certificate</strong> and install the downloaded file.</li>
             <li>For app-level interception (HTTPS in your own apps), also check the <strong>App Config</strong> tab.</li>
           </ol>
-
-          <div class="alert warning" style="margin-top:14px">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            Manual certificate install only covers <strong>user-installed CA trust</strong>. Most apps built for API 24+ ignore user CAs — you still need the App Config changes.
-          </div>
         </template>
 
       </div>

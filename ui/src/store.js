@@ -278,6 +278,13 @@ export const adbDevicesLoading = ref(false)
 // Any error string returned from the backend for device listing
 export const adbDevicesError = ref(null)
 
+// List of { name, running_serial } objects — every configured AVD, running or not
+export const avds = ref([])
+export const avdsLoading = ref(false)
+export const avdsError = ref(null)
+// { [avdName]: { state: 'launching'|'booting'|'error', serial?: string, error?: string } }
+export const avdBootStatus = ref({})
+
 export const setupProgress = ref({
     show: false,
     error: null,
@@ -309,6 +316,9 @@ export const revertProgress = ref({
 export const iosSimulators = ref([])
 export const iosSimulatorsLoading = ref(false)
 export const iosSimulatorsError = ref(null)
+
+// { [udid]: { state: 'booting'|'error', error?: string } } — per-simulator boot status
+export const iosBootStatus = ref({})
 
 export const iosSetupProgress = ref({
     show: false,
@@ -417,6 +427,21 @@ export const listAdbDevices = () => {
     wsConnection.send(JSON.stringify({ type: "LIST_ADB_DEVICES" }))
 }
 
+/** Request the backend to list all configured AVDs (like Android Studio's Device Manager). */
+export const listAvds = () => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    avdsLoading.value = true
+    avdsError.value = null
+    wsConnection.send(JSON.stringify({ type: "LIST_AVDS" }))
+}
+
+/** Boot an offline AVD by name, mirroring double-clicking it in Android Studio. */
+export const bootAvd = (name) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    avdBootStatus.value = { ...avdBootStatus.value, [name]: { state: 'launching', error: null } }
+    wsConnection.send(JSON.stringify({ type: "BOOT_AVD", name }))
+}
+
 /**
  * Kick off the certificate install + proxy setup on a specific device.
  * @param {string} serial  - ADB device serial, e.g. "emulator-5554" or "R58M31XXXXX"
@@ -462,6 +487,28 @@ export const injectEmulatorCert = () => {
     setupAndroidDevice("emulator-5554", "emulator")
 }
 
+// Per-serial status for the "push cert to Downloads" action: { state: 'idle'|'pushing'|'success'|'error', error, path }
+export const certPushStatus = ref({})
+
+/**
+ * Push the mitmproxy CA cert (.cer) directly into a device's Downloads folder via adb,
+ * as an alternative to visiting http://mitm.it in the device browser.
+ * @param {string} serial - ADB device serial
+ */
+export const pushCertToDownloads = (serial) => {
+    if (!serial) {
+        console.warn('[pushCertToDownloads] No serial provided, aborting')
+        return
+    }
+    if (wsConnection?.readyState !== WebSocket.OPEN) {
+        console.warn('[pushCertToDownloads] WebSocket not open, readyState=', wsConnection?.readyState)
+        return
+    }
+    console.log('[pushCertToDownloads] Sending PUSH_CERT_TO_DOWNLOADS for serial=', serial)
+    certPushStatus.value = { ...certPushStatus.value, [serial]: { state: 'pushing', error: null, logs: [] } }
+    wsConnection.send(JSON.stringify({ type: "PUSH_CERT_TO_DOWNLOADS", serial }))
+}
+
 /** Request the backend to list available iOS Simulators. */
 export const listIosSimulators = () => {
     if (wsConnection?.readyState !== WebSocket.OPEN) return
@@ -469,6 +516,13 @@ export const listIosSimulators = () => {
     iosSimulatorsError.value = null
     iosSimulators.value = []
     wsConnection.send(JSON.stringify({ type: "LIST_IOS_SIMULATORS" }))
+}
+
+/** Boot a Shutdown iOS Simulator and bring Simulator.app to the foreground. */
+export const bootIosSimulator = (udid) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    iosBootStatus.value = { ...iosBootStatus.value, [udid]: { state: 'booting', error: null } }
+    wsConnection.send(JSON.stringify({ type: "BOOT_IOS_SIMULATOR", udid }))
 }
 
 /** Install the mitmproxy CA cert into a specific iOS Simulator. */
@@ -1209,6 +1263,57 @@ export const initWebSocket = () => {
             }
         }
 
+        // ---- AVD list response (includes offline AVDs, like Android Studio) ----
+        else if (payload.type === "AVD_LIST") {
+            avdsLoading.value = false
+            if (payload.error) {
+                avdsError.value = payload.error
+                avds.value = []
+            } else {
+                avdsError.value = null
+                avds.value = payload.avds || []
+            }
+        }
+
+        // ---- AVD boot progress ----
+        else if (payload.type === "AVD_BOOT_PROGRESS") {
+            const { name, status } = payload
+            if (status === 'error') {
+                avdBootStatus.value = { ...avdBootStatus.value, [name]: { state: 'error', error: payload.error } }
+            } else if (status === 'success') {
+                const next = { ...avdBootStatus.value }
+                delete next[name]
+                avdBootStatus.value = next
+                listAvds()
+                listAdbDevices()
+            } else {
+                // 'launching' | 'booting'
+                avdBootStatus.value = { ...avdBootStatus.value, [name]: { state: status, error: null } }
+            }
+        }
+
+        // ---- NEW: Live command log lines while pushing the cert ----
+        else if (payload.type === "CERT_PUSH_LOG") {
+            console.log('[CERT_PUSH_LOG]', payload)
+            const prev = certPushStatus.value[payload.serial] || { state: 'pushing', error: null, logs: [] }
+            certPushStatus.value = {
+                ...certPushStatus.value,
+                [payload.serial]: { ...prev, logs: [...(prev.logs || []), payload.message] }
+            }
+        }
+
+        // ---- NEW: Result of pushing the cert to a device's Downloads folder ----
+        else if (payload.type === "CERT_PUSHED") {
+            console.log('[CERT_PUSHED]', payload)
+            const prev = certPushStatus.value[payload.serial] || {}
+            certPushStatus.value = {
+                ...certPushStatus.value,
+                [payload.serial]: payload.success
+                    ? { state: 'success', path: payload.path, error: null, logs: payload.logs || prev.logs || [] }
+                    : { state: 'error', error: payload.error || 'Push failed', logs: payload.logs || prev.logs || [] }
+            }
+        }
+
         // ---- NEW: Setup progress (now serial-scoped) ----
         else if (payload.type === "SETUP_PROGRESS") {
             if (payload.step === 'check_adb' && payload.status === 'start') {
@@ -1275,6 +1380,16 @@ export const initWebSocket = () => {
             } else {
                 iosSimulatorsError.value = null
                 iosSimulators.value = payload.simulators || []
+            }
+        }
+
+        // ---- iOS Simulator: boot result ----
+        else if (payload.type === "IOS_SIMULATOR_BOOTED") {
+            if (payload.success) {
+                iosBootStatus.value = { ...iosBootStatus.value, [payload.udid]: { state: 'success', error: null } }
+                listIosSimulators()
+            } else {
+                iosBootStatus.value = { ...iosBootStatus.value, [payload.udid]: { state: 'error', error: payload.error } }
             }
         }
 

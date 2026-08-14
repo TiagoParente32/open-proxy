@@ -95,12 +95,14 @@ function startPython () {
       const pyBin   = process.platform === 'win32' ? 'python.exe' : 'python3'
       const venvDir = process.platform === 'win32' ? 'Scripts' : 'bin'
       exe  = path.join(__dirname, '..', 'venv', venvDir, pyBin)
-      args = [path.join(__dirname, '..', 'main.py')]
+      // -u: unbuffered stdio, so print() output shows up immediately in the
+      // terminal instead of sitting in Python's pipe buffer.
+      args = ['-u', path.join(__dirname, '..', 'main.py')]
       cwd  = path.join(__dirname, '..')
     }
 
     console.log(`[Python] ${exe} ${args.join(' ')}`)
-    pythonProcess = spawn(exe, args, { cwd })
+    pythonProcess = spawn(exe, args, { cwd, env: { ...process.env, PYTHONUNBUFFERED: '1' } })
 
     // Resolve once Python prints its startup line — the WS server is ready
     const timeout = setTimeout(() => {
