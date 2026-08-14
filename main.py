@@ -1853,6 +1853,89 @@ class ProxyUIBridge:
         except Exception as e:
             await update("current_active_step", "error", str(e))
 
+    async def push_cert_to_downloads(self, ws, serial: str):
+        """
+        Pushes the mitmproxy CA cert (.cer, Android-friendly extension) straight into
+        the device's Downloads folder via `adb push`, as an alternative to visiting
+        http://mitm.it (useful when the browser force-upgrades to https and fails to load).
+        The user still has to tap the file in Downloads/Files to install it as a CA.
+        """
+        serial_flag = ["-s", serial]
+        logs = []
+
+        async def log(msg):
+            print(f"[PUSH_CERT] {msg}", flush=True)
+            logs.append(msg)
+            await ws.send(json.dumps({"type": "CERT_PUSH_LOG", "serial": serial, "message": msg}))
+
+        await log(f"Starting push for serial={serial!r}")
+        try:
+            adb_cmd = get_executable_path("adb")
+            await log(f"Using adb at: {adb_cmd!r}")
+
+            cert_path = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.cer")
+            await log(f"Cert path: {cert_path!r} exists={os.path.exists(cert_path)}")
+            if not os.path.exists(cert_path):
+                error = "Certificate not found. Start the proxy first!"
+                await log(f"ERROR: {error}")
+                await ws.send(json.dumps({
+                    "type": "CERT_PUSHED", "serial": serial, "success": False,
+                    "error": error, "logs": logs
+                }))
+                return
+
+            dest_path = "/sdcard/Download/mitmproxy-ca-cert.cer"
+            cmd = [adb_cmd] + serial_flag + ["push", cert_path, dest_path]
+            await log(f"Running: {' '.join(cmd)}")
+
+            # Run adb off the event loop with a timeout, so a stuck/unauthorized
+            # device can't hang the whole websocket server.
+            loop = asyncio.get_event_loop()
+            try:
+                result = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: subprocess.run(cmd, capture_output=True, text=True)
+                    ),
+                    timeout=20
+                )
+            except asyncio.TimeoutError:
+                error = "adb push timed out after 20s. Is the device authorized (check for an 'Allow USB debugging' prompt)?"
+                await log(f"ERROR: {error}")
+                await ws.send(json.dumps({
+                    "type": "CERT_PUSHED", "serial": serial, "success": False,
+                    "error": error, "logs": logs
+                }))
+                return
+
+            await log(f"returncode={result.returncode}")
+            if result.stdout.strip():
+                await log(f"stdout: {result.stdout.strip()}")
+            if result.stderr.strip():
+                await log(f"stderr: {result.stderr.strip()}")
+            result.check_returncode()
+
+            await log(f"Success — pushed to {dest_path}")
+            await ws.send(json.dumps({
+                "type": "CERT_PUSHED", "serial": serial, "success": True,
+                "path": dest_path, "logs": logs
+            }))
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr.strip() if e.stderr else str(e)
+            await log(f"ERROR: Command failed: {error_msg}")
+            await ws.send(json.dumps({
+                "type": "CERT_PUSHED", "serial": serial, "success": False,
+                "error": f"Command failed: {error_msg}", "logs": logs
+            }))
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            await log(f"ERROR: Unexpected error: {e}\n{tb}")
+            await ws.send(json.dumps({
+                "type": "CERT_PUSHED", "serial": serial, "success": False,
+                "error": str(e), "logs": logs
+            }))
+
     async def revert_android_device(self, ws, serial: str):
         """Clears the proxy setting and removes the mitmproxy cert from a device."""
         serial_flag = ["-s", serial]
@@ -2178,6 +2261,15 @@ class ProxyUIBridge:
                     serial = payload.get("serial")
                     if serial:
                         asyncio.create_task(self.revert_android_device(websocket, serial))
+
+                # ---- NEW: Push the CA cert straight into the device's Downloads folder ----
+                elif payload.get("type") == "PUSH_CERT_TO_DOWNLOADS":
+                    serial = payload.get("serial")
+                    print(f"[WS] Received PUSH_CERT_TO_DOWNLOADS serial={serial!r}", flush=True)
+                    if serial:
+                        asyncio.create_task(self.push_cert_to_downloads(websocket, serial))
+                    else:
+                        print("[WS] PUSH_CERT_TO_DOWNLOADS ignored: no serial provided", flush=True)
 
                 # ---- iOS Simulator setup ----
                 elif payload.get("type") == "LIST_IOS_SIMULATORS":

@@ -12,6 +12,8 @@ import {
     listAdbDevices,
     setupAndroidDevice,
     revertAndroidDevice,
+    certPushStatus,
+    pushCertToDownloads,
     iosSimulators,
     iosSimulatorsLoading,
     iosSimulatorsError,
@@ -36,6 +38,8 @@ import QRCode from 'qrcode'
 
 const selectedSerial = ref(null)
 const selectedUdid   = ref(null)
+// Device chosen for the "push cert to Downloads" manual-tab action (defaults to the first detected emulator)
+const pushTargetSerial = ref(null)
 const activeTab  = ref('devices')
 const activePane = ref('pick')
 const copiedKey  = ref(null)
@@ -44,6 +48,10 @@ const copiedKey  = ref(null)
 const qrCanvas   = ref(null)
 const localPort  = ref(51820)
 const wgCopied   = ref(false)
+
+// QR code that points a phone's camera straight at http://mitm.it (avoids typos
+// and, more importantly, avoids the address bar auto-upgrading to https://mitm.it)
+const mitmQrCanvas = ref(null)
 
 const wgStatusLabel = computed(() => ({
   disabled: { text: 'Off',       cls: 'pill-off'      },
@@ -96,6 +104,29 @@ watch([isVpnVisible, wgPort], ([visible]) => {
   if (visible) localPort.value = wgPort.value
 })
 // ─────────────────────────────────────────────────────────────────────────────
+
+// True while the Android physical-device "Manual Proxy" tab is on screen —
+// used to (re)render the mitm.it QR code only when it's actually visible.
+const isAndroidDeviceManualVisible = computed(() =>
+  showDeviceSetupModal.value &&
+  deviceSetupType.value === 'android_device' &&
+  activeTab.value === 'manual'
+)
+
+watch(isAndroidDeviceManualVisible, async (visible) => {
+  if (!visible) return
+  await nextTick()
+  if (mitmQrCanvas.value) {
+    try {
+      await QRCode.toCanvas(mitmQrCanvas.value, 'http://mitm.it', {
+        width: 140,
+        color: { dark: '#000000', light: '#ffffff' },
+        errorCorrectionLevel: 'M',
+      })
+    } catch (e) { console.error('[mitm.it QR] failed:', e) }
+  }
+})
+
 
 // ── Raw code strings ──────────────────────────────────────────────────────────
 const networkSecurityConfig = `<?xml version="1.0" encoding="utf-8"?>
@@ -255,6 +286,13 @@ const filteredAdbDevices = computed(() =>
         : adbDevices.value
 )
 
+// Keep the manual-tab "push to Downloads" target pointed at a valid, connected device
+watch(filteredAdbDevices, (devices) => {
+    if (!devices.some(d => d.serial === pushTargetSerial.value)) {
+        pushTargetSerial.value = devices[0]?.serial || null
+    }
+}, { immediate: true })
+
 // Only booted simulators can have the cert installed
 const bootedSimulators = computed(() => iosSimulators.value.filter(s => s.state === 'Booted'))
 
@@ -412,6 +450,14 @@ const modalTitle = () => {
           </svg>
           Devices
         </button>
+        <button class="tab-btn" :class="{ active: activeTab === 'manual' }"
+                @click="activeTab = 'manual'; if (deviceSetupType === 'android_emulator') listAdbDevices()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          Manual
+        </button>
         <button v-if="deviceSetupType === 'android_emulator'" class="tab-btn" :class="{ active: activeTab === 'config' }"
                 @click="activeTab = 'config'">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -419,14 +465,6 @@ const modalTitle = () => {
             <polyline points="8 6 2 12 8 18"/>
           </svg>
           App Config
-        </button>
-        <button class="tab-btn" :class="{ active: activeTab === 'manual' }"
-                @click="activeTab = 'manual'">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-          </svg>
-          Manual
         </button>
       </div>
 
@@ -779,7 +817,15 @@ const modalTitle = () => {
                 <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'and_dev_port' }" @click="copyInfo(proxyPort, 'and_dev_port')">{{ proxyPort }}</code></div>
               </div>
             </li>
-            <li>Open the browser on your phone and navigate to <code class="ic">http://mitm.it</code> — tap the <strong>Android</strong> button to download the certificate.</li>
+            <li>Open the browser on your phone and navigate to <code class="ic">http://mitm.it</code> or scan the QR code as a shortcut — tap the <strong>Android</strong> button to download the certificate.
+              <div class="info-box" style="align-items:center;gap:12px">
+                <canvas ref="mitmQrCanvas" style="border-radius:6px;flex-shrink:0" />
+              </div>
+              <div class="alert warning" style="margin-top:10px">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span><code class="ic">mitm.it</code> only works over <strong>HTTP</strong>. Modern browsers (Chrome, Firefox, Edge, etc.) often auto-upgrade the address to <code class="ic">https://mitm.it</code>, which will fail to load. Disable the browser's "Always use secure connections" / "HTTPS-Only Mode" setting, or type the full <code class="ic">http://</code> URL and avoid autocomplete rewriting it.</span>
+              </div>
+            </li>
             <li>Go to <strong>Settings › Security › Encryption &amp; Credentials › Install a certificate › CA Certificate</strong> and install the downloaded file.</li>
           </ol>
           <div class="alert warning" style="margin-top:14px">
@@ -1024,7 +1070,44 @@ const modalTitle = () => {
               </div>
               <em style="font-size:11px;color:var(--fg-placeholder);">The special address <code class="ic">10.0.2.2</code> routes from the emulator to your Mac's localhost.</em>
             </li>
-            <li>Open the emulator browser and go to <code class="ic">http://mitm.it</code>, then tap the Android certificate download.</li>
+            <li>
+              Open the emulator browser and go to <code class="ic">http://mitm.it</code>, then tap the Android certificate download.
+              <div class="alert warning" style="margin-top:10px">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span><code class="ic">mitm.it</code> only works over <strong>HTTP</strong>. Modern browsers (Chrome, Firefox, Edge, etc.) often auto-upgrade the address to <code class="ic">https://mitm.it</code>, which will fail to load. Disable the browser's "Always use secure connections" / "HTTPS-Only Mode" setting, or type the full <code class="ic">http://</code> URL and avoid autocomplete rewriting it.</span>
+              </div>
+              <div style="margin-top:10px">
+                <strong>Or</strong> skip the browser entirely — push the certificate straight to the device's Downloads folder:
+              </div>
+              <div class="info-box" style="align-items:center">
+                <select v-if="filteredAdbDevices.length > 1" v-model="pushTargetSerial" class="info-val"
+                        style="cursor:pointer;background:transparent;border:none;font:inherit">
+                  <option v-for="d in filteredAdbDevices" :key="d.serial" :value="d.serial">{{ d.model }} ({{ d.serial }})</option>
+                </select>
+                <span v-else-if="filteredAdbDevices.length === 1" class="info-val">{{ filteredAdbDevices[0].model }}</span>
+                <span v-else class="info-val" style="color:var(--fg-placeholder)">No emulator detected</span>
+                <button class="pill install" :disabled="!pushTargetSerial || certPushStatus[pushTargetSerial]?.state === 'pushing'"
+                        @click="pushCertToDownloads(pushTargetSerial)">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  {{ pushTargetSerial && certPushStatus[pushTargetSerial]?.state === 'pushing' ? 'Pushing…' : 'Push to Downloads' }}
+                </button>
+              </div>
+              <em v-if="pushTargetSerial && certPushStatus[pushTargetSerial]?.state === 'success'" style="font-size:11px;color:var(--setup-success);display:block;margin-top:4px">
+                Pushed to {{ certPushStatus[pushTargetSerial].path }} — open Files/Downloads on the device and tap it to install.
+              </em>
+              <div v-else-if="pushTargetSerial && certPushStatus[pushTargetSerial]?.state === 'error'" class="alert error" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:6px">
+                <div style="display:flex;gap:6px;align-items:flex-start">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <span>{{ certPushStatus[pushTargetSerial].error }}</span>
+                </div>
+              </div>
+              <pre v-if="pushTargetSerial && certPushStatus[pushTargetSerial]?.logs?.length && (certPushStatus[pushTargetSerial].state === 'pushing' || certPushStatus[pushTargetSerial].state === 'error')"
+                   class="code-pre" style="margin-top:8px;max-height:140px;overflow-y:auto;font-size:10.5px;line-height:1.5">{{ certPushStatus[pushTargetSerial].logs.join('\n') }}</pre>
+            </li>
             <li>Go to <strong>Settings → Security → Encryption &amp; Credentials → Install a certificate → CA Certificate</strong> and install the downloaded file.</li>
             <li>For app-level interception (HTTPS in your own apps), also check the <strong>App Config</strong> tab.</li>
           </ol>

@@ -462,6 +462,28 @@ export const injectEmulatorCert = () => {
     setupAndroidDevice("emulator-5554", "emulator")
 }
 
+// Per-serial status for the "push cert to Downloads" action: { state: 'idle'|'pushing'|'success'|'error', error, path }
+export const certPushStatus = ref({})
+
+/**
+ * Push the mitmproxy CA cert (.cer) directly into a device's Downloads folder via adb,
+ * as an alternative to visiting http://mitm.it in the device browser.
+ * @param {string} serial - ADB device serial
+ */
+export const pushCertToDownloads = (serial) => {
+    if (!serial) {
+        console.warn('[pushCertToDownloads] No serial provided, aborting')
+        return
+    }
+    if (wsConnection?.readyState !== WebSocket.OPEN) {
+        console.warn('[pushCertToDownloads] WebSocket not open, readyState=', wsConnection?.readyState)
+        return
+    }
+    console.log('[pushCertToDownloads] Sending PUSH_CERT_TO_DOWNLOADS for serial=', serial)
+    certPushStatus.value = { ...certPushStatus.value, [serial]: { state: 'pushing', error: null, logs: [] } }
+    wsConnection.send(JSON.stringify({ type: "PUSH_CERT_TO_DOWNLOADS", serial }))
+}
+
 /** Request the backend to list available iOS Simulators. */
 export const listIosSimulators = () => {
     if (wsConnection?.readyState !== WebSocket.OPEN) return
@@ -1206,6 +1228,28 @@ export const initWebSocket = () => {
             } else {
                 adbDevicesError.value = null
                 adbDevices.value = payload.devices || []
+            }
+        }
+
+        // ---- NEW: Live command log lines while pushing the cert ----
+        else if (payload.type === "CERT_PUSH_LOG") {
+            console.log('[CERT_PUSH_LOG]', payload)
+            const prev = certPushStatus.value[payload.serial] || { state: 'pushing', error: null, logs: [] }
+            certPushStatus.value = {
+                ...certPushStatus.value,
+                [payload.serial]: { ...prev, logs: [...(prev.logs || []), payload.message] }
+            }
+        }
+
+        // ---- NEW: Result of pushing the cert to a device's Downloads folder ----
+        else if (payload.type === "CERT_PUSHED") {
+            console.log('[CERT_PUSHED]', payload)
+            const prev = certPushStatus.value[payload.serial] || {}
+            certPushStatus.value = {
+                ...certPushStatus.value,
+                [payload.serial]: payload.success
+                    ? { state: 'success', path: payload.path, error: null, logs: payload.logs || prev.logs || [] }
+                    : { state: 'error', error: payload.error || 'Push failed', logs: payload.logs || prev.logs || [] }
             }
         }
 
