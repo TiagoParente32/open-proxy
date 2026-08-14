@@ -1050,6 +1050,7 @@ const modalTitle = () => {
                 <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'sim_port' }" @click="copyInfo(proxyPort, 'sim_port')">{{ proxyPort }}</code></div>
               </div>
             </li>
+            <li>Open Safari and go to <code class="ic">{{ mitmCertUrl }}</code> — tap the <strong>iOS</strong> button to download the profile.</li>
             <li>Go to <strong>Settings → General → VPN &amp; Device Management</strong> and install the downloaded profile.</li>
             <li>
               <strong>Crucial:</strong> Go to <strong>Settings → General → About → Certificate Trust Settings</strong> and toggle the mitmproxy certificate <strong>ON</strong>.
@@ -1076,11 +1077,7 @@ const modalTitle = () => {
               <em style="font-size:11px;color:var(--fg-placeholder);">The special address <code class="ic">10.0.2.2</code> routes from the emulator to your Mac's localhost.</em>
             </li>
             <li>
-              Open the emulator browser and go to <code class="ic">http://mitm.it</code>, then tap the Android certificate download.
-              <div class="alert warning" style="margin-top:10px">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                <span><code class="ic">mitm.it</code> only works over <strong>HTTP</strong>. Modern browsers (Chrome, Firefox, Edge, etc.) often auto-upgrade the address to <code class="ic">https://mitm.it</code>, which will fail to load. Disable the browser's "Always use secure connections" / "HTTPS-Only Mode" setting, or type the full <code class="ic">http://</code> URL and avoid autocomplete rewriting it.</span>
-              </div>
+              Open the emulator browser and go to <code class="ic">{{ mitmCertUrl }}</code>, then tap the Android certificate download.
               <div style="margin-top:10px">
                 <strong>Or</strong> skip the browser entirely — push the certificate straight to the device's Downloads folder:
               </div>
