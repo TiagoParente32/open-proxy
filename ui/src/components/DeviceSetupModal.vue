@@ -49,9 +49,13 @@ const qrCanvas   = ref(null)
 const localPort  = ref(51820)
 const wgCopied   = ref(false)
 
-// QR code that points a phone's camera straight at http://mitm.it (avoids typos
-// and, more importantly, avoids the address bar auto-upgrading to https://mitm.it)
+// Chrome/Safari's "HTTPS-First" mode auto-upgrades http://mitm.it to https:// (it's a
+// public-looking hostname), which fails with a cert warning instead of the download page.
+// Private-network IPs are exempt from that upgrade, so we point the QR/instructions at
+// OpenProxy's own LAN IP instead (see main.py's second onboarding responder).
+const mitmCertUrl = computed(() => `http://${proxyIP.value}/`)
 const mitmQrCanvas = ref(null)
+const iosMitmQrCanvas = ref(null)
 
 const wgStatusLabel = computed(() => ({
   disabled: { text: 'Off',       cls: 'pill-off'      },
@@ -105,25 +109,26 @@ watch([isVpnVisible, wgPort], ([visible]) => {
 })
 // ─────────────────────────────────────────────────────────────────────────────
 
-// True while the Android physical-device "Manual Proxy" tab is on screen —
-// used to (re)render the mitm.it QR code only when it's actually visible.
-const isAndroidDeviceManualVisible = computed(() =>
+// True while a physical device's "Manual Proxy" tab is on screen —
+// used to (re)render the cert-install QR code only when it's actually visible.
+const isPhysicalDeviceManualVisible = computed(() =>
   showDeviceSetupModal.value &&
-  deviceSetupType.value === 'android_device' &&
+  (deviceSetupType.value === 'android_device' || deviceSetupType.value === 'ios_device') &&
   activeTab.value === 'manual'
 )
 
-watch(isAndroidDeviceManualVisible, async (visible) => {
+watch([isPhysicalDeviceManualVisible, deviceSetupType, mitmCertUrl], async ([visible]) => {
   if (!visible) return
   await nextTick()
-  if (mitmQrCanvas.value) {
+  const canvas = deviceSetupType.value === 'android_device' ? mitmQrCanvas.value : iosMitmQrCanvas.value
+  if (canvas) {
     try {
-      await QRCode.toCanvas(mitmQrCanvas.value, 'http://mitm.it', {
+      await QRCode.toCanvas(canvas, mitmCertUrl.value, {
         width: 140,
         color: { dark: '#000000', light: '#ffffff' },
         errorCorrectionLevel: 'M',
       })
-    } catch (e) { console.error('[mitm.it QR] failed:', e) }
+    } catch (e) { console.error('[cert QR] failed:', e) }
   }
 })
 
@@ -817,20 +822,16 @@ const modalTitle = () => {
                 <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'and_dev_port' }" @click="copyInfo(proxyPort, 'and_dev_port')">{{ proxyPort }}</code></div>
               </div>
             </li>
-            <li>Open the browser on your phone and navigate to <code class="ic">http://mitm.it</code> or scan the QR code as a shortcut — tap the <strong>Android</strong> button to download the certificate.
+            <li>Open the browser on your phone and navigate to <code class="ic">{{ mitmCertUrl }}</code> or scan the QR code as a shortcut — tap the <strong>Android</strong> button to download the certificate.
               <div class="info-box" style="align-items:center;gap:12px">
                 <canvas ref="mitmQrCanvas" style="border-radius:6px;flex-shrink:0" />
-              </div>
-              <div class="alert warning" style="margin-top:10px">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                <span><code class="ic">mitm.it</code> only works over <strong>HTTP</strong>. Modern browsers (Chrome, Firefox, Edge, etc.) often auto-upgrade the address to <code class="ic">https://mitm.it</code>, which will fail to load. Disable the browser's "Always use secure connections" / "HTTPS-Only Mode" setting, or type the full <code class="ic">http://</code> URL and avoid autocomplete rewriting it.</span>
               </div>
             </li>
             <li>Go to <strong>Settings › Security › Encryption &amp; Credentials › Install a certificate › CA Certificate</strong> and install the downloaded file.</li>
           </ol>
           <div class="alert warning" style="margin-top:14px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            The <code class="ic">mitm.it</code> page only loads when the proxy is running and your phone is routing through it. Make sure OpenProxy is recording before visiting it.
+            This page only loads when the proxy is running and your phone is routing through it. Make sure OpenProxy is recording before visiting it.
           </div>
         </div>
 
@@ -845,7 +846,11 @@ const modalTitle = () => {
                 <div class="info-row"><span class="info-label">Port</span><code class="info-val copyable" :class="{ copied: copiedInfo === 'ios_dev_port' }" @click="copyInfo(proxyPort, 'ios_dev_port')">{{ proxyPort }}</code></div>
               </div>
             </li>
-            <li>Open Safari on your iPhone and go to <code class="ic">http://mitm.it</code> — tap the <strong>iOS</strong> button to download the profile.</li>
+            <li>Open Safari on your iPhone and go to <code class="ic">{{ mitmCertUrl }}</code> or scan the QR code as a shortcut — tap the <strong>iOS</strong> button to download the profile.
+              <div class="info-box" style="align-items:center;gap:12px">
+                <canvas ref="iosMitmQrCanvas" style="border-radius:6px;flex-shrink:0" />
+              </div>
+            </li>
             <li>Go to <strong>Settings › General › VPN &amp; Device Management</strong> and install the downloaded profile.</li>
             <li><strong>Crucial:</strong> <strong>Settings › General › About › Certificate Trust Settings</strong> — toggle mitmproxy <strong>ON</strong>.</li>
           </ol>

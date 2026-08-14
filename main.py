@@ -24,6 +24,8 @@ from PIL import Image
 from mitmproxy import http, options
 from mitmproxy.tools.dump import DumpMaster
 from mitmproxy.proxy.mode_servers import WireGuardServerInstance
+from mitmproxy.addons import asgiapp
+from mitmproxy.addons.onboardingapp import app as _onboarding_wsgi_app
 
 
 # this comment is to test if the update is working
@@ -199,6 +201,9 @@ async def _watch_local_ip(bridge):
             if new_ip != LOCAL_IP:
                 LOCAL_IP = new_ip
                 print(f"[INFO] Network change detected — new local IP: {LOCAL_IP}")
+                ip_onboarding = getattr(bridge, "_ip_onboarding_addon", None)
+                if ip_onboarding:
+                    ip_onboarding.host = LOCAL_IP
                 await bridge.broadcast_to_ui("SYSTEM_INFO", {
                     "ip": LOCAL_IP,
                     "port": bridge.proxy_port,
@@ -1348,6 +1353,7 @@ class ProxyUIBridge:
         self.wg_enabled = False
         self.wg_port = 51820
         self._master = None     # set by run_proxy_forever; used for WG restart + inject
+        self._ip_onboarding_addon = None  # set by run_proxy_forever; serves mitm cert page on LOCAL_IP
         self._last_startup_error = ""   # captured from mitmproxy's log on startup failure
         self.pending_update_info = None  # cached until a client connects
 
@@ -2681,6 +2687,14 @@ async def run_proxy_forever(bridge, proxy_port):
             opts.update(mode=modes)
             master = DumpMaster(opts, with_termlog=False, with_dumper=False)
             master.addons.add(bridge)
+            # Chrome/Safari's "HTTPS-First" mode auto-upgrades http://mitm.it to https://
+            # (it's a public-looking hostname), which shows a cert warning instead of the
+            # cert download page. Private-network IPs are exempt from that upgrade, so we
+            # also serve the same onboarding app on the device's own LAN IP — used by the
+            # physical-device setup instructions/QR code. Kept in sync by _watch_local_ip().
+            ip_onboarding = asgiapp.WSGIApp(_onboarding_wsgi_app, LOCAL_IP, None)
+            master.addons.add(ip_onboarding)
+            bridge._ip_onboarding_addon = ip_onboarding
             bridge._master = master
             await master.run()
         except asyncio.CancelledError:
