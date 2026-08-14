@@ -278,6 +278,13 @@ export const adbDevicesLoading = ref(false)
 // Any error string returned from the backend for device listing
 export const adbDevicesError = ref(null)
 
+// List of { name, running_serial } objects — every configured AVD, running or not
+export const avds = ref([])
+export const avdsLoading = ref(false)
+export const avdsError = ref(null)
+// { [avdName]: { state: 'launching'|'booting'|'error', serial?: string, error?: string } }
+export const avdBootStatus = ref({})
+
 export const setupProgress = ref({
     show: false,
     error: null,
@@ -418,6 +425,21 @@ export const listAdbDevices = () => {
     adbDevicesError.value = null
     adbDevices.value = []
     wsConnection.send(JSON.stringify({ type: "LIST_ADB_DEVICES" }))
+}
+
+/** Request the backend to list all configured AVDs (like Android Studio's Device Manager). */
+export const listAvds = () => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    avdsLoading.value = true
+    avdsError.value = null
+    wsConnection.send(JSON.stringify({ type: "LIST_AVDS" }))
+}
+
+/** Boot an offline AVD by name, mirroring double-clicking it in Android Studio. */
+export const bootAvd = (name) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    avdBootStatus.value = { ...avdBootStatus.value, [name]: { state: 'launching', error: null } }
+    wsConnection.send(JSON.stringify({ type: "BOOT_AVD", name }))
 }
 
 /**
@@ -1238,6 +1260,35 @@ export const initWebSocket = () => {
             } else {
                 adbDevicesError.value = null
                 adbDevices.value = payload.devices || []
+            }
+        }
+
+        // ---- AVD list response (includes offline AVDs, like Android Studio) ----
+        else if (payload.type === "AVD_LIST") {
+            avdsLoading.value = false
+            if (payload.error) {
+                avdsError.value = payload.error
+                avds.value = []
+            } else {
+                avdsError.value = null
+                avds.value = payload.avds || []
+            }
+        }
+
+        // ---- AVD boot progress ----
+        else if (payload.type === "AVD_BOOT_PROGRESS") {
+            const { name, status } = payload
+            if (status === 'error') {
+                avdBootStatus.value = { ...avdBootStatus.value, [name]: { state: 'error', error: payload.error } }
+            } else if (status === 'success') {
+                const next = { ...avdBootStatus.value }
+                delete next[name]
+                avdBootStatus.value = next
+                listAvds()
+                listAdbDevices()
+            } else {
+                // 'launching' | 'booting'
+                avdBootStatus.value = { ...avdBootStatus.value, [name]: { state: status, error: null } }
             }
         }
 

@@ -99,6 +99,24 @@ def get_executable_path(base_name):
             ]:
                 if os.path.exists(f): return f
 
+    if base_name == "emulator":
+        android_home = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
+        if android_home:
+            fallback = os.path.join(android_home, "emulator", exe_name)
+            if os.path.exists(fallback): return fallback
+
+        if os.name == "nt":
+            fallback = os.path.expandvars(rf"%LOCALAPPDATA%\Android\Sdk\emulator\{exe_name}")
+            if os.path.exists(fallback): return fallback
+
+        elif sys.platform == "darwin":
+            fallback = os.path.expanduser("~/Library/Android/sdk/emulator/emulator")
+            if os.path.exists(fallback): return fallback
+
+        else:
+            fallback = os.path.expanduser("~/Android/Sdk/emulator/emulator")
+            if os.path.exists(fallback): return fallback
+
     if base_name == "openssl" and os.name == "nt":
         fallbacks = [
             r"C:\Program Files\Git\usr\bin\openssl.exe",
@@ -964,6 +982,29 @@ def list_adb_devices(adb_cmd):
     return devices
 
 
+def list_avds(emulator_cmd):
+    """Returns the names of all configured AVDs (running or not) via `emulator -list-avds`."""
+    result = subprocess.run(
+        [emulator_cmd, "-list-avds"],
+        capture_output=True, text=True, timeout=10
+    )
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def get_avd_name_for_serial(adb_cmd, serial):
+    """Returns the AVD name backing a running emulator serial, or None if it can't be determined."""
+    try:
+        result = subprocess.run(
+            [adb_cmd, "-s", serial, "emu", "avd", "name"],
+            capture_output=True, text=True, timeout=5
+        )
+        # Output is the AVD name on the first line, "OK" on the second.
+        lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+        return lines[0] if lines else None
+    except Exception:
+        return None
+
+
 # ============================================================================
 # IOS SIMULATOR HELPERS  (macOS only)
 # ============================================================================
@@ -1755,7 +1796,138 @@ class ProxyUIBridge:
             await ws.send(json.dumps({"type": "ADB_DEVICES", "devices": [], "error": str(e)}))
         except Exception as e:
             await ws.send(json.dumps({"type": "ADB_DEVICES", "devices": [], "error": f"Unexpected error: {e}"}))
-            
+
+    async def handle_list_avds(self, ws):
+        """Lists all configured AVDs (like Android Studio's Device Manager), flagging
+        which ones are already running so the UI can offer to boot the rest."""
+        try:
+            emulator_cmd = get_executable_path("emulator")
+            loop = asyncio.get_running_loop()
+            avd_names = await asyncio.wait_for(
+                loop.run_in_executor(None, list_avds, emulator_cmd),
+                timeout=10.0
+            )
+
+            running_by_avd = {}
+            try:
+                adb_cmd = get_executable_path("adb")
+                devices = await loop.run_in_executor(None, list_adb_devices, adb_cmd)
+                for d in devices:
+                    if d["type"] != "emulator":
+                        continue
+                    avd_name = await loop.run_in_executor(None, get_avd_name_for_serial, adb_cmd, d["serial"])
+                    if avd_name:
+                        running_by_avd[avd_name] = d["serial"]
+            except FileNotFoundError:
+                pass  # adb missing — still report the AVD list, just without running-state info
+
+            avds = [{"name": n, "running_serial": running_by_avd.get(n)} for n in avd_names]
+            await ws.send(json.dumps({"type": "AVD_LIST", "avds": avds}))
+        except asyncio.TimeoutError:
+            await ws.send(json.dumps({
+                "type": "AVD_LIST", "avds": [],
+                "error": "`emulator -list-avds` timed out after 10 seconds."
+            }))
+        except FileNotFoundError as e:
+            await ws.send(json.dumps({"type": "AVD_LIST", "avds": [], "error": str(e)}))
+        except Exception as e:
+            await ws.send(json.dumps({"type": "AVD_LIST", "avds": [], "error": f"Unexpected error: {e}"}))
+
+    async def boot_avd(self, ws, name: str):
+        """Launches an offline AVD (detached, like double-clicking it in Android Studio's
+        Device Manager) and waits for it to appear in adb and finish booting."""
+        async def send(status, **kw):
+            payload = {"type": "AVD_BOOT_PROGRESS", "name": name, "status": status}
+            payload.update(kw)
+            await ws.send(json.dumps(payload))
+
+        loop = asyncio.get_running_loop()
+
+        try:
+            emulator_cmd = get_executable_path("emulator")
+        except FileNotFoundError as e:
+            await send("error", error=str(e))
+            return
+
+        adb_cmd = None
+        before_serials = set()
+        try:
+            adb_cmd = get_executable_path("adb")
+            before = await loop.run_in_executor(None, list_adb_devices, adb_cmd)
+            before_serials = {d["serial"] for d in before}
+        except FileNotFoundError:
+            pass
+
+        def _launch():
+            kwargs = {}
+            if os.name == "nt":
+                kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            else:
+                kwargs["start_new_session"] = True
+            return subprocess.Popen(
+                [emulator_cmd, "-avd", name],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                **kwargs
+            )
+
+        try:
+            proc = await loop.run_in_executor(None, _launch)
+        except Exception as e:
+            await send("error", error=str(e))
+            return
+
+        await send("launching")
+        await asyncio.sleep(2.0)
+        if proc.poll() is not None:
+            await send("error", error=(
+                f"emulator process exited immediately (code {proc.returncode}). "
+                "It may already be running, or the AVD config may be broken."
+            ))
+            return
+
+        if not adb_cmd:
+            # Launched successfully but we can't verify boot completion without adb.
+            await send("success")
+            return
+
+        serial = None
+        deadline = loop.time() + 150  # cold boots can take well over a minute
+        while loop.time() < deadline:
+            try:
+                devices = await loop.run_in_executor(None, list_adb_devices, adb_cmd)
+            except Exception:
+                devices = []
+            new_serials = [d["serial"] for d in devices if d["serial"] not in before_serials]
+            if new_serials:
+                serial = new_serials[0]
+                break
+            await asyncio.sleep(3)
+
+        if not serial:
+            await send("error", error="Timed out waiting for the emulator to appear in `adb devices`.")
+            return
+
+        await send("booting", serial=serial)
+
+        deadline = loop.time() + 150
+        while loop.time() < deadline:
+            try:
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: subprocess.run(
+                        [adb_cmd, "-s", serial, "shell", "getprop", "sys.boot_completed"],
+                        capture_output=True, text=True, timeout=10
+                    )
+                )
+                if result.stdout.strip() == "1":
+                    await send("success", serial=serial)
+                    return
+            except Exception:
+                pass
+            await asyncio.sleep(3)
+
+        await send("error", error="Emulator appeared but never finished booting (sys.boot_completed check timed out).")
+
     async def setup_android_device(self, ws, serial: str, device_type: str):
         """
         Installs the mitmproxy cert and sets the proxy on a specific ADB device.
@@ -2283,6 +2455,15 @@ class ProxyUIBridge:
                 # ---- NEW: List ADB devices ----
                 elif payload.get("type") == "LIST_ADB_DEVICES":
                     asyncio.create_task(self.handle_list_adb_devices(websocket))
+
+                # ---- NEW: List AVDs (including offline ones) and boot them on demand ----
+                elif payload.get("type") == "LIST_AVDS":
+                    asyncio.create_task(self.handle_list_avds(websocket))
+
+                elif payload.get("type") == "BOOT_AVD":
+                    avd_name = payload.get("name")
+                    if avd_name:
+                        asyncio.create_task(self.boot_avd(websocket, avd_name))
 
                 # ---- NEW: Setup a specific device (replaces generic SETUP_ANDROID) ----
                 elif payload.get("type") == "SETUP_ANDROID_DEVICE":

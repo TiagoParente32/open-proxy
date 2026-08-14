@@ -7,6 +7,12 @@ import {
     adbDevices,
     adbDevicesLoading,
     adbDevicesError,
+    avds,
+    avdsLoading,
+    avdsError,
+    avdBootStatus,
+    listAvds,
+    bootAvd,
     setupProgress,
     revertProgress,
     listAdbDevices,
@@ -231,7 +237,7 @@ const initModal = ([open]) => {
         activeTab.value = 'chrome'
     } else {
         activeTab.value = 'devices'
-        if (deviceSetupType.value === 'android_emulator') listAdbDevices()
+        if (deviceSetupType.value === 'android_emulator') { listAdbDevices(); listAvds() }
         if (deviceSetupType.value === 'ios_simulator')    listIosSimulators()
     }
 }
@@ -292,6 +298,9 @@ const filteredAdbDevices = computed(() =>
         ? adbDevices.value.filter(d => d.type === 'emulator')
         : adbDevices.value
 )
+
+// AVDs that aren't currently running — offered with a "Boot" action, like Android Studio's Device Manager
+const offlineAvds = computed(() => avds.value.filter(a => !a.running_serial))
 
 // Keep the manual-tab "push to Downloads" target pointed at a valid, connected device
 watch(filteredAdbDevices, (devices) => {
@@ -516,16 +525,17 @@ const modalTitle = () => {
                 </svg>
                 Install All ({{ filteredAdbDevices.length }})
               </button>
-              <button class="refresh-btn" :disabled="adbDevicesLoading" @click="listAdbDevices()" title="Refresh devices">
+              <button class="refresh-btn" :disabled="adbDevicesLoading || avdsLoading"
+                      @click="listAdbDevices(); listAvds()" title="Refresh devices">
                 <!-- Refresh / rotate-cw icon -->
-                <svg :class="{ spinning: adbDevicesLoading }"
+                <svg :class="{ spinning: adbDevicesLoading || avdsLoading }"
                      width="13" height="13" viewBox="0 0 24 24"
                      fill="none" stroke="currentColor" stroke-width="2.2"
                      stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="23 4 23 10 17 10"/>
                   <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                 </svg>
-                <span>{{ adbDevicesLoading ? 'Scanning…' : 'Refresh' }}</span>
+                <span>{{ adbDevicesLoading || avdsLoading ? 'Scanning…' : 'Refresh' }}</span>
               </button>
             </div>
           </div>
@@ -549,7 +559,7 @@ const modalTitle = () => {
           </div>
 
           <!-- Empty state -->
-          <div v-else-if="!adbDevicesLoading && filteredAdbDevices.length === 0 && !adbDevicesError"
+          <div v-else-if="!adbDevicesLoading && filteredAdbDevices.length === 0 && offlineAvds.length === 0 && !adbDevicesError"
                class="empty-state">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="1.5">
               <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
@@ -595,6 +605,34 @@ const modalTitle = () => {
                     <path d="M3.51 15a9 9 0 1 0 .49-4.95"/>
                   </svg>
                   Revert
+                </button>
+              </div>
+            </div>
+
+            <!-- Offline AVDs (configured but not running) — boot them like Android Studio's Device Manager -->
+            <div v-for="avd in offlineAvds" :key="avd.name" class="device-row">
+              <div class="device-thumb">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <rect x="2" y="3" width="20" height="14" rx="2"/>
+                  <polyline points="8 21 12 17 16 21"/>
+                  <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+              </div>
+              <div class="device-info">
+                <span class="device-model">{{ avd.name.replace(/_/g, ' ') }}</span>
+              </div>
+              <span class="type-badge offline">
+                {{ avdBootStatus[avd.name]?.state === 'booting' ? 'Booting' : avdBootStatus[avd.name]?.state === 'launching' ? 'Launching' : 'Offline' }}
+              </span>
+              <div class="row-actions">
+                <button class="pill" :class="avdBootStatus[avd.name]?.state === 'error' ? 'revert' : 'install'"
+                        :disabled="avdBootStatus[avd.name]?.state === 'launching' || avdBootStatus[avd.name]?.state === 'booting'"
+                        :title="avdBootStatus[avd.name]?.error || ''"
+                        @click="bootAvd(avd.name)">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <path d="M12 2v6"/><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+                  </svg>
+                  {{ avdBootStatus[avd.name]?.state === 'launching' ? 'Launching…' : avdBootStatus[avd.name]?.state === 'booting' ? 'Booting…' : 'Boot' }}
                 </button>
               </div>
             </div>
