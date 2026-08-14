@@ -2010,6 +2010,39 @@ class ProxyUIBridge:
     # iOS SIMULATOR SETUP HELPERS  (macOS only)
     # -------------------------------------------------------------------------
 
+    async def boot_ios_simulator(self, ws, udid: str):
+        """Boots a Shutdown iOS Simulator and brings Simulator.app to the foreground."""
+        async def send(success, error=None):
+            await ws.send(json.dumps({
+                "type": "IOS_SIMULATOR_BOOTED", "udid": udid,
+                "success": success, "error": error
+            }))
+
+        try:
+            loop = asyncio.get_running_loop()
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: subprocess.run(["xcrun", "simctl", "boot", udid], capture_output=True, text=True)
+                ),
+                timeout=30
+            )
+            # simctl errors out if the device is already booted — that's not a real failure.
+            if result.returncode != 0 and "current state: Booted" not in (result.stderr or ""):
+                error_msg = result.stderr.strip() or result.stdout.strip() or "simctl boot failed"
+                await send(False, error_msg)
+                return
+
+            await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(["open", "-a", "Simulator"], capture_output=True, text=True)
+            )
+            await send(True)
+        except asyncio.TimeoutError:
+            await send(False, "xcrun simctl boot timed out after 30s.")
+        except Exception as e:
+            await send(False, str(e))
+
     async def handle_list_ios_simulators(self, ws):
         if sys.platform != "darwin":
             await ws.send(json.dumps({
@@ -2280,6 +2313,11 @@ class ProxyUIBridge:
                 # ---- iOS Simulator setup ----
                 elif payload.get("type") == "LIST_IOS_SIMULATORS":
                     asyncio.create_task(self.handle_list_ios_simulators(websocket))
+
+                elif payload.get("type") == "BOOT_IOS_SIMULATOR":
+                    udid = payload.get("udid")
+                    if udid:
+                        asyncio.create_task(self.boot_ios_simulator(websocket, udid))
 
                 elif payload.get("type") == "SETUP_IOS_SIMULATOR":
                     udid = payload.get("udid")

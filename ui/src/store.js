@@ -310,6 +310,9 @@ export const iosSimulators = ref([])
 export const iosSimulatorsLoading = ref(false)
 export const iosSimulatorsError = ref(null)
 
+// { [udid]: { state: 'booting'|'error', error?: string } } — per-simulator boot status
+export const iosBootStatus = ref({})
+
 export const iosSetupProgress = ref({
     show: false,
     error: null,
@@ -491,6 +494,13 @@ export const listIosSimulators = () => {
     iosSimulatorsError.value = null
     iosSimulators.value = []
     wsConnection.send(JSON.stringify({ type: "LIST_IOS_SIMULATORS" }))
+}
+
+/** Boot a Shutdown iOS Simulator and bring Simulator.app to the foreground. */
+export const bootIosSimulator = (udid) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    iosBootStatus.value = { ...iosBootStatus.value, [udid]: { state: 'booting', error: null } }
+    wsConnection.send(JSON.stringify({ type: "BOOT_IOS_SIMULATOR", udid }))
 }
 
 /** Install the mitmproxy CA cert into a specific iOS Simulator. */
@@ -1319,6 +1329,16 @@ export const initWebSocket = () => {
             } else {
                 iosSimulatorsError.value = null
                 iosSimulators.value = payload.simulators || []
+            }
+        }
+
+        // ---- iOS Simulator: boot result ----
+        else if (payload.type === "IOS_SIMULATOR_BOOTED") {
+            if (payload.success) {
+                iosBootStatus.value = { ...iosBootStatus.value, [payload.udid]: { state: 'success', error: null } }
+                listIosSimulators()
+            } else {
+                iosBootStatus.value = { ...iosBootStatus.value, [payload.udid]: { state: 'error', error: payload.error } }
             }
         }
 
