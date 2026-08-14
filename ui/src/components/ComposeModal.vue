@@ -17,10 +17,9 @@ const selectMethod = (method) => {
   showMethodMenu.value = false
 }
 
-// --- TWO-WAY URL & PARAMS SYNCING ---
 const queryParams = ref([{ key: '', value: '' }])
 
-// 1. URL -> Grid (Runs when you type in the URL bar, or when the modal opens)
+// URL -> Grid (runs when typing in the URL bar, or when the modal opens)
 const syncUrlToParams = () => {
   const url = composeData.value.url || '';
   const parts = url.split('?');
@@ -42,7 +41,7 @@ const syncUrlToParams = () => {
   queryParams.value = newParams;
 }
 
-// 2. Grid -> URL (Runs when you type in the Params grid)
+// Grid -> URL (runs when typing in the Params grid)
 const syncParamsToUrl = () => {
   let baseUrl = composeData.value.url.split('?')[0] || '';
   const params = [];
@@ -60,7 +59,6 @@ const syncParamsToUrl = () => {
   }
 }
 
-// --- TWO-WAY HEADERS SYNCING ---
 const reqHeaders = ref([{ key: '', value: '' }])
 
 const syncReqHeadersFromJson = () => {
@@ -92,7 +90,7 @@ const removeHeaderRow = (index) => {
   syncReqHeadersToJson()
 }
 
-// Auto-fill the grid whenever the modal is opened (perfect for Edit Mode!)
+// Populate the params/headers grids whenever the modal opens, so Edit Mode prefills correctly
 watch(() => showComposeModal.value, (isOpen) => {
   if (isOpen) {
     syncUrlToParams();
@@ -109,7 +107,7 @@ const checkParamRow = (index) => {
 const removeParamRow = (index) => {
   queryParams.value.splice(index, 1)
   if (queryParams.value.length === 0) queryParams.value.push({ key: '', value: '' })
-  syncParamsToUrl() // Update URL when a row is deleted
+  syncParamsToUrl()
 }
 </script>
 
@@ -223,7 +221,6 @@ const removeParamRow = (index) => {
 </template>
 
 <style scoped>
-/* OVERLAY & MODAL */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -249,7 +246,6 @@ const removeParamRow = (index) => {
   overflow: hidden;
 }
 
-/* HEADER */
 .pm-header {
   display: flex;
   justify-content: space-between;
@@ -279,7 +275,6 @@ const removeParamRow = (index) => {
   color: var(--error);
 }
 
-/* OMNIBAR */
 .pm-omnibar-container {
   display: flex;
   gap: 8px;
@@ -334,7 +329,6 @@ const removeParamRow = (index) => {
   background: var(--accent-hover);
 }
 
-/* CUSTOM METHOD DROPDOWN */
 .pm-method-wrapper {
   position: relative;
   user-select: none;
@@ -365,7 +359,7 @@ const removeParamRow = (index) => {
   opacity: 0.6;
 }
 
-/* THE MAGIC OVERLAY THAT FIXES THE DROPDOWN */
+/* Full-screen invisible overlay so any outside click closes the dropdown */
 .pm-dropdown-overlay {
   position: fixed;
   top: 0;
@@ -402,7 +396,6 @@ const removeParamRow = (index) => {
   background: var(--surface-hover-strong);
 }
 
-/* Method Colors */
 .get {
   color: var(--method-get);
 }
@@ -428,7 +421,6 @@ const removeParamRow = (index) => {
   color: var(--method-other);
 }
 
-/* TABS */
 .pm-tabs {
   display: flex;
   gap: 24px;
@@ -457,7 +449,6 @@ const removeParamRow = (index) => {
   border-bottom-color: var(--accent);
 }
 
-/* EDITOR AREA */
 .pm-editor-area {
   flex: 1;
   display: flex;
@@ -490,7 +481,6 @@ const removeParamRow = (index) => {
   height: 100% !important;
 }
 
-/* PARAMS GRID */
 .pm-params-container { padding: 16px 20px; overflow-y: auto; flex: 1; }
 
 .pm-kv-table {

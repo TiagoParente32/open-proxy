@@ -264,7 +264,6 @@ export const showBustCacheBtn   = computed(() => toolbarVisibility.value.bustCac
 // OS Proxy toggle is darwin-only today; visibility flag still respected so it can be hidden when irrelevant
 export const showOsProxyBtn     = computed(() => toolbarVisibility.value.osProxy && platform.value === 'darwin')
 
-// Opens DeviceSetupModal directly on the VPN Mode view
 export const openVpnMode = () => {
     deviceSetupType.value = 'vpn_mode'
     closeAllModals()
@@ -275,7 +274,6 @@ export const openVpnMode = () => {
 export const adbDevices = ref([])
 // Whether a LIST_ADB_DEVICES fetch is in-flight
 export const adbDevicesLoading = ref(false)
-// Any error string returned from the backend for device listing
 export const adbDevicesError = ref(null)
 
 export const setupProgress = ref({
@@ -283,7 +281,6 @@ export const setupProgress = ref({
     error: null,
     // 'setup' or 'revert' — controls which title/copy to show
     mode: 'setup',
-    // Which device serial the current progress applies to
     targetSerial: null,
     steps: [
         { id: 'check_adb',    label: 'Checking dependencies...',    status: 'pending' },
@@ -408,7 +405,6 @@ const applyHighlightRules = (req) => {
     }
 }
 
-/** Request the backend to scan for connected ADB devices. */
 export const listAdbDevices = () => {
     if (wsConnection?.readyState !== WebSocket.OPEN) return
     adbDevicesLoading.value = true
@@ -425,7 +421,6 @@ export const listAdbDevices = () => {
 export const setupAndroidDevice = (serial, deviceType) => {
     if (wsConnection?.readyState !== WebSocket.OPEN) return
 
-    // Reset & show the progress panel
     setupProgress.value.mode = 'setup'
     setupProgress.value.targetSerial = serial
     setupProgress.value.show = true
@@ -439,10 +434,6 @@ export const setupAndroidDevice = (serial, deviceType) => {
     }))
 }
 
-/**
- * Revert the proxy config and remove the cert from a specific device.
- * @param {string} serial - ADB device serial
- */
 export const revertAndroidDevice = (serial) => {
     if (wsConnection?.readyState !== WebSocket.OPEN) return
 
@@ -462,7 +453,6 @@ export const injectEmulatorCert = () => {
     setupAndroidDevice("emulator-5554", "emulator")
 }
 
-/** Request the backend to list available iOS Simulators. */
 export const listIosSimulators = () => {
     if (wsConnection?.readyState !== WebSocket.OPEN) return
     iosSimulatorsLoading.value = true
@@ -543,7 +533,6 @@ export const toggleProxyUpstreamCert = () => {
 }
 
 export const syncProxyIgnoreHosts = (hosts, mode) => {
-    // Save to the correct list based on mode
     if (mode === 'allow') {
         proxyAllowHosts.value = hosts
         saveState('proxyAllowHosts', hosts)
@@ -708,11 +697,9 @@ export const deviceNicknames = ref(loadState('deviceNicknames', {}))
 
 function parseUserAgentDevice(ua) {
     if (!ua) return null
-    // iOS devices
     if (/iPhone/i.test(ua)) return 'iPhone'
     if (/iPad/i.test(ua)) return 'iPad'
     if (/iPod/i.test(ua)) return 'iPod'
-    // Android
     const android = ua.match(/Android[^;]*;\s*([^)]+)\)/i)
     if (android) {
         // Try to extract device model from Android UA, e.g. "SM-G991B" or "Pixel 6"
@@ -720,11 +707,8 @@ function parseUserAgentDevice(ua) {
         return model.length > 0 && model.length < 40 ? model : 'Android Device'
     }
     if (/Android/i.test(ua)) return 'Android Device'
-    // macOS / Mac
     if (/Macintosh|Mac OS X/i.test(ua)) return 'Mac'
-    // Windows
     if (/Windows/i.test(ua)) return 'Windows PC'
-    // Linux (non-Android)
     if (/Linux/i.test(ua)) return 'Linux Device'
     return null
 }
@@ -736,7 +720,6 @@ function deviceLabel(ip, uaDevice) {
     if (hostname) {
         return hostname.endsWith('.local') ? hostname.slice(0, -6) : hostname
     }
-    // Fall back to UA-derived device name if available
     if (uaDevice) return uaDevice
     return ip
 }
@@ -752,7 +735,6 @@ export const deviceTrafficTree = computed(() => {
         if (!tree[ip]) tree[ip] = new Set()
         if (domain) tree[ip].add(domain)
 
-        // Collect best UA-based device name for this IP
         if (!uaMap[ip]) {
             const ua = req.req_headers?.['user-agent'] || req.req_headers?.['User-Agent']
             const name = parseUserAgentDevice(ua)
@@ -1197,7 +1179,6 @@ export const initWebSocket = () => {
             trappedFlows.value.push(newFlow)
         }
 
-        // ---- NEW: ADB device list response ----
         else if (payload.type === "ADB_DEVICES") {
             adbDevicesLoading.value = false
             if (payload.error) {
@@ -1209,7 +1190,6 @@ export const initWebSocket = () => {
             }
         }
 
-        // ---- NEW: Setup progress (now serial-scoped) ----
         else if (payload.type === "SETUP_PROGRESS") {
             if (payload.step === 'check_adb' && payload.status === 'start') {
                 setupProgress.value.show = true
@@ -1241,7 +1221,6 @@ export const initWebSocket = () => {
             }
         }
 
-        // ---- NEW: Revert progress ----
         else if (payload.type === "REVERT_PROGRESS") {
             if (payload.step === 'clear_proxy' && payload.status === 'start') {
                 revertProgress.value.show = true
@@ -1266,7 +1245,6 @@ export const initWebSocket = () => {
             }
         }
 
-        // ---- iOS Simulator: device list ----
         else if (payload.type === "IOS_SIMULATORS") {
             iosSimulatorsLoading.value = false
             if (payload.error) {
@@ -1278,7 +1256,6 @@ export const initWebSocket = () => {
             }
         }
 
-        // ---- iOS Simulator: install progress ----
         else if (payload.type === "IOS_SETUP_PROGRESS") {
             if (payload.step === 'check_xcrun' && payload.status === 'start') {
                 iosSetupProgress.value.show = true
@@ -1301,7 +1278,6 @@ export const initWebSocket = () => {
             }
         }
 
-        // ---- iOS Simulator: revert progress ----
         else if (payload.type === "IOS_REVERT_PROGRESS") {
             if (payload.step === 'find_store' && payload.status === 'start') {
                 iosRevertProgress.value.show = true
@@ -1470,7 +1446,6 @@ export const initWebSocket = () => {
 // 8. PREFERENCES RESET
 // ============================================================================
 export const resetPreferences = () => {
-    // Clear all openproxy_* keys and the onboarding flag
     Object.keys(localStorage)
         .filter(k => k.startsWith('openproxy_') || k === 'openproxy-theme')
         .forEach(k => localStorage.removeItem(k))
@@ -1490,7 +1465,6 @@ const EXPORT_SKIP_KEYS = new Set(['requests', 'wsMessages'])
 export const exportSettings = async () => {
     const settings = {}
 
-    // Collect all openproxy_* keys (skip traffic)
     for (const storageKey of Object.keys(localStorage)) {
         if (storageKey === 'openproxy-theme') {
             settings.theme = localStorage.getItem(storageKey)
@@ -1542,7 +1516,6 @@ export const importSettings = async () => {
         return
     }
 
-    // Restore localStorage-backed settings
     const LS_KEYS = [
         'theme', 'toolbarVisibility', 'throttleProfile', 'disableCache',
         'isFocusMode', 'pinnedSources', 'activeChips', 'sortOrder',
