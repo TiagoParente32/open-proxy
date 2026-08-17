@@ -203,11 +203,12 @@ const dismiss = () => dismissCertTrustDialog()
 }
 
 .warn-footer {
-  display: flex; justify-content: flex-end; align-items: center;
+  display: flex; align-items: center;
   gap: 8px; margin-top: 4px;
 }
 
 .warn-btn-dismiss {
+  flex: 1; text-align: center;
   font-size: 12px;
   background: transparent; border: 1px solid var(--border);
   color: var(--fg-muted); padding: 8px 16px;
@@ -216,6 +217,7 @@ const dismiss = () => dismissCertTrustDialog()
 .warn-btn-dismiss:hover { color: var(--fg-primary); border-color: var(--fg-muted); }
 
 .warn-btn-primary {
+  flex: 1; text-align: center;
   background: var(--accent); color: #fff; border: none;
   border-radius: 8px; padding: 8px 18px;
   font-size: 13px; font-weight: 600;
