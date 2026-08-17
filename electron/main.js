@@ -343,12 +343,12 @@ function setupMenu () {
         { label: 'Compose Request', click: () => js('openComposeNew()'),   accelerator: 'CmdOrCtrl+N' },
         { label: 'Clear Traffic',   click: () => js('clearTraffic()'),     accelerator: 'CmdOrCtrl+K' },
         { type: 'separator' },
-        ...(process.platform === 'darwin' ? [{
+        {
           label:   'OS Proxy',
           type:    'checkbox',
           checked: macosProxyActive,
           click:   () => js('toggleMacProxy()'),
-        }] : []),
+        },
         {
           label:   'No Cache',
           type:    'checkbox',
@@ -457,7 +457,7 @@ function setupMenu () {
               'certificates',
               'throttle',
               'bustCache',
-              ...(process.platform === 'darwin' ? ['osProxy'] : []),
+              'osProxy',
             ].map((key) => ({
               label: { certificates: 'Certificates', throttle: 'Throttle', bustCache: 'No Cache', osProxy: 'OS Proxy' }[key],
               type: 'checkbox', checked: toolbarVisibility[key],

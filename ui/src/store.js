@@ -261,8 +261,7 @@ export const showScriptBtn      = computed(() => toolbarVisibility.value.scripts
 export const showCertificatesBtn = computed(() => toolbarVisibility.value.certificates)
 export const showThrottleBtn    = computed(() => toolbarVisibility.value.throttle)
 export const showBustCacheBtn   = computed(() => toolbarVisibility.value.bustCache)
-// OS Proxy toggle is darwin-only today; visibility flag still respected so it can be hidden when irrelevant
-export const showOsProxyBtn     = computed(() => toolbarVisibility.value.osProxy && platform.value === 'darwin')
+export const showOsProxyBtn     = computed(() => toolbarVisibility.value.osProxy)
 
 // Opens DeviceSetupModal directly on the VPN Mode view
 export const openVpnMode = () => {

@@ -1333,6 +1333,153 @@ def unset_macos_proxy() -> dict:
     return {'ok': True, 'services': services, 'error': None}
 
 
+# ============================================================================
+# WINDOWS OS PROXY HELPERS
+# ============================================================================
+def _refresh_windows_proxy_settings():
+    """Tells WinINet (and therefore Chrome/Edge) to re-read the registry proxy
+    settings immediately, instead of waiting for the next app restart."""
+    import ctypes
+    INTERNET_OPTION_SETTINGS_CHANGED = 39
+    INTERNET_OPTION_REFRESH = 37
+    ctypes.windll.wininet.InternetSetOptionW(0, INTERNET_OPTION_SETTINGS_CHANGED, 0, 0)
+    ctypes.windll.wininet.InternetSetOptionW(0, INTERNET_OPTION_REFRESH, 0, 0)
+
+
+def set_windows_proxy(port: int) -> dict:
+    """
+    Sets HTTP+HTTPS proxy to 127.0.0.1:<port> via the per-user registry key —
+    HKCU, not HKLM, so no admin/UAC elevation is needed.
+    """
+    import winreg
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+            0, winreg.KEY_SET_VALUE
+        )
+        winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 1)
+        winreg.SetValueEx(key, "ProxyServer", 0, winreg.REG_SZ, f"127.0.0.1:{port}")
+        winreg.SetValueEx(key, "ProxyOverride", 0, winreg.REG_SZ,
+            "localhost;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.2*.*;172.30.*;172.31.*;192.168.*;<local>")
+        winreg.CloseKey(key)
+        _refresh_windows_proxy_settings()
+        return {'ok': True, 'error': None}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
+
+def unset_windows_proxy() -> dict:
+    """Disables the per-user HTTP+HTTPS proxy set by set_windows_proxy()."""
+    import winreg
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+            0, winreg.KEY_SET_VALUE
+        )
+        winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 0)
+        winreg.CloseKey(key)
+        _refresh_windows_proxy_settings()
+        return {'ok': True, 'error': None}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
+
+# ============================================================================
+# LINUX OS PROXY HELPERS
+# ============================================================================
+def _linux_desktop_environment() -> str:
+    """Best-effort GNOME/KDE detection via the standard XDG env vars."""
+    de = (os.environ.get('XDG_CURRENT_DESKTOP') or os.environ.get('DESKTOP_SESSION') or '').lower()
+    if 'kde' in de or 'plasma' in de:
+        return 'kde'
+    if 'gnome' in de or 'unity' in de or 'cinnamon' in de or 'budgie' in de:
+        return 'gnome'
+    return 'unknown'
+
+
+def _kwriteconfig_cmd():
+    """kwriteconfig6 (Plasma 6) or kwriteconfig5 (Plasma 5) — whichever is on PATH."""
+    import shutil
+    return shutil.which('kwriteconfig6') or shutil.which('kwriteconfig5')
+
+
+def set_linux_proxy(port: int) -> dict:
+    """
+    Sets HTTP+HTTPS proxy to 127.0.0.1:<port> for the current desktop session.
+    GNOME: gsettings (applies live to GNOME/GTK apps and Chrome immediately).
+    KDE: writes kioslaverc via kwriteconfig — best-effort, some apps may need
+    a restart to pick it up. No admin privileges needed for either.
+    """
+    de = _linux_desktop_environment()
+    try:
+        if de == 'gnome':
+            bypass = "['localhost', '127.0.0.0/8', '::1']"
+            for cmd in [
+                ['gsettings', 'set', 'org.gnome.system.proxy', 'mode', 'manual'],
+                ['gsettings', 'set', 'org.gnome.system.proxy.http', 'host', '127.0.0.1'],
+                ['gsettings', 'set', 'org.gnome.system.proxy.http', 'port', str(port)],
+                ['gsettings', 'set', 'org.gnome.system.proxy.https', 'host', '127.0.0.1'],
+                ['gsettings', 'set', 'org.gnome.system.proxy.https', 'port', str(port)],
+                ['gsettings', 'set', 'org.gnome.system.proxy', 'ignore-hosts', bypass],
+            ]:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                if r.returncode != 0:
+                    return {'ok': False, 'error': r.stderr.strip() or f"'{cmd[0]}' failed"}
+            return {'ok': True, 'error': None}
+
+        if de == 'kde':
+            kwriteconfig = _kwriteconfig_cmd()
+            if not kwriteconfig:
+                return {'ok': False, 'error': "kwriteconfig5/6 not found — can't configure KDE's proxy settings."}
+            proxy_val = f"http://127.0.0.1 {port}"
+            for args in [
+                ['--file', 'kioslaverc', '--group', 'Proxy Settings', '--key', 'ProxyType', '1'],
+                ['--file', 'kioslaverc', '--group', 'Proxy Settings', '--key', 'httpProxy', proxy_val],
+                ['--file', 'kioslaverc', '--group', 'Proxy Settings', '--key', 'httpsProxy', proxy_val],
+                ['--file', 'kioslaverc', '--group', 'Proxy Settings', '--key', 'NoProxyFor', 'localhost,127.0.0.1,::1'],
+            ]:
+                r = subprocess.run([kwriteconfig] + args, capture_output=True, text=True, timeout=5)
+                if r.returncode != 0:
+                    return {'ok': False, 'error': r.stderr.strip() or 'kwriteconfig failed'}
+            return {'ok': True, 'error': None}
+
+        return {'ok': False, 'error': (
+            f"Unsupported desktop environment ({de or 'unknown'}). "
+            "GNOME and KDE are supported automatically — set the proxy manually "
+            "via your DE's network settings otherwise."
+        )}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
+
+def unset_linux_proxy() -> dict:
+    """Disables the proxy set by set_linux_proxy()."""
+    de = _linux_desktop_environment()
+    try:
+        if de == 'gnome':
+            r = subprocess.run(['gsettings', 'set', 'org.gnome.system.proxy', 'mode', 'none'],
+                                capture_output=True, text=True, timeout=5)
+            if r.returncode != 0:
+                return {'ok': False, 'error': r.stderr.strip() or "'gsettings' failed"}
+            return {'ok': True, 'error': None}
+
+        if de == 'kde':
+            kwriteconfig = _kwriteconfig_cmd()
+            if not kwriteconfig:
+                return {'ok': False, 'error': "kwriteconfig5/6 not found — can't configure KDE's proxy settings."}
+            r = subprocess.run(
+                [kwriteconfig, '--file', 'kioslaverc', '--group', 'Proxy Settings', '--key', 'ProxyType', '0'],
+                capture_output=True, text=True, timeout=5
+            )
+            if r.returncode != 0:
+                return {'ok': False, 'error': r.stderr.strip() or 'kwriteconfig failed'}
+            return {'ok': True, 'error': None}
+
+        return {'ok': False, 'error': f"Unsupported desktop environment ({de or 'unknown'})."}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
 
 
 # ============================================================================
@@ -2509,27 +2656,29 @@ class ProxyUIBridge:
         await asyncio.gather(*(client.send(message) for client in self.connected_clients), return_exceptions=True)
 
     async def _toggle_macos_proxy(self, websocket, enable: bool):
-        if sys.platform != "darwin":
-            await websocket.send(json.dumps({
-                "type": "MACOS_PROXY_STATUS",
-                "active": False,
-                "services": [],
-                "error": "System proxy toggle is macOS-only.",
-            }))
-            return
-
-        # Notify the UI if this will require a one-time admin password prompt
-        # to install the passwordless sudoers entry.
-        if not _sudoers_ok():
-            await self.broadcast_to_ui("MACOS_PROXY_FIRST_TIME_SETUP", {})
-
-        # set/unset_macos_proxy() may block on the osascript admin dialog
-        # (first run only), so run them off the asyncio loop.
         loop = asyncio.get_running_loop()
-        if enable:
-            result = await loop.run_in_executor(None, set_macos_proxy, self.proxy_port)
+
+        if sys.platform == "darwin":
+            # Notify the UI if this will require a one-time admin password prompt
+            # to install the passwordless sudoers entry.
+            if not _sudoers_ok():
+                await self.broadcast_to_ui("MACOS_PROXY_FIRST_TIME_SETUP", {})
+            # set/unset_macos_proxy() may block on the osascript admin dialog
+            # (first run only), so run them off the asyncio loop.
+            if enable:
+                result = await loop.run_in_executor(None, set_macos_proxy, self.proxy_port)
+            else:
+                result = await loop.run_in_executor(None, unset_macos_proxy)
+        elif sys.platform == "win32":
+            fn = set_windows_proxy if enable else unset_windows_proxy
+            result = await loop.run_in_executor(None, fn, self.proxy_port) if enable \
+                else await loop.run_in_executor(None, fn)
+        elif sys.platform.startswith("linux"):
+            fn = set_linux_proxy if enable else unset_linux_proxy
+            result = await loop.run_in_executor(None, fn, self.proxy_port) if enable \
+                else await loop.run_in_executor(None, fn)
         else:
-            result = await loop.run_in_executor(None, unset_macos_proxy)
+            result = {"ok": False, "error": f"Unsupported platform: {sys.platform}"}
 
         if result.get("ok"):
             self.is_mac_proxy_set = enable
@@ -3203,14 +3352,19 @@ if __name__ == "__main__":
     t.start()
 
     def _shutdown(*_args):
-        # If the user set the macOS system proxy this session, unset it on quit
-        # — otherwise their entire Mac keeps routing through OpenProxy after we
-        # exit. This will pop the admin password dialog one more time.
-        if sys.platform == "darwin" and bridge.is_mac_proxy_set:
+        # If the user set the OS-level system proxy this session, unset it on quit
+        # — otherwise their entire machine keeps routing through OpenProxy after
+        # we exit. On macOS this will pop the admin password dialog one more time.
+        if bridge.is_mac_proxy_set:
             try:
-                unset_macos_proxy()
+                if sys.platform == "darwin":
+                    unset_macos_proxy()
+                elif sys.platform == "win32":
+                    unset_windows_proxy()
+                elif sys.platform.startswith("linux"):
+                    unset_linux_proxy()
             except Exception as e:
-                print(f"[QUIT] Failed to unset macOS proxy: {e}", flush=True)
+                print(f"[QUIT] Failed to unset OS proxy: {e}", flush=True)
         os._exit(0)
 
     # Electron sends SIGTERM via pythonProcess.kill() on before-quit; SIGINT
