@@ -79,7 +79,6 @@ import {
   showComposeModal,
   pinSource,
   closeAllModals,
-  checkCertTrust,
 } from './store.js'
 
 onMounted(() => {
@@ -223,11 +222,6 @@ const onboardingModalRef = ref(null)
 // Whether there is pre-existing user data to prefill the onboarding steps with
 // (vs. a truly blank/fresh install where defaults make more sense).
 const onboardingPrefill = hasPriorInstallData
-
-const onOnboardingDone = () => {
-  showOnboardingModal.value = false
-  checkCertTrust()
-}
 
 const contextMenuEl = ref(null)
 watch(() => [contextMenu.value.x, contextMenu.value.y, contextMenu.value.show], ([,, visible]) => {
@@ -631,13 +625,13 @@ const openBreakpointModalFromContext = () => {
     <BreakpointsModal />
     <ComposeModal />
     <HighlightModal />
+    <OsProxyWarningModal />
+    <CertTrustModal />
     <DeviceSetupModal />
     <ScriptingModal />
     <IgnoreHostsModal :show="showIgnoreHostsModal" @close="showIgnoreHostsModal = false" />
-    <OnboardingModal v-if="showOnboardingModal" ref="onboardingModalRef" :app-version="appVersion" :prefill="onboardingPrefill" @done="onOnboardingDone" />
+    <OnboardingModal v-if="showOnboardingModal" ref="onboardingModalRef" :app-version="appVersion" :prefill="onboardingPrefill" @done="showOnboardingModal = false" />
     <KeyboardShortcutsModal v-if="showShortcutsModal" @close="showShortcutsModal = false" />
-    <OsProxyWarningModal />
-    <CertTrustModal />
   </div>
 </template>
 

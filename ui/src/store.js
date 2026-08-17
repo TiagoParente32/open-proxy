@@ -552,9 +552,11 @@ export const revertIosSimulator = (udid) => {
 }
 
 /** Ask the backend whether the mitmproxy CA is already trusted on this machine — if
- *  not, the CERT_TRUST_STATUS handler opens showCertTrustDialog. Tied to the actual
- *  cert/trust state rather than a single moment: called after onboarding finishes
- *  and whenever the OS proxy is turned on (see toggleMacProxy below). */
+ *  not, the CERT_TRUST_STATUS handler opens showCertTrustDialog. Only called when the
+ *  OS proxy is turned on (see toggleMacProxy below) — that's the only point where
+ *  OpenProxy actually knows this machine's own traffic is about to route through it.
+ *  (macOS-only today, since that's the only platform with an OS-proxy toggle — a
+ *  manually-configured browser proxy on any platform isn't detectable here either.) */
 export const checkCertTrust = () => {
     if (wsConnection?.readyState !== WebSocket.OPEN) return
     wsConnection.send(JSON.stringify({ type: "CHECK_CERT_TRUST" }))
@@ -1273,7 +1275,6 @@ export const initWebSocket = () => {
         wsConnection.send(JSON.stringify({ type: "TOGGLE_CACHE", disable_cache: disableCache.value }))
         _sendProxyOptions()
         if (wgEnabled.value) requestWgConf()
-        checkCertTrust()
     }
 
     wsConnection.onmessage = (event) => {
