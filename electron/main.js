@@ -185,6 +185,10 @@ function setupIPC () {
     }
   })
   ipcMain.on('shell:openExternal', (_e, url) => shell.openExternal(url))
+  ipcMain.on('shell:showItemInFolder', (_e, path) => {
+    console.log('[shell:showItemInFolder] path =', JSON.stringify(path), 'exists =', require('fs').existsSync(path))
+    shell.showItemInFolder(path)
+  })
   ipcMain.on('menu:bustCacheSync', (_e, val) => {
     bustCacheEnabled = !!val
     setupMenu()
