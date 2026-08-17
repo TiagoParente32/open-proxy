@@ -26,6 +26,7 @@ import IgnoreHostsModal from './components/IgnoreHostsModal.vue'
 import OnboardingModal from './components/OnboardingModal.vue'
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal.vue'
 import OsProxyWarningModal from './components/OsProxyWarningModal.vue'
+import CertTrustModal from './components/CertTrustModal.vue'
 // Import just the logic needed for the top-level app overlay (WebSockets & Context Menu)
 import { 
   initWebSocket, 
@@ -78,6 +79,7 @@ import {
   showComposeModal,
   pinSource,
   closeAllModals,
+  checkCertTrust,
 } from './store.js'
 
 onMounted(() => {
@@ -221,6 +223,11 @@ const onboardingModalRef = ref(null)
 // Whether there is pre-existing user data to prefill the onboarding steps with
 // (vs. a truly blank/fresh install where defaults make more sense).
 const onboardingPrefill = hasPriorInstallData
+
+const onOnboardingDone = () => {
+  showOnboardingModal.value = false
+  checkCertTrust()
+}
 
 const contextMenuEl = ref(null)
 watch(() => [contextMenu.value.x, contextMenu.value.y, contextMenu.value.show], ([,, visible]) => {
@@ -627,9 +634,10 @@ const openBreakpointModalFromContext = () => {
     <DeviceSetupModal />
     <ScriptingModal />
     <IgnoreHostsModal :show="showIgnoreHostsModal" @close="showIgnoreHostsModal = false" />
-    <OnboardingModal v-if="showOnboardingModal" ref="onboardingModalRef" :app-version="appVersion" :prefill="onboardingPrefill" @done="showOnboardingModal = false" />
+    <OnboardingModal v-if="showOnboardingModal" ref="onboardingModalRef" :app-version="appVersion" :prefill="onboardingPrefill" @done="onOnboardingDone" />
     <KeyboardShortcutsModal v-if="showShortcutsModal" @close="showShortcutsModal = false" />
     <OsProxyWarningModal />
+    <CertTrustModal />
   </div>
 </template>
 

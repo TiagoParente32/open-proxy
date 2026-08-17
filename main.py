@@ -1065,18 +1065,31 @@ def get_active_network_services():
 
 SUDOERS_PATH = '/etc/sudoers.d/openproxy'
 NETWORKSETUP  = '/usr/sbin/networksetup'
+SECURITY_BIN  = '/usr/bin/security'
+MACOS_CERT_PATH = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.pem")
+MACOS_TRUST_CMD = [
+    SECURITY_BIN, 'add-trusted-cert', '-d', '-r', 'trustRoot',
+    '-k', '/Library/Keychains/System.keychain', MACOS_CERT_PATH,
+]
 
 def _sudoers_entry_for_user(username: str) -> str:
-    return f'{username} ALL=(root) NOPASSWD: {NETWORKSETUP}\n'
+    return (
+        f'{username} ALL=(root) NOPASSWD: {NETWORKSETUP}\n'
+        f'{username} ALL=(root) NOPASSWD: {" ".join(MACOS_TRUST_CMD)}\n'
+    )
 
 def _sudoers_ok() -> bool:
-    """Return True if 'sudo -n networksetup' works without a password prompt."""
+    """
+    Return True if both networksetup and the cert-trust command are passwordless.
+    Checks for SECURITY_BIN specifically (not just 'add-trusted-cert') so a stale
+    sudoers file from before a SECURITY_BIN path fix is detected as stale and
+    regenerated, rather than silently treated as already correct.
+    """
     try:
-        r = subprocess.run(
-            ['sudo', '-n', NETWORKSETUP, '-help'],
-            capture_output=True, timeout=5
-        )
-        return r.returncode == 0
+        r = subprocess.run(['sudo', '-n', '-l'], capture_output=True, text=True, timeout=5)
+        if r.returncode != 0:
+            return False
+        return NETWORKSETUP in r.stdout and SECURITY_BIN in r.stdout and 'add-trusted-cert' in r.stdout
     except Exception:
         return False
 
@@ -1122,6 +1135,138 @@ def ensure_networksetup_sudoers() -> dict:
         return {'ok': False, 'already_installed': False, 'error': 'Operation timed out.'}
     except Exception as e:
         return {'ok': False, 'already_installed': False, 'error': str(e)}
+
+
+def is_cert_trusted_macos() -> bool:
+    """
+    Checks whether the mitmproxy CA is actually trusted — not just present in the
+    keychain. `find-certificate` only checks presence, so a cert explicitly set to
+    "Never Trust" in Keychain Access would still show up as "found". `verify-cert`
+    runs the real trust evaluation and correctly respects that override.
+    """
+    if not os.path.exists(MACOS_CERT_PATH):
+        return False
+    try:
+        r = subprocess.run(
+            ['security', 'verify-cert', '-c', MACOS_CERT_PATH],
+            capture_output=True, timeout=5
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def trust_cert_macos() -> dict:
+    """Adds the mitmproxy CA cert to the System keychain as a trusted root."""
+    if not os.path.exists(MACOS_CERT_PATH):
+        return {'ok': False, 'error': 'Certificate not found. Start the proxy first to generate it.'}
+    if is_cert_trusted_macos():
+        return {'ok': True, 'error': None}
+    setup = ensure_networksetup_sudoers()
+    if not setup['ok']:
+        return {'ok': False, 'error': setup['error']}
+    try:
+        r = subprocess.run(['sudo', '-n'] + MACOS_TRUST_CMD, capture_output=True, text=True, timeout=15)
+        if r.returncode == 0:
+            return {'ok': True, 'error': None}
+        return {'ok': False, 'error': r.stderr.strip() or r.stdout.strip() or 'security add-trusted-cert failed'}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
+
+# ============================================================================
+# WINDOWS CERT TRUST HELPERS
+# ============================================================================
+WINDOWS_CERT_PATH = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.cer")
+
+def is_cert_trusted_windows() -> bool:
+    """Checks whether the mitmproxy CA is already in the current user's Root store."""
+    try:
+        certutil = get_executable_path("certutil")
+    except FileNotFoundError:
+        return False
+    try:
+        r = subprocess.run([certutil, '-user', '-store', 'Root'], capture_output=True, text=True, timeout=10)
+        return 'mitmproxy' in r.stdout
+    except Exception:
+        return False
+
+
+def trust_cert_windows() -> dict:
+    """
+    Adds the mitmproxy CA cert to the current user's Trusted Root store via certutil.
+    Uses '-user' so this writes to HKCU, not the machine store — no UAC/admin
+    elevation needed, and Chrome/Edge (which read the Windows cert store) pick it up.
+    """
+    if not os.path.exists(WINDOWS_CERT_PATH):
+        return {'ok': False, 'error': 'Certificate not found. Start the proxy first to generate it.'}
+    if is_cert_trusted_windows():
+        return {'ok': True, 'error': None}
+    try:
+        certutil = get_executable_path("certutil")
+    except FileNotFoundError as e:
+        return {'ok': False, 'error': str(e)}
+    try:
+        r = subprocess.run(
+            [certutil, '-user', '-addstore', '-f', 'Root', WINDOWS_CERT_PATH],
+            capture_output=True, text=True, timeout=15
+        )
+        if r.returncode == 0:
+            return {'ok': True, 'error': None}
+        return {'ok': False, 'error': r.stderr.strip() or r.stdout.strip() or 'certutil failed'}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
+
+# ============================================================================
+# LINUX CERT TRUST HELPERS
+# ============================================================================
+LINUX_CERT_PATH   = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.pem")
+LINUX_DEBIAN_DEST = '/usr/local/share/ca-certificates/openproxy-mitmproxy.crt'
+LINUX_RHEL_DEST   = '/etc/pki/ca-trust/source/anchors/openproxy-mitmproxy.pem'
+
+def is_cert_trusted_linux() -> bool:
+    """Best-effort check: does our marker file already exist in a known system trust dir?"""
+    return os.path.exists(LINUX_DEBIAN_DEST) or os.path.exists(LINUX_RHEL_DEST)
+
+
+def trust_cert_linux() -> dict:
+    """
+    Adds the mitmproxy CA cert to the Linux system trust store (covers curl/wget and
+    most Chromium-based browsers, depending on distro). Firefox keeps its own
+    separate per-profile NSS cert database and isn't covered by this.
+    Requires a graphical polkit agent for the 'pkexec' admin prompt.
+    """
+    import shutil
+
+    if not os.path.exists(LINUX_CERT_PATH):
+        return {'ok': False, 'error': 'Certificate not found. Start the proxy first to generate it.'}
+    if is_cert_trusted_linux():
+        return {'ok': True, 'error': None}
+
+    if shutil.which('update-ca-certificates'):
+        dest = LINUX_DEBIAN_DEST
+        cmd = f"mkdir -p '{os.path.dirname(dest)}' && cp '{LINUX_CERT_PATH}' '{dest}' && update-ca-certificates"
+    elif shutil.which('update-ca-trust'):
+        dest = LINUX_RHEL_DEST
+        cmd = f"mkdir -p '{os.path.dirname(dest)}' && cp '{LINUX_CERT_PATH}' '{dest}' && update-ca-trust extract"
+    else:
+        return {'ok': False, 'error': "No supported system trust store tool found (expected 'update-ca-certificates' or 'update-ca-trust')."}
+
+    pkexec = shutil.which('pkexec')
+    if not pkexec:
+        return {'ok': False, 'error': "'pkexec' not found — can't request admin privileges graphically. Trust the certificate manually instead."}
+
+    try:
+        r = subprocess.run([pkexec, 'bash', '-c', cmd], capture_output=True, text=True, timeout=60)
+        if r.returncode == 0:
+            return {'ok': True, 'error': None}
+        err = r.stderr.strip() or r.stdout.strip()
+        if r.returncode == 126 or 'dismissed' in err.lower() or 'not authorized' in err.lower():
+            return {'ok': False, 'error': 'cancelled'}
+        return {'ok': False, 'error': err or 'Failed to update the system trust store.'}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
 
 
 def set_macos_proxy(port: int) -> dict:
@@ -2396,6 +2541,33 @@ class ProxyUIBridge:
             "error": result.get("error"),
         })
 
+    async def handle_check_cert_trust(self, ws):
+        """Reports whether the mitmproxy CA is already trusted on this machine."""
+        loop = asyncio.get_running_loop()
+        if sys.platform == "darwin":
+            trusted = await loop.run_in_executor(None, is_cert_trusted_macos)
+        elif sys.platform == "win32":
+            trusted = await loop.run_in_executor(None, is_cert_trusted_windows)
+        elif sys.platform.startswith("linux"):
+            trusted = await loop.run_in_executor(None, is_cert_trusted_linux)
+        else:
+            trusted = False
+        await ws.send(json.dumps({"type": "CERT_TRUST_STATUS", "trusted": trusted}))
+
+    async def handle_trust_cert(self, ws):
+        """Trusts the mitmproxy CA in this machine's OS cert store (Chrome/Edge/curl on
+        all platforms, plus Safari on macOS). Firefox keeps its own separate store."""
+        loop = asyncio.get_running_loop()
+        if sys.platform == "darwin":
+            result = await loop.run_in_executor(None, trust_cert_macos)
+        elif sys.platform == "win32":
+            result = await loop.run_in_executor(None, trust_cert_windows)
+        elif sys.platform.startswith("linux"):
+            result = await loop.run_in_executor(None, trust_cert_linux)
+        else:
+            result = {"ok": False, "error": f"Unsupported platform: {sys.platform}"}
+        await ws.send(json.dumps({"type": "CERT_TRUST_RESULT", "ok": result["ok"], "error": result["error"]}))
+
     async def websocket_handler(self, websocket):
         self.connected_clients.add(websocket)
         try:
@@ -2672,6 +2844,12 @@ class ProxyUIBridge:
 
                 elif payload.get("type") == "UNSET_MAC_PROXY":
                     await self._toggle_macos_proxy(websocket, enable=False)
+
+                elif payload.get("type") == "CHECK_CERT_TRUST":
+                    asyncio.create_task(self.handle_check_cert_trust(websocket))
+
+                elif payload.get("type") == "TRUST_CERT":
+                    asyncio.create_task(self.handle_trust_cert(websocket))
 
                 elif payload.get("type") == "SCRIPT_SAVE":
                     self.scripts_manager.save_script(
