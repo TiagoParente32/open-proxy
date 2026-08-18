@@ -462,6 +462,39 @@ def _launch_linux_script(script, needs_elevation):
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def _launch_macos_script(script, needs_elevation):
+    """Launch a bash update script, escalating via an osascript admin prompt if the
+    install path needs root — e.g. the app was installed by a different admin
+    account, or /Applications write access is restricted on a managed/MDM Mac.
+
+    Same two-step approach as _launch_linux_script: a tiny launcher backgrounds
+    the real update worker so the blocking osascript call (and thus
+    apply_update()) only returns once the user has authenticated — not before.
+    """
+    if needs_elevation:
+        launcher = script + '.launcher.sh'
+        with open(launcher, 'w') as f:
+            f.write(f'#!/bin/bash\nnohup bash "{script}" >/dev/null 2>&1 &\n')
+        os.chmod(launcher, os.stat(launcher).st_mode | stat.S_IEXEC)
+
+        shell_cmd = f'bash "{launcher}"'
+        as_string = shell_cmd.replace('\\', '\\\\').replace('"', '\\"')
+        osa_script = f'do shell script "{as_string}" with administrator privileges'
+
+        # Block until the user authenticates. Raises if cancelled/failed.
+        result = subprocess.run(['osascript', '-e', osa_script],
+                                 capture_output=True, text=True)
+        if result.returncode != 0:
+            err = result.stderr.strip()
+            if 'User canceled' in err or '-128' in err:
+                raise PermissionError("Elevation was cancelled.")
+            raise PermissionError(f"Elevation failed: {err or 'authentication failed'}")
+    else:
+        subprocess.Popen(['bash', script], close_fds=True,
+                         start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def apply_update(download_url, progress_cb=None):
     """
     Download the release zip, extract it, then launch a helper script that
@@ -473,10 +506,12 @@ def apply_update(download_url, progress_cb=None):
 
     install_path = _get_app_install_path()
 
-    # Check write access early; on Linux we can escalate via pkexec if needed.
+    # Check write access early; on macOS/Linux we can escalate (osascript /
+    # pkexec) if needed. Windows installs per-user by default (no perMachine
+    # override in package.json), so %LOCALAPPDATA% is always writable there.
     # macOS checks the parent dir (we need to replace the .app bundle itself).
     check_path = os.path.dirname(install_path) if sys.platform == 'darwin' else install_path
-    needs_elevation = sys.platform not in ('darwin', 'win32') and not os.access(check_path, os.W_OK)
+    needs_elevation = sys.platform != 'win32' and not os.access(check_path, os.W_OK)
 
     tmp_dir = tempfile.mkdtemp(prefix='openproxy_update_')
 
@@ -810,11 +845,7 @@ rm -rf "{backup_path}"
 open -n "{install_path}"
 """)
         os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
-        # start_new_session=True puts the script in its own process group so it
-        # is fully independent of Python — survives Python being killed by Electron.
-        subprocess.Popen(['bash', script], close_fds=True,
-                         start_new_session=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        _launch_macos_script(script, needs_elevation)
 
     elif sys.platform == 'win32':
         exe_name = APP_PRODUCT_NAME + '.exe'
