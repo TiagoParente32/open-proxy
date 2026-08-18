@@ -56,7 +56,7 @@ const goToHostFilters = () => {
 
 <style scoped>
 .warn-overlay {
-  position: fixed; inset: 0; z-index: 9999;
+  position: fixed; inset: 0; z-index: 99999;
   background: rgba(0, 0, 0, 0.55);
   display: flex; align-items: center; justify-content: center;
 }
@@ -107,11 +107,12 @@ const goToHostFilters = () => {
 }
 
 .warn-footer {
-  display: flex; justify-content: flex-end; align-items: center;
+  display: flex; align-items: center;
   gap: 8px; margin-top: 4px;
 }
 
 .warn-btn-dismiss {
+  flex: 1; text-align: center;
   font-size: 12px;
   background: transparent; border: 1px solid var(--border);
   color: var(--fg-muted); padding: 8px 16px;
@@ -120,6 +121,7 @@ const goToHostFilters = () => {
 .warn-btn-dismiss:hover { color: var(--fg-primary); border-color: var(--fg-muted); }
 
 .warn-btn-primary {
+  flex: 1; text-align: center;
   background: var(--accent); color: #fff; border: none;
   border-radius: 8px; padding: 8px 18px;
   font-size: 13px; font-weight: 600;

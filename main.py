@@ -1065,18 +1065,31 @@ def get_active_network_services():
 
 SUDOERS_PATH = '/etc/sudoers.d/openproxy'
 NETWORKSETUP  = '/usr/sbin/networksetup'
+SECURITY_BIN  = '/usr/bin/security'
+MACOS_CERT_PATH = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.pem")
+MACOS_TRUST_CMD = [
+    SECURITY_BIN, 'add-trusted-cert', '-d', '-r', 'trustRoot',
+    '-k', '/Library/Keychains/System.keychain', MACOS_CERT_PATH,
+]
 
 def _sudoers_entry_for_user(username: str) -> str:
-    return f'{username} ALL=(root) NOPASSWD: {NETWORKSETUP}\n'
+    return (
+        f'{username} ALL=(root) NOPASSWD: {NETWORKSETUP}\n'
+        f'{username} ALL=(root) NOPASSWD: {" ".join(MACOS_TRUST_CMD)}\n'
+    )
 
 def _sudoers_ok() -> bool:
-    """Return True if 'sudo -n networksetup' works without a password prompt."""
+    """
+    Return True if both networksetup and the cert-trust command are passwordless.
+    Checks for SECURITY_BIN specifically (not just 'add-trusted-cert') so a stale
+    sudoers file from before a SECURITY_BIN path fix is detected as stale and
+    regenerated, rather than silently treated as already correct.
+    """
     try:
-        r = subprocess.run(
-            ['sudo', '-n', NETWORKSETUP, '-help'],
-            capture_output=True, timeout=5
-        )
-        return r.returncode == 0
+        r = subprocess.run(['sudo', '-n', '-l'], capture_output=True, text=True, timeout=5)
+        if r.returncode != 0:
+            return False
+        return NETWORKSETUP in r.stdout and SECURITY_BIN in r.stdout and 'add-trusted-cert' in r.stdout
     except Exception:
         return False
 
@@ -1122,6 +1135,138 @@ def ensure_networksetup_sudoers() -> dict:
         return {'ok': False, 'already_installed': False, 'error': 'Operation timed out.'}
     except Exception as e:
         return {'ok': False, 'already_installed': False, 'error': str(e)}
+
+
+def is_cert_trusted_macos() -> bool:
+    """
+    Checks whether the mitmproxy CA is actually trusted — not just present in the
+    keychain. `find-certificate` only checks presence, so a cert explicitly set to
+    "Never Trust" in Keychain Access would still show up as "found". `verify-cert`
+    runs the real trust evaluation and correctly respects that override.
+    """
+    if not os.path.exists(MACOS_CERT_PATH):
+        return False
+    try:
+        r = subprocess.run(
+            ['security', 'verify-cert', '-c', MACOS_CERT_PATH],
+            capture_output=True, timeout=5
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def trust_cert_macos() -> dict:
+    """Adds the mitmproxy CA cert to the System keychain as a trusted root."""
+    if not os.path.exists(MACOS_CERT_PATH):
+        return {'ok': False, 'error': 'Certificate not found. Start the proxy first to generate it.'}
+    if is_cert_trusted_macos():
+        return {'ok': True, 'error': None}
+    setup = ensure_networksetup_sudoers()
+    if not setup['ok']:
+        return {'ok': False, 'error': setup['error']}
+    try:
+        r = subprocess.run(['sudo', '-n'] + MACOS_TRUST_CMD, capture_output=True, text=True, timeout=15)
+        if r.returncode == 0:
+            return {'ok': True, 'error': None}
+        return {'ok': False, 'error': r.stderr.strip() or r.stdout.strip() or 'security add-trusted-cert failed'}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
+
+# ============================================================================
+# WINDOWS CERT TRUST HELPERS
+# ============================================================================
+WINDOWS_CERT_PATH = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.cer")
+
+def is_cert_trusted_windows() -> bool:
+    """Checks whether the mitmproxy CA is already in the current user's Root store."""
+    try:
+        certutil = get_executable_path("certutil")
+    except FileNotFoundError:
+        return False
+    try:
+        r = subprocess.run([certutil, '-user', '-store', 'Root'], capture_output=True, text=True, timeout=10)
+        return 'mitmproxy' in r.stdout
+    except Exception:
+        return False
+
+
+def trust_cert_windows() -> dict:
+    """
+    Adds the mitmproxy CA cert to the current user's Trusted Root store via certutil.
+    Uses '-user' so this writes to HKCU, not the machine store — no UAC/admin
+    elevation needed, and Chrome/Edge (which read the Windows cert store) pick it up.
+    """
+    if not os.path.exists(WINDOWS_CERT_PATH):
+        return {'ok': False, 'error': 'Certificate not found. Start the proxy first to generate it.'}
+    if is_cert_trusted_windows():
+        return {'ok': True, 'error': None}
+    try:
+        certutil = get_executable_path("certutil")
+    except FileNotFoundError as e:
+        return {'ok': False, 'error': str(e)}
+    try:
+        r = subprocess.run(
+            [certutil, '-user', '-addstore', '-f', 'Root', WINDOWS_CERT_PATH],
+            capture_output=True, text=True, timeout=15
+        )
+        if r.returncode == 0:
+            return {'ok': True, 'error': None}
+        return {'ok': False, 'error': r.stderr.strip() or r.stdout.strip() or 'certutil failed'}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
+
+# ============================================================================
+# LINUX CERT TRUST HELPERS
+# ============================================================================
+LINUX_CERT_PATH   = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.pem")
+LINUX_DEBIAN_DEST = '/usr/local/share/ca-certificates/openproxy-mitmproxy.crt'
+LINUX_RHEL_DEST   = '/etc/pki/ca-trust/source/anchors/openproxy-mitmproxy.pem'
+
+def is_cert_trusted_linux() -> bool:
+    """Best-effort check: does our marker file already exist in a known system trust dir?"""
+    return os.path.exists(LINUX_DEBIAN_DEST) or os.path.exists(LINUX_RHEL_DEST)
+
+
+def trust_cert_linux() -> dict:
+    """
+    Adds the mitmproxy CA cert to the Linux system trust store (covers curl/wget and
+    most Chromium-based browsers, depending on distro). Firefox keeps its own
+    separate per-profile NSS cert database and isn't covered by this.
+    Requires a graphical polkit agent for the 'pkexec' admin prompt.
+    """
+    import shutil
+
+    if not os.path.exists(LINUX_CERT_PATH):
+        return {'ok': False, 'error': 'Certificate not found. Start the proxy first to generate it.'}
+    if is_cert_trusted_linux():
+        return {'ok': True, 'error': None}
+
+    if shutil.which('update-ca-certificates'):
+        dest = LINUX_DEBIAN_DEST
+        cmd = f"mkdir -p '{os.path.dirname(dest)}' && cp '{LINUX_CERT_PATH}' '{dest}' && update-ca-certificates"
+    elif shutil.which('update-ca-trust'):
+        dest = LINUX_RHEL_DEST
+        cmd = f"mkdir -p '{os.path.dirname(dest)}' && cp '{LINUX_CERT_PATH}' '{dest}' && update-ca-trust extract"
+    else:
+        return {'ok': False, 'error': "No supported system trust store tool found (expected 'update-ca-certificates' or 'update-ca-trust')."}
+
+    pkexec = shutil.which('pkexec')
+    if not pkexec:
+        return {'ok': False, 'error': "'pkexec' not found — can't request admin privileges graphically. Trust the certificate manually instead."}
+
+    try:
+        r = subprocess.run([pkexec, 'bash', '-c', cmd], capture_output=True, text=True, timeout=60)
+        if r.returncode == 0:
+            return {'ok': True, 'error': None}
+        err = r.stderr.strip() or r.stdout.strip()
+        if r.returncode == 126 or 'dismissed' in err.lower() or 'not authorized' in err.lower():
+            return {'ok': False, 'error': 'cancelled'}
+        return {'ok': False, 'error': err or 'Failed to update the system trust store.'}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
 
 
 def set_macos_proxy(port: int) -> dict:
@@ -1188,6 +1333,153 @@ def unset_macos_proxy() -> dict:
     return {'ok': True, 'services': services, 'error': None}
 
 
+# ============================================================================
+# WINDOWS OS PROXY HELPERS
+# ============================================================================
+def _refresh_windows_proxy_settings():
+    """Tells WinINet (and therefore Chrome/Edge) to re-read the registry proxy
+    settings immediately, instead of waiting for the next app restart."""
+    import ctypes
+    INTERNET_OPTION_SETTINGS_CHANGED = 39
+    INTERNET_OPTION_REFRESH = 37
+    ctypes.windll.wininet.InternetSetOptionW(0, INTERNET_OPTION_SETTINGS_CHANGED, 0, 0)
+    ctypes.windll.wininet.InternetSetOptionW(0, INTERNET_OPTION_REFRESH, 0, 0)
+
+
+def set_windows_proxy(port: int) -> dict:
+    """
+    Sets HTTP+HTTPS proxy to 127.0.0.1:<port> via the per-user registry key —
+    HKCU, not HKLM, so no admin/UAC elevation is needed.
+    """
+    import winreg
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+            0, winreg.KEY_SET_VALUE
+        )
+        winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 1)
+        winreg.SetValueEx(key, "ProxyServer", 0, winreg.REG_SZ, f"127.0.0.1:{port}")
+        winreg.SetValueEx(key, "ProxyOverride", 0, winreg.REG_SZ,
+            "localhost;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.2*.*;172.30.*;172.31.*;192.168.*;<local>")
+        winreg.CloseKey(key)
+        _refresh_windows_proxy_settings()
+        return {'ok': True, 'error': None}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
+
+def unset_windows_proxy() -> dict:
+    """Disables the per-user HTTP+HTTPS proxy set by set_windows_proxy()."""
+    import winreg
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+            0, winreg.KEY_SET_VALUE
+        )
+        winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 0)
+        winreg.CloseKey(key)
+        _refresh_windows_proxy_settings()
+        return {'ok': True, 'error': None}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
+
+# ============================================================================
+# LINUX OS PROXY HELPERS
+# ============================================================================
+def _linux_desktop_environment() -> str:
+    """Best-effort GNOME/KDE detection via the standard XDG env vars."""
+    de = (os.environ.get('XDG_CURRENT_DESKTOP') or os.environ.get('DESKTOP_SESSION') or '').lower()
+    if 'kde' in de or 'plasma' in de:
+        return 'kde'
+    if 'gnome' in de or 'unity' in de or 'cinnamon' in de or 'budgie' in de:
+        return 'gnome'
+    return 'unknown'
+
+
+def _kwriteconfig_cmd():
+    """kwriteconfig6 (Plasma 6) or kwriteconfig5 (Plasma 5) — whichever is on PATH."""
+    import shutil
+    return shutil.which('kwriteconfig6') or shutil.which('kwriteconfig5')
+
+
+def set_linux_proxy(port: int) -> dict:
+    """
+    Sets HTTP+HTTPS proxy to 127.0.0.1:<port> for the current desktop session.
+    GNOME: gsettings (applies live to GNOME/GTK apps and Chrome immediately).
+    KDE: writes kioslaverc via kwriteconfig — best-effort, some apps may need
+    a restart to pick it up. No admin privileges needed for either.
+    """
+    de = _linux_desktop_environment()
+    try:
+        if de == 'gnome':
+            bypass = "['localhost', '127.0.0.0/8', '::1']"
+            for cmd in [
+                ['gsettings', 'set', 'org.gnome.system.proxy', 'mode', 'manual'],
+                ['gsettings', 'set', 'org.gnome.system.proxy.http', 'host', '127.0.0.1'],
+                ['gsettings', 'set', 'org.gnome.system.proxy.http', 'port', str(port)],
+                ['gsettings', 'set', 'org.gnome.system.proxy.https', 'host', '127.0.0.1'],
+                ['gsettings', 'set', 'org.gnome.system.proxy.https', 'port', str(port)],
+                ['gsettings', 'set', 'org.gnome.system.proxy', 'ignore-hosts', bypass],
+            ]:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                if r.returncode != 0:
+                    return {'ok': False, 'error': r.stderr.strip() or f"'{cmd[0]}' failed"}
+            return {'ok': True, 'error': None}
+
+        if de == 'kde':
+            kwriteconfig = _kwriteconfig_cmd()
+            if not kwriteconfig:
+                return {'ok': False, 'error': "kwriteconfig5/6 not found — can't configure KDE's proxy settings."}
+            proxy_val = f"http://127.0.0.1 {port}"
+            for args in [
+                ['--file', 'kioslaverc', '--group', 'Proxy Settings', '--key', 'ProxyType', '1'],
+                ['--file', 'kioslaverc', '--group', 'Proxy Settings', '--key', 'httpProxy', proxy_val],
+                ['--file', 'kioslaverc', '--group', 'Proxy Settings', '--key', 'httpsProxy', proxy_val],
+                ['--file', 'kioslaverc', '--group', 'Proxy Settings', '--key', 'NoProxyFor', 'localhost,127.0.0.1,::1'],
+            ]:
+                r = subprocess.run([kwriteconfig] + args, capture_output=True, text=True, timeout=5)
+                if r.returncode != 0:
+                    return {'ok': False, 'error': r.stderr.strip() or 'kwriteconfig failed'}
+            return {'ok': True, 'error': None}
+
+        return {'ok': False, 'error': (
+            f"Unsupported desktop environment ({de or 'unknown'}). "
+            "GNOME and KDE are supported automatically — set the proxy manually "
+            "via your DE's network settings otherwise."
+        )}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
+
+def unset_linux_proxy() -> dict:
+    """Disables the proxy set by set_linux_proxy()."""
+    de = _linux_desktop_environment()
+    try:
+        if de == 'gnome':
+            r = subprocess.run(['gsettings', 'set', 'org.gnome.system.proxy', 'mode', 'none'],
+                                capture_output=True, text=True, timeout=5)
+            if r.returncode != 0:
+                return {'ok': False, 'error': r.stderr.strip() or "'gsettings' failed"}
+            return {'ok': True, 'error': None}
+
+        if de == 'kde':
+            kwriteconfig = _kwriteconfig_cmd()
+            if not kwriteconfig:
+                return {'ok': False, 'error': "kwriteconfig5/6 not found — can't configure KDE's proxy settings."}
+            r = subprocess.run(
+                [kwriteconfig, '--file', 'kioslaverc', '--group', 'Proxy Settings', '--key', 'ProxyType', '0'],
+                capture_output=True, text=True, timeout=5
+            )
+            if r.returncode != 0:
+                return {'ok': False, 'error': r.stderr.strip() or 'kwriteconfig failed'}
+            return {'ok': True, 'error': None}
+
+        return {'ok': False, 'error': f"Unsupported desktop environment ({de or 'unknown'})."}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
 
 
 # ============================================================================
@@ -2364,27 +2656,29 @@ class ProxyUIBridge:
         await asyncio.gather(*(client.send(message) for client in self.connected_clients), return_exceptions=True)
 
     async def _toggle_macos_proxy(self, websocket, enable: bool):
-        if sys.platform != "darwin":
-            await websocket.send(json.dumps({
-                "type": "MACOS_PROXY_STATUS",
-                "active": False,
-                "services": [],
-                "error": "System proxy toggle is macOS-only.",
-            }))
-            return
-
-        # Notify the UI if this will require a one-time admin password prompt
-        # to install the passwordless sudoers entry.
-        if not _sudoers_ok():
-            await self.broadcast_to_ui("MACOS_PROXY_FIRST_TIME_SETUP", {})
-
-        # set/unset_macos_proxy() may block on the osascript admin dialog
-        # (first run only), so run them off the asyncio loop.
         loop = asyncio.get_running_loop()
-        if enable:
-            result = await loop.run_in_executor(None, set_macos_proxy, self.proxy_port)
+
+        if sys.platform == "darwin":
+            # Notify the UI if this will require a one-time admin password prompt
+            # to install the passwordless sudoers entry.
+            if not _sudoers_ok():
+                await self.broadcast_to_ui("MACOS_PROXY_FIRST_TIME_SETUP", {})
+            # set/unset_macos_proxy() may block on the osascript admin dialog
+            # (first run only), so run them off the asyncio loop.
+            if enable:
+                result = await loop.run_in_executor(None, set_macos_proxy, self.proxy_port)
+            else:
+                result = await loop.run_in_executor(None, unset_macos_proxy)
+        elif sys.platform == "win32":
+            fn = set_windows_proxy if enable else unset_windows_proxy
+            result = await loop.run_in_executor(None, fn, self.proxy_port) if enable \
+                else await loop.run_in_executor(None, fn)
+        elif sys.platform.startswith("linux"):
+            fn = set_linux_proxy if enable else unset_linux_proxy
+            result = await loop.run_in_executor(None, fn, self.proxy_port) if enable \
+                else await loop.run_in_executor(None, fn)
         else:
-            result = await loop.run_in_executor(None, unset_macos_proxy)
+            result = {"ok": False, "error": f"Unsupported platform: {sys.platform}"}
 
         if result.get("ok"):
             self.is_mac_proxy_set = enable
@@ -2395,6 +2689,33 @@ class ProxyUIBridge:
             "services": result.get("services", []),
             "error": result.get("error"),
         })
+
+    async def handle_check_cert_trust(self, ws):
+        """Reports whether the mitmproxy CA is already trusted on this machine."""
+        loop = asyncio.get_running_loop()
+        if sys.platform == "darwin":
+            trusted = await loop.run_in_executor(None, is_cert_trusted_macos)
+        elif sys.platform == "win32":
+            trusted = await loop.run_in_executor(None, is_cert_trusted_windows)
+        elif sys.platform.startswith("linux"):
+            trusted = await loop.run_in_executor(None, is_cert_trusted_linux)
+        else:
+            trusted = False
+        await ws.send(json.dumps({"type": "CERT_TRUST_STATUS", "trusted": trusted}))
+
+    async def handle_trust_cert(self, ws):
+        """Trusts the mitmproxy CA in this machine's OS cert store (Chrome/Edge/curl on
+        all platforms, plus Safari on macOS). Firefox keeps its own separate store."""
+        loop = asyncio.get_running_loop()
+        if sys.platform == "darwin":
+            result = await loop.run_in_executor(None, trust_cert_macos)
+        elif sys.platform == "win32":
+            result = await loop.run_in_executor(None, trust_cert_windows)
+        elif sys.platform.startswith("linux"):
+            result = await loop.run_in_executor(None, trust_cert_linux)
+        else:
+            result = {"ok": False, "error": f"Unsupported platform: {sys.platform}"}
+        await ws.send(json.dumps({"type": "CERT_TRUST_RESULT", "ok": result["ok"], "error": result["error"]}))
 
     async def websocket_handler(self, websocket):
         self.connected_clients.add(websocket)
@@ -2672,6 +2993,12 @@ class ProxyUIBridge:
 
                 elif payload.get("type") == "UNSET_MAC_PROXY":
                     await self._toggle_macos_proxy(websocket, enable=False)
+
+                elif payload.get("type") == "CHECK_CERT_TRUST":
+                    asyncio.create_task(self.handle_check_cert_trust(websocket))
+
+                elif payload.get("type") == "TRUST_CERT":
+                    asyncio.create_task(self.handle_trust_cert(websocket))
 
                 elif payload.get("type") == "SCRIPT_SAVE":
                     self.scripts_manager.save_script(
@@ -3025,14 +3352,19 @@ if __name__ == "__main__":
     t.start()
 
     def _shutdown(*_args):
-        # If the user set the macOS system proxy this session, unset it on quit
-        # — otherwise their entire Mac keeps routing through OpenProxy after we
-        # exit. This will pop the admin password dialog one more time.
-        if sys.platform == "darwin" and bridge.is_mac_proxy_set:
+        # If the user set the OS-level system proxy this session, unset it on quit
+        # — otherwise their entire machine keeps routing through OpenProxy after
+        # we exit. On macOS this will pop the admin password dialog one more time.
+        if bridge.is_mac_proxy_set:
             try:
-                unset_macos_proxy()
+                if sys.platform == "darwin":
+                    unset_macos_proxy()
+                elif sys.platform == "win32":
+                    unset_windows_proxy()
+                elif sys.platform.startswith("linux"):
+                    unset_linux_proxy()
             except Exception as e:
-                print(f"[QUIT] Failed to unset macOS proxy: {e}", flush=True)
+                print(f"[QUIT] Failed to unset OS proxy: {e}", flush=True)
         os._exit(0)
 
     # Electron sends SIGTERM via pythonProcess.kill() on before-quit; SIGINT

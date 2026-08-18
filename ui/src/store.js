@@ -261,8 +261,7 @@ export const showScriptBtn      = computed(() => toolbarVisibility.value.scripts
 export const showCertificatesBtn = computed(() => toolbarVisibility.value.certificates)
 export const showThrottleBtn    = computed(() => toolbarVisibility.value.throttle)
 export const showBustCacheBtn   = computed(() => toolbarVisibility.value.bustCache)
-// OS Proxy toggle is darwin-only today; visibility flag still respected so it can be hidden when irrelevant
-export const showOsProxyBtn     = computed(() => toolbarVisibility.value.osProxy && platform.value === 'darwin')
+export const showOsProxyBtn     = computed(() => toolbarVisibility.value.osProxy)
 
 // Opens DeviceSetupModal directly on the VPN Mode view
 export const openVpnMode = () => {
@@ -347,6 +346,12 @@ export const macosProxyLoading      = ref(false)
 export const macosProxyFirstTimeSetup = ref(false)   // true while the one-time sudoers install runs
 export const macosProxyError        = ref(null)
 export const macosProxyServices     = ref([])
+
+// "Trust the mitmproxy CA on this machine" — checked once right after onboarding
+export const showCertTrustDialog = ref(false)
+export const certTrustStatus     = ref(null)   // true | false | null (unknown / not checked yet)
+export const certTrustLoading    = ref(false)
+export const certTrustError      = ref(null)
 
 // Proxy engine options (persisted)
 export const proxyHttp2        = ref(loadState('proxyHttp2', true))
@@ -545,6 +550,41 @@ export const revertIosSimulator = (udid) => {
     wsConnection.send(JSON.stringify({ type: "REVERT_IOS_SIMULATOR", udid }))
 }
 
+/** Ask the backend whether the mitmproxy CA is already trusted on this machine — if
+ *  not, the CERT_TRUST_STATUS handler opens showCertTrustDialog. Only called when the
+ *  OS proxy is turned on (see toggleMacProxy below) — that's the only point where
+ *  OpenProxy actually knows this machine's own traffic is about to route through it.
+ *  (macOS-only today, since that's the only platform with an OS-proxy toggle — a
+ *  manually-configured browser proxy on any platform isn't detectable here either.) */
+export const checkCertTrust = () => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    wsConnection.send(JSON.stringify({ type: "CHECK_CERT_TRUST" }))
+}
+
+/**
+ * Only these two warning-style dialogs (cert trust + unfiltered-traffic) can
+ * both become relevant from the same "enable OS proxy" click, and only one
+ * should ever be on screen at a time. Cert trust always wins — an untrusted
+ * cert breaks HTTPS everywhere, which is more fundamental than an unfiltered
+ * host list. This re-checks the condition fresh rather than caching a
+ * "pending" decision, so it stays correct even if host filters changed while
+ * the cert dialog was up.
+ */
+const maybeShowOsProxyWarning = () => {
+    if (showCertTrustDialog.value) return
+    if (macosProxyActive.value && proxyHostFilterMode.value === 'ignore' && proxyIgnoreHosts.value.length === 0) {
+        showOsProxyWarning.value = true
+    }
+}
+
+/** Close the cert-trust dialog, then let the (lower-priority) OS-proxy warning
+ *  take its turn if it's still applicable. Use this instead of setting
+ *  showCertTrustDialog directly so the two dialogs never overlap. */
+export const dismissCertTrustDialog = () => {
+    showCertTrustDialog.value = false
+    maybeShowOsProxyWarning()
+}
+
 /**
  * Toggle the macOS system proxy. The backend prompts for the admin password
  * via osascript, so the user will see a native dialog before this resolves.
@@ -555,11 +595,31 @@ export const toggleMacProxy = () => {
         macosProxyError.value = 'Backend not connected.'
         return
     }
+    const enabling = !macosProxyActive.value
     macosProxyLoading.value = true
     macosProxyError.value = null
     wsConnection.send(JSON.stringify({
-        type: macosProxyActive.value ? "UNSET_MAC_PROXY" : "SET_MAC_PROXY"
+        type: enabling ? "SET_MAC_PROXY" : "UNSET_MAC_PROXY"
     }))
+    // Enabling the OS proxy routes ALL Mac traffic through OpenProxy — if the cert
+    // isn't trusted yet, that's the moment HTTPS everywhere would start breaking.
+    if (enabling) checkCertTrust()
+}
+
+/**
+ * Trust the mitmproxy CA on this machine's OS cert store (Chrome/Edge/curl on
+ * macOS/Windows/Linux). May show a native admin prompt (macOS/Linux) the first
+ * time; Windows writes to the per-user store so no elevation is needed there.
+ */
+export const trustCertOnThisMachine = () => {
+    if (certTrustLoading.value) return
+    if (wsConnection?.readyState !== WebSocket.OPEN) {
+        certTrustError.value = 'Backend not connected.'
+        return
+    }
+    certTrustLoading.value = true
+    certTrustError.value = null
+    wsConnection.send(JSON.stringify({ type: "TRUST_CERT" }))
 }
 
 // mitmproxy treats an empty allow_hosts (together with an empty ignore_hosts)
@@ -1455,10 +1515,25 @@ export const initWebSocket = () => {
                 macosProxyError.value = null
             }
             // Warn if the OS proxy was just enabled while no host-filter is active
-            // (mode is 'ignore' with an empty list means all traffic is intercepted)
-            if (macosProxyActive.value && proxyHostFilterMode.value === 'ignore' && proxyIgnoreHosts.value.length === 0) {
-                showOsProxyWarning.value = true
+            // (mode is 'ignore' with an empty list means all traffic is intercepted).
+            // Deferred if the cert-trust dialog is up — that's the higher-priority
+            // issue (untrusted cert breaks everything, not just unfiltered traffic).
+            maybeShowOsProxyWarning()
+        }
+
+        else if (payload.type === "CERT_TRUST_STATUS") {
+            certTrustStatus.value = payload.trusted
+            if (!payload.trusted) {
+                showOsProxyWarning.value = false   // cert dialog takes priority — only one modal at a time
+                showCertTrustDialog.value = true
             }
+        }
+
+        else if (payload.type === "CERT_TRUST_RESULT") {
+            certTrustLoading.value = false
+            certTrustStatus.value = payload.ok
+            certTrustError.value = payload.ok || payload.error === 'cancelled' ? null : payload.error
+            if (payload.ok) setTimeout(dismissCertTrustDialog, 1200)
         }
 
         else if (payload.type === 'WS_MESSAGE') {
