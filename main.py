@@ -467,17 +467,18 @@ def _launch_macos_script(script, needs_elevation):
     install path needs root — e.g. the app was installed by a different admin
     account, or /Applications write access is restricted on a managed/MDM Mac.
 
-    Same two-step approach as _launch_linux_script: a tiny launcher backgrounds
-    the real update worker so the blocking osascript call (and thus
-    apply_update()) only returns once the user has authenticated — not before.
+    Elevated runs hand the script to launchd via `launchctl submit` rather than
+    backgrounding it with nohup: the authorization session osascript opens for
+    "with administrator privileges" is torn down — killing its child processes,
+    nohup or not — as soon as the top-level command returns, so a plain
+    `nohup ... &` launcher gets reaped before the real script does any work
+    (verified: the update silently no-ops with this symptom). A launchd job is
+    supervised independently of that session and survives it. do_update.sh
+    removes its own launchd entry once it's done (see apply_update()).
     """
     if needs_elevation:
-        launcher = script + '.launcher.sh'
-        with open(launcher, 'w') as f:
-            f.write(f'#!/bin/bash\nnohup bash "{script}" >/dev/null 2>&1 &\n')
-        os.chmod(launcher, os.stat(launcher).st_mode | stat.S_IEXEC)
-
-        shell_cmd = f'bash "{launcher}"'
+        label = f"com.openproxy.update.{os.path.basename(os.path.dirname(script))}"
+        shell_cmd = f'launchctl submit -l {label} -- /bin/bash "{script}"'
         as_string = shell_cmd.replace('\\', '\\\\').replace('"', '\\"')
         osa_script = f'do shell script "{as_string}" with administrator privileges'
 
@@ -793,6 +794,11 @@ def apply_update(download_url, progress_cb=None):
         backup_path = install_path + '.old'
 
         log = os.path.join(os.path.expanduser("~"), ".openproxy", "update.log")
+        # Must exist before the script runs — it's the target of the script's very
+        # first line (exec > log). Created here (as the current user, pre-elevation)
+        # so it isn't left root-owned, which would block a future non-elevated update
+        # from writing to it.
+        os.makedirs(os.path.dirname(log), exist_ok=True)
         script = os.path.join(tmp_dir, 'do_update.sh')
         with open(script, 'w') as f:
             support_lines = ""
@@ -801,6 +807,14 @@ def apply_update(download_url, progress_cb=None):
 rm -rf "{old_support_dir}"
 mv -f "{new_support_dir}" "{old_support_dir}"
 xattr -cr "{old_support_dir}" 2>/dev/null || true"""
+
+            # Elevated runs are handed to launchd (see _launch_macos_script) instead
+            # of a backgrounded nohup process, so the job has to remove its own
+            # launchd entry once done — nothing else will.
+            cleanup_line = ""
+            if needs_elevation:
+                label = f"com.openproxy.update.{os.path.basename(tmp_dir)}"
+                cleanup_line = f'\nlaunchctl remove "{label}" 2>/dev/null || true\n'
 
             f.write(f"""#!/bin/bash
 exec >"{log}" 2>&1
@@ -843,7 +857,7 @@ xattr -cr "{install_path}" 2>/dev/null || true{support_lines}
 rm -rf "{backup_path}"
 
 open -n "{install_path}"
-""")
+{cleanup_line}""")
         os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
         _launch_macos_script(script, needs_elevation)
 
