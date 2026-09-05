@@ -95,12 +95,14 @@ function startPython () {
       const pyBin   = process.platform === 'win32' ? 'python.exe' : 'python3'
       const venvDir = process.platform === 'win32' ? 'Scripts' : 'bin'
       exe  = path.join(__dirname, '..', 'venv', venvDir, pyBin)
-      args = [path.join(__dirname, '..', 'main.py')]
+      // -u: unbuffered stdio, so print() output shows up immediately in the
+      // terminal instead of sitting in Python's pipe buffer.
+      args = ['-u', path.join(__dirname, '..', 'main.py')]
       cwd  = path.join(__dirname, '..')
     }
 
     console.log(`[Python] ${exe} ${args.join(' ')}`)
-    pythonProcess = spawn(exe, args, { cwd })
+    pythonProcess = spawn(exe, args, { cwd, env: { ...process.env, PYTHONUNBUFFERED: '1' } })
 
     // Resolve once Python prints its startup line — the WS server is ready
     const timeout = setTimeout(() => {
@@ -183,6 +185,10 @@ function setupIPC () {
     }
   })
   ipcMain.on('shell:openExternal', (_e, url) => shell.openExternal(url))
+  ipcMain.on('shell:showItemInFolder', (_e, path) => {
+    console.log('[shell:showItemInFolder] path =', JSON.stringify(path), 'exists =', require('fs').existsSync(path))
+    shell.showItemInFolder(path)
+  })
   ipcMain.on('menu:bustCacheSync', (_e, val) => {
     bustCacheEnabled = !!val
     setupMenu()
@@ -336,12 +342,12 @@ function setupMenu () {
         { label: 'Compose Request', click: () => js('openComposeNew()'),   accelerator: 'CmdOrCtrl+N' },
         { label: 'Clear Traffic',   click: () => js('clearTraffic()'),     accelerator: 'CmdOrCtrl+K' },
         { type: 'separator' },
-        ...(process.platform === 'darwin' ? [{
+        {
           label:   'OS Proxy',
           type:    'checkbox',
           checked: macosProxyActive,
           click:   () => js('toggleMacProxy()'),
-        }] : []),
+        },
         {
           label:   'No Cache',
           type:    'checkbox',
@@ -450,7 +456,7 @@ function setupMenu () {
               'certificates',
               'throttle',
               'bustCache',
-              ...(process.platform === 'darwin' ? ['osProxy'] : []),
+              'osProxy',
             ].map((key) => ({
               label: { certificates: 'Certificates', throttle: 'Throttle', bustCache: 'No Cache', osProxy: 'OS Proxy' }[key],
               type: 'checkbox', checked: toolbarVisibility[key],

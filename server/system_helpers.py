@@ -43,6 +43,24 @@ def get_executable_path(base_name):
             ]:
                 if os.path.exists(f): return f
 
+    if base_name == "emulator":
+        android_home = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
+        if android_home:
+            fallback = os.path.join(android_home, "emulator", exe_name)
+            if os.path.exists(fallback): return fallback
+
+        if os.name == "nt":
+            fallback = os.path.expandvars(rf"%LOCALAPPDATA%\Android\Sdk\emulator\{exe_name}")
+            if os.path.exists(fallback): return fallback
+
+        elif sys.platform == "darwin":
+            fallback = os.path.expanduser("~/Library/Android/sdk/emulator/emulator")
+            if os.path.exists(fallback): return fallback
+
+        else:
+            fallback = os.path.expanduser("~/Android/Sdk/emulator/emulator")
+            if os.path.exists(fallback): return fallback
+
     if base_name == "openssl" and os.name == "nt":
         fallbacks = [
             r"C:\Program Files\Git\usr\bin\openssl.exe",
@@ -144,6 +162,9 @@ async def _watch_local_ip(bridge):
             if new_ip != LOCAL_IP:
                 LOCAL_IP = new_ip
                 print(f"[INFO] Network change detected — new local IP: {LOCAL_IP}")
+                ip_onboarding = getattr(bridge, "_ip_onboarding_addon", None)
+                if ip_onboarding:
+                    ip_onboarding.host = LOCAL_IP
                 await bridge.broadcast_to_ui("SYSTEM_INFO", {
                     "ip": LOCAL_IP,
                     "port": bridge.proxy_port,

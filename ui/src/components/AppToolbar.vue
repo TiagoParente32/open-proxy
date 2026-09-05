@@ -247,8 +247,8 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         :title="macosProxyFirstTimeSetup
           ? 'One-time setup — enter your admin password once to enable passwordless toggling in future'
           : macosProxyActive
-            ? 'macOS system proxy is ON — click to disable'
-            : 'Route all macOS traffic through this proxy'"
+            ? 'System proxy is ON — click to disable'
+            : 'Route all traffic on this device through this proxy'"
       >
         <span class="toggle-label">OS Proxy</span>
         <div class="switch"></div>

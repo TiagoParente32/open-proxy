@@ -2,10 +2,11 @@ import os
 import json
 import asyncio
 import subprocess
+import traceback
 
 from server import system_helpers
 from server.system_helpers import get_executable_path
-from server.adb import list_adb_devices
+from server.adb import list_adb_devices, list_avds, get_avd_name_for_serial
 
 
 class AndroidSetupMixin:
@@ -30,6 +31,137 @@ class AndroidSetupMixin:
             await ws.send(json.dumps({"type": "ADB_DEVICES", "devices": [], "error": str(e)}))
         except Exception as e:
             await ws.send(json.dumps({"type": "ADB_DEVICES", "devices": [], "error": f"Unexpected error: {e}"}))
+
+    async def handle_list_avds(self, ws):
+        """Lists all configured AVDs (like Android Studio's Device Manager), flagging
+        which ones are already running so the UI can offer to boot the rest."""
+        try:
+            emulator_cmd = get_executable_path("emulator")
+            loop = asyncio.get_running_loop()
+            avd_names = await asyncio.wait_for(
+                loop.run_in_executor(None, list_avds, emulator_cmd),
+                timeout=10.0
+            )
+
+            running_by_avd = {}
+            try:
+                adb_cmd = get_executable_path("adb")
+                devices = await loop.run_in_executor(None, list_adb_devices, adb_cmd)
+                for d in devices:
+                    if d["type"] != "emulator":
+                        continue
+                    avd_name = await loop.run_in_executor(None, get_avd_name_for_serial, adb_cmd, d["serial"])
+                    if avd_name:
+                        running_by_avd[avd_name] = d["serial"]
+            except FileNotFoundError:
+                pass  # adb missing — still report the AVD list, just without running-state info
+
+            avds = [{"name": n, "running_serial": running_by_avd.get(n)} for n in avd_names]
+            await ws.send(json.dumps({"type": "AVD_LIST", "avds": avds}))
+        except asyncio.TimeoutError:
+            await ws.send(json.dumps({
+                "type": "AVD_LIST", "avds": [],
+                "error": "`emulator -list-avds` timed out after 10 seconds."
+            }))
+        except FileNotFoundError as e:
+            await ws.send(json.dumps({"type": "AVD_LIST", "avds": [], "error": str(e)}))
+        except Exception as e:
+            await ws.send(json.dumps({"type": "AVD_LIST", "avds": [], "error": f"Unexpected error: {e}"}))
+
+    async def boot_avd(self, ws, name: str):
+        """Launches an offline AVD (detached, like double-clicking it in Android Studio's
+        Device Manager) and waits for it to appear in adb and finish booting."""
+        async def send(status, **kw):
+            payload = {"type": "AVD_BOOT_PROGRESS", "name": name, "status": status}
+            payload.update(kw)
+            await ws.send(json.dumps(payload))
+
+        loop = asyncio.get_running_loop()
+
+        try:
+            emulator_cmd = get_executable_path("emulator")
+        except FileNotFoundError as e:
+            await send("error", error=str(e))
+            return
+
+        adb_cmd = None
+        before_serials = set()
+        try:
+            adb_cmd = get_executable_path("adb")
+            before = await loop.run_in_executor(None, list_adb_devices, adb_cmd)
+            before_serials = {d["serial"] for d in before}
+        except FileNotFoundError:
+            pass
+
+        def _launch():
+            kwargs = {}
+            if os.name == "nt":
+                kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            else:
+                kwargs["start_new_session"] = True
+            return subprocess.Popen(
+                [emulator_cmd, "-avd", name],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                **kwargs
+            )
+
+        try:
+            proc = await loop.run_in_executor(None, _launch)
+        except Exception as e:
+            await send("error", error=str(e))
+            return
+
+        await send("launching")
+        await asyncio.sleep(2.0)
+        if proc.poll() is not None:
+            await send("error", error=(
+                f"emulator process exited immediately (code {proc.returncode}). "
+                "It may already be running, or the AVD config may be broken."
+            ))
+            return
+
+        if not adb_cmd:
+            # Launched successfully but we can't verify boot completion without adb.
+            await send("success")
+            return
+
+        serial = None
+        deadline = loop.time() + 150  # cold boots can take well over a minute
+        while loop.time() < deadline:
+            try:
+                devices = await loop.run_in_executor(None, list_adb_devices, adb_cmd)
+            except Exception:
+                devices = []
+            new_serials = [d["serial"] for d in devices if d["serial"] not in before_serials]
+            if new_serials:
+                serial = new_serials[0]
+                break
+            await asyncio.sleep(3)
+
+        if not serial:
+            await send("error", error="Timed out waiting for the emulator to appear in `adb devices`.")
+            return
+
+        await send("booting", serial=serial)
+
+        deadline = loop.time() + 150
+        while loop.time() < deadline:
+            try:
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: subprocess.run(
+                        [adb_cmd, "-s", serial, "shell", "getprop", "sys.boot_completed"],
+                        capture_output=True, text=True, timeout=10
+                    )
+                )
+                if result.stdout.strip() == "1":
+                    await send("success", serial=serial)
+                    return
+            except Exception:
+                pass
+            await asyncio.sleep(3)
+
+        await send("error", error="Emulator appeared but never finished booting (sys.boot_completed check timed out).")
 
     async def setup_android_device(self, ws, serial: str, device_type: str):
         """
@@ -132,6 +264,88 @@ class AndroidSetupMixin:
             await update("current_active_step", "error", f"Command failed: {error_msg}")
         except Exception as e:
             await update("current_active_step", "error", str(e))
+
+    async def push_cert_to_downloads(self, ws, serial: str):
+        """
+        Pushes the mitmproxy CA cert (.cer, Android-friendly extension) straight into
+        the device's Downloads folder via `adb push`, as an alternative to visiting
+        http://mitm.it (useful when the browser force-upgrades to https and fails to load).
+        The user still has to tap the file in Downloads/Files to install it as a CA.
+        """
+        serial_flag = ["-s", serial]
+        logs = []
+
+        async def log(msg):
+            print(f"[PUSH_CERT] {msg}", flush=True)
+            logs.append(msg)
+            await ws.send(json.dumps({"type": "CERT_PUSH_LOG", "serial": serial, "message": msg}))
+
+        await log(f"Starting push for serial={serial!r}")
+        try:
+            adb_cmd = get_executable_path("adb")
+            await log(f"Using adb at: {adb_cmd!r}")
+
+            cert_path = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.cer")
+            await log(f"Cert path: {cert_path!r} exists={os.path.exists(cert_path)}")
+            if not os.path.exists(cert_path):
+                error = "Certificate not found. Start the proxy first!"
+                await log(f"ERROR: {error}")
+                await ws.send(json.dumps({
+                    "type": "CERT_PUSHED", "serial": serial, "success": False,
+                    "error": error, "logs": logs
+                }))
+                return
+
+            dest_path = "/sdcard/Download/mitmproxy-ca-cert.cer"
+            cmd = [adb_cmd] + serial_flag + ["push", cert_path, dest_path]
+            await log(f"Running: {' '.join(cmd)}")
+
+            # Run adb off the event loop with a timeout, so a stuck/unauthorized
+            # device can't hang the whole websocket server.
+            loop = asyncio.get_event_loop()
+            try:
+                result = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: subprocess.run(cmd, capture_output=True, text=True)
+                    ),
+                    timeout=20
+                )
+            except asyncio.TimeoutError:
+                error = "adb push timed out after 20s. Is the device authorized (check for an 'Allow USB debugging' prompt)?"
+                await log(f"ERROR: {error}")
+                await ws.send(json.dumps({
+                    "type": "CERT_PUSHED", "serial": serial, "success": False,
+                    "error": error, "logs": logs
+                }))
+                return
+
+            await log(f"returncode={result.returncode}")
+            if result.stdout.strip():
+                await log(f"stdout: {result.stdout.strip()}")
+            if result.stderr.strip():
+                await log(f"stderr: {result.stderr.strip()}")
+            result.check_returncode()
+
+            await log(f"Success — pushed to {dest_path}")
+            await ws.send(json.dumps({
+                "type": "CERT_PUSHED", "serial": serial, "success": True,
+                "path": dest_path, "logs": logs
+            }))
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr.strip() if e.stderr else str(e)
+            await log(f"ERROR: Command failed: {error_msg}")
+            await ws.send(json.dumps({
+                "type": "CERT_PUSHED", "serial": serial, "success": False,
+                "error": f"Command failed: {error_msg}", "logs": logs
+            }))
+        except Exception as e:
+            tb = traceback.format_exc()
+            await log(f"ERROR: Unexpected error: {e}\n{tb}")
+            await ws.send(json.dumps({
+                "type": "CERT_PUSHED", "serial": serial, "success": False,
+                "error": str(e), "logs": logs
+            }))
 
     async def revert_android_device(self, ws, serial: str):
         """Clears the proxy setting and removes the mitmproxy cert from a device."""

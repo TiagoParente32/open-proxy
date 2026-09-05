@@ -24,18 +24,31 @@ def get_active_network_services():
 
 SUDOERS_PATH = '/etc/sudoers.d/openproxy'
 NETWORKSETUP  = '/usr/sbin/networksetup'
+SECURITY_BIN  = '/usr/bin/security'
+MACOS_CERT_PATH = os.path.expanduser("~/.mitmproxy/mitmproxy-ca-cert.pem")
+MACOS_TRUST_CMD = [
+    SECURITY_BIN, 'add-trusted-cert', '-d', '-r', 'trustRoot',
+    '-k', '/Library/Keychains/System.keychain', MACOS_CERT_PATH,
+]
 
 def _sudoers_entry_for_user(username: str) -> str:
-    return f'{username} ALL=(root) NOPASSWD: {NETWORKSETUP}\n'
+    return (
+        f'{username} ALL=(root) NOPASSWD: {NETWORKSETUP}\n'
+        f'{username} ALL=(root) NOPASSWD: {" ".join(MACOS_TRUST_CMD)}\n'
+    )
 
 def _sudoers_ok() -> bool:
-    """Return True if 'sudo -n networksetup' works without a password prompt."""
+    """
+    Return True if both networksetup and the cert-trust command are passwordless.
+    Checks for SECURITY_BIN specifically (not just 'add-trusted-cert') so a stale
+    sudoers file from before a SECURITY_BIN path fix is detected as stale and
+    regenerated, rather than silently treated as already correct.
+    """
     try:
-        r = subprocess.run(
-            ['sudo', '-n', NETWORKSETUP, '-help'],
-            capture_output=True, timeout=5
-        )
-        return r.returncode == 0
+        r = subprocess.run(['sudo', '-n', '-l'], capture_output=True, text=True, timeout=5)
+        if r.returncode != 0:
+            return False
+        return NETWORKSETUP in r.stdout and SECURITY_BIN in r.stdout and 'add-trusted-cert' in r.stdout
     except Exception:
         return False
 
@@ -81,6 +94,43 @@ def ensure_networksetup_sudoers() -> dict:
         return {'ok': False, 'already_installed': False, 'error': 'Operation timed out.'}
     except Exception as e:
         return {'ok': False, 'already_installed': False, 'error': str(e)}
+
+
+def is_cert_trusted_macos() -> bool:
+    """
+    Checks whether the mitmproxy CA is actually trusted — not just present in the
+    keychain. `find-certificate` only checks presence, so a cert explicitly set to
+    "Never Trust" in Keychain Access would still show up as "found". `verify-cert`
+    runs the real trust evaluation and correctly respects that override.
+    """
+    if not os.path.exists(MACOS_CERT_PATH):
+        return False
+    try:
+        r = subprocess.run(
+            ['security', 'verify-cert', '-c', MACOS_CERT_PATH],
+            capture_output=True, timeout=5
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def trust_cert_macos() -> dict:
+    """Adds the mitmproxy CA cert to the System keychain as a trusted root."""
+    if not os.path.exists(MACOS_CERT_PATH):
+        return {'ok': False, 'error': 'Certificate not found. Start the proxy first to generate it.'}
+    if is_cert_trusted_macos():
+        return {'ok': True, 'error': None}
+    setup = ensure_networksetup_sudoers()
+    if not setup['ok']:
+        return {'ok': False, 'error': setup['error']}
+    try:
+        r = subprocess.run(['sudo', '-n'] + MACOS_TRUST_CMD, capture_output=True, text=True, timeout=15)
+        if r.returncode == 0:
+            return {'ok': True, 'error': None}
+        return {'ok': False, 'error': r.stderr.strip() or r.stdout.strip() or 'security add-trusted-cert failed'}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
 
 
 def set_macos_proxy(port: int) -> dict:

@@ -261,8 +261,7 @@ export const showScriptBtn      = computed(() => toolbarVisibility.value.scripts
 export const showCertificatesBtn = computed(() => toolbarVisibility.value.certificates)
 export const showThrottleBtn    = computed(() => toolbarVisibility.value.throttle)
 export const showBustCacheBtn   = computed(() => toolbarVisibility.value.bustCache)
-// OS Proxy toggle is darwin-only today; visibility flag still respected so it can be hidden when irrelevant
-export const showOsProxyBtn     = computed(() => toolbarVisibility.value.osProxy && platform.value === 'darwin')
+export const showOsProxyBtn     = computed(() => toolbarVisibility.value.osProxy)
 
 export const openVpnMode = () => {
     deviceSetupType.value = 'vpn_mode'
@@ -275,6 +274,13 @@ export const adbDevices = ref([])
 // Whether a LIST_ADB_DEVICES fetch is in-flight
 export const adbDevicesLoading = ref(false)
 export const adbDevicesError = ref(null)
+
+// List of { name, running_serial } objects — every configured AVD, running or not
+export const avds = ref([])
+export const avdsLoading = ref(false)
+export const avdsError = ref(null)
+// { [avdName]: { state: 'launching'|'booting'|'error', serial?: string, error?: string } }
+export const avdBootStatus = ref({})
 
 export const setupProgress = ref({
     show: false,
@@ -307,6 +313,9 @@ export const iosSimulators = ref([])
 export const iosSimulatorsLoading = ref(false)
 export const iosSimulatorsError = ref(null)
 
+// { [udid]: { state: 'booting'|'error', error?: string } } — per-simulator boot status
+export const iosBootStatus = ref({})
+
 export const iosSetupProgress = ref({
     show: false,
     error: null,
@@ -334,6 +343,12 @@ export const macosProxyLoading      = ref(false)
 export const macosProxyFirstTimeSetup = ref(false)   // true while the one-time sudoers install runs
 export const macosProxyError        = ref(null)
 export const macosProxyServices     = ref([])
+
+// "Trust the mitmproxy CA on this machine" — checked once right after onboarding
+export const showCertTrustDialog = ref(false)
+export const certTrustStatus     = ref(null)   // true | false | null (unknown / not checked yet)
+export const certTrustLoading    = ref(false)
+export const certTrustError      = ref(null)
 
 // Proxy engine options (persisted)
 export const proxyHttp2        = ref(loadState('proxyHttp2', true))
@@ -413,6 +428,21 @@ export const listAdbDevices = () => {
     wsConnection.send(JSON.stringify({ type: "LIST_ADB_DEVICES" }))
 }
 
+/** Request the backend to list all configured AVDs (like Android Studio's Device Manager). */
+export const listAvds = () => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    avdsLoading.value = true
+    avdsError.value = null
+    wsConnection.send(JSON.stringify({ type: "LIST_AVDS" }))
+}
+
+/** Boot an offline AVD by name, mirroring double-clicking it in Android Studio. */
+export const bootAvd = (name) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    avdBootStatus.value = { ...avdBootStatus.value, [name]: { state: 'launching', error: null } }
+    wsConnection.send(JSON.stringify({ type: "BOOT_AVD", name }))
+}
+
 /**
  * Kick off the certificate install + proxy setup on a specific device.
  * @param {string} serial  - ADB device serial, e.g. "emulator-5554" or "R58M31XXXXX"
@@ -453,12 +483,42 @@ export const injectEmulatorCert = () => {
     setupAndroidDevice("emulator-5554", "emulator")
 }
 
+// Per-serial status for the "push cert to Downloads" action: { state: 'idle'|'pushing'|'success'|'error', error, path }
+export const certPushStatus = ref({})
+
+/**
+ * Push the mitmproxy CA cert (.cer) directly into a device's Downloads folder via adb,
+ * as an alternative to visiting http://mitm.it in the device browser.
+ * @param {string} serial - ADB device serial
+ */
+export const pushCertToDownloads = (serial) => {
+    if (!serial) {
+        console.warn('[pushCertToDownloads] No serial provided, aborting')
+        return
+    }
+    if (wsConnection?.readyState !== WebSocket.OPEN) {
+        console.warn('[pushCertToDownloads] WebSocket not open, readyState=', wsConnection?.readyState)
+        return
+    }
+    console.log('[pushCertToDownloads] Sending PUSH_CERT_TO_DOWNLOADS for serial=', serial)
+    certPushStatus.value = { ...certPushStatus.value, [serial]: { state: 'pushing', error: null, logs: [] } }
+    wsConnection.send(JSON.stringify({ type: "PUSH_CERT_TO_DOWNLOADS", serial }))
+}
+
+/** Request the backend to list available iOS Simulators. */
 export const listIosSimulators = () => {
     if (wsConnection?.readyState !== WebSocket.OPEN) return
     iosSimulatorsLoading.value = true
     iosSimulatorsError.value = null
     iosSimulators.value = []
     wsConnection.send(JSON.stringify({ type: "LIST_IOS_SIMULATORS" }))
+}
+
+/** Boot a Shutdown iOS Simulator and bring Simulator.app to the foreground. */
+export const bootIosSimulator = (udid) => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    iosBootStatus.value = { ...iosBootStatus.value, [udid]: { state: 'booting', error: null } }
+    wsConnection.send(JSON.stringify({ type: "BOOT_IOS_SIMULATOR", udid }))
 }
 
 /** Install the mitmproxy CA cert into a specific iOS Simulator. */
@@ -481,6 +541,41 @@ export const revertIosSimulator = (udid) => {
     wsConnection.send(JSON.stringify({ type: "REVERT_IOS_SIMULATOR", udid }))
 }
 
+/** Ask the backend whether the mitmproxy CA is already trusted on this machine — if
+ *  not, the CERT_TRUST_STATUS handler opens showCertTrustDialog. Only called when the
+ *  OS proxy is turned on (see toggleMacProxy below) — that's the only point where
+ *  OpenProxy actually knows this machine's own traffic is about to route through it.
+ *  (macOS-only today, since that's the only platform with an OS-proxy toggle — a
+ *  manually-configured browser proxy on any platform isn't detectable here either.) */
+export const checkCertTrust = () => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    wsConnection.send(JSON.stringify({ type: "CHECK_CERT_TRUST" }))
+}
+
+/**
+ * Only these two warning-style dialogs (cert trust + unfiltered-traffic) can
+ * both become relevant from the same "enable OS proxy" click, and only one
+ * should ever be on screen at a time. Cert trust always wins — an untrusted
+ * cert breaks HTTPS everywhere, which is more fundamental than an unfiltered
+ * host list. This re-checks the condition fresh rather than caching a
+ * "pending" decision, so it stays correct even if host filters changed while
+ * the cert dialog was up.
+ */
+const maybeShowOsProxyWarning = () => {
+    if (showCertTrustDialog.value) return
+    if (macosProxyActive.value && proxyHostFilterMode.value === 'ignore' && proxyIgnoreHosts.value.length === 0) {
+        showOsProxyWarning.value = true
+    }
+}
+
+/** Close the cert-trust dialog, then let the (lower-priority) OS-proxy warning
+ *  take its turn if it's still applicable. Use this instead of setting
+ *  showCertTrustDialog directly so the two dialogs never overlap. */
+export const dismissCertTrustDialog = () => {
+    showCertTrustDialog.value = false
+    maybeShowOsProxyWarning()
+}
+
 /**
  * Toggle the macOS system proxy. The backend prompts for the admin password
  * via osascript, so the user will see a native dialog before this resolves.
@@ -491,11 +586,31 @@ export const toggleMacProxy = () => {
         macosProxyError.value = 'Backend not connected.'
         return
     }
+    const enabling = !macosProxyActive.value
     macosProxyLoading.value = true
     macosProxyError.value = null
     wsConnection.send(JSON.stringify({
-        type: macosProxyActive.value ? "UNSET_MAC_PROXY" : "SET_MAC_PROXY"
+        type: enabling ? "SET_MAC_PROXY" : "UNSET_MAC_PROXY"
     }))
+    // Enabling the OS proxy routes ALL Mac traffic through OpenProxy — if the cert
+    // isn't trusted yet, that's the moment HTTPS everywhere would start breaking.
+    if (enabling) checkCertTrust()
+}
+
+/**
+ * Trust the mitmproxy CA on this machine's OS cert store (Chrome/Edge/curl on
+ * macOS/Windows/Linux). May show a native admin prompt (macOS/Linux) the first
+ * time; Windows writes to the per-user store so no elevation is needed there.
+ */
+export const trustCertOnThisMachine = () => {
+    if (certTrustLoading.value) return
+    if (wsConnection?.readyState !== WebSocket.OPEN) {
+        certTrustError.value = 'Backend not connected.'
+        return
+    }
+    certTrustLoading.value = true
+    certTrustError.value = null
+    wsConnection.send(JSON.stringify({ type: "TRUST_CERT" }))
 }
 
 // mitmproxy treats an empty allow_hosts (together with an empty ignore_hosts)
@@ -1190,6 +1305,58 @@ export const initWebSocket = () => {
             }
         }
 
+        // ---- AVD list response (includes offline AVDs, like Android Studio) ----
+        else if (payload.type === "AVD_LIST") {
+            avdsLoading.value = false
+            if (payload.error) {
+                avdsError.value = payload.error
+                avds.value = []
+            } else {
+                avdsError.value = null
+                avds.value = payload.avds || []
+            }
+        }
+
+        // ---- AVD boot progress ----
+        else if (payload.type === "AVD_BOOT_PROGRESS") {
+            const { name, status } = payload
+            if (status === 'error') {
+                avdBootStatus.value = { ...avdBootStatus.value, [name]: { state: 'error', error: payload.error } }
+            } else if (status === 'success') {
+                const next = { ...avdBootStatus.value }
+                delete next[name]
+                avdBootStatus.value = next
+                listAvds()
+                listAdbDevices()
+            } else {
+                // 'launching' | 'booting'
+                avdBootStatus.value = { ...avdBootStatus.value, [name]: { state: status, error: null } }
+            }
+        }
+
+        // ---- NEW: Live command log lines while pushing the cert ----
+        else if (payload.type === "CERT_PUSH_LOG") {
+            console.log('[CERT_PUSH_LOG]', payload)
+            const prev = certPushStatus.value[payload.serial] || { state: 'pushing', error: null, logs: [] }
+            certPushStatus.value = {
+                ...certPushStatus.value,
+                [payload.serial]: { ...prev, logs: [...(prev.logs || []), payload.message] }
+            }
+        }
+
+        // ---- NEW: Result of pushing the cert to a device's Downloads folder ----
+        else if (payload.type === "CERT_PUSHED") {
+            console.log('[CERT_PUSHED]', payload)
+            const prev = certPushStatus.value[payload.serial] || {}
+            certPushStatus.value = {
+                ...certPushStatus.value,
+                [payload.serial]: payload.success
+                    ? { state: 'success', path: payload.path, error: null, logs: payload.logs || prev.logs || [] }
+                    : { state: 'error', error: payload.error || 'Push failed', logs: payload.logs || prev.logs || [] }
+            }
+        }
+
+        // ---- NEW: Setup progress (now serial-scoped) ----
         else if (payload.type === "SETUP_PROGRESS") {
             if (payload.step === 'check_adb' && payload.status === 'start') {
                 setupProgress.value.show = true
@@ -1256,6 +1423,17 @@ export const initWebSocket = () => {
             }
         }
 
+        // ---- iOS Simulator: boot result ----
+        else if (payload.type === "IOS_SIMULATOR_BOOTED") {
+            if (payload.success) {
+                iosBootStatus.value = { ...iosBootStatus.value, [payload.udid]: { state: 'success', error: null } }
+                listIosSimulators()
+            } else {
+                iosBootStatus.value = { ...iosBootStatus.value, [payload.udid]: { state: 'error', error: payload.error } }
+            }
+        }
+
+        // ---- iOS Simulator: install progress ----
         else if (payload.type === "IOS_SETUP_PROGRESS") {
             if (payload.step === 'check_xcrun' && payload.status === 'start') {
                 iosSetupProgress.value.show = true
@@ -1316,10 +1494,25 @@ export const initWebSocket = () => {
                 macosProxyError.value = null
             }
             // Warn if the OS proxy was just enabled while no host-filter is active
-            // (mode is 'ignore' with an empty list means all traffic is intercepted)
-            if (macosProxyActive.value && proxyHostFilterMode.value === 'ignore' && proxyIgnoreHosts.value.length === 0) {
-                showOsProxyWarning.value = true
+            // (mode is 'ignore' with an empty list means all traffic is intercepted).
+            // Deferred if the cert-trust dialog is up — that's the higher-priority
+            // issue (untrusted cert breaks everything, not just unfiltered traffic).
+            maybeShowOsProxyWarning()
+        }
+
+        else if (payload.type === "CERT_TRUST_STATUS") {
+            certTrustStatus.value = payload.trusted
+            if (!payload.trusted) {
+                showOsProxyWarning.value = false   // cert dialog takes priority — only one modal at a time
+                showCertTrustDialog.value = true
             }
+        }
+
+        else if (payload.type === "CERT_TRUST_RESULT") {
+            certTrustLoading.value = false
+            certTrustStatus.value = payload.ok
+            certTrustError.value = payload.ok || payload.error === 'cancelled' ? null : payload.error
+            if (payload.ok) setTimeout(dismissCertTrustDialog, 1200)
         }
 
         else if (payload.type === 'WS_MESSAGE') {

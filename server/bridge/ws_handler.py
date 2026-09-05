@@ -75,6 +75,15 @@ class WsHandlerMixin:
                 elif payload.get("type") == "LIST_ADB_DEVICES":
                     asyncio.create_task(self.handle_list_adb_devices(websocket))
 
+                # ---- List AVDs (including offline ones) and boot them on demand ----
+                elif payload.get("type") == "LIST_AVDS":
+                    asyncio.create_task(self.handle_list_avds(websocket))
+
+                elif payload.get("type") == "BOOT_AVD":
+                    avd_name = payload.get("name")
+                    if avd_name:
+                        asyncio.create_task(self.boot_avd(websocket, avd_name))
+
                 elif payload.get("type") == "SETUP_ANDROID_DEVICE":
                     serial = payload.get("serial")
                     device_type = payload.get("device_type", "emulator")
@@ -91,8 +100,22 @@ class WsHandlerMixin:
                     if serial:
                         asyncio.create_task(self.revert_android_device(websocket, serial))
 
+                # ---- Push the CA cert straight into the device's Downloads folder ----
+                elif payload.get("type") == "PUSH_CERT_TO_DOWNLOADS":
+                    serial = payload.get("serial")
+                    print(f"[WS] Received PUSH_CERT_TO_DOWNLOADS serial={serial!r}", flush=True)
+                    if serial:
+                        asyncio.create_task(self.push_cert_to_downloads(websocket, serial))
+                    else:
+                        print("[WS] PUSH_CERT_TO_DOWNLOADS ignored: no serial provided", flush=True)
+
                 elif payload.get("type") == "LIST_IOS_SIMULATORS":
                     asyncio.create_task(self.handle_list_ios_simulators(websocket))
+
+                elif payload.get("type") == "BOOT_IOS_SIMULATOR":
+                    udid = payload.get("udid")
+                    if udid:
+                        asyncio.create_task(self.boot_ios_simulator(websocket, udid))
 
                 elif payload.get("type") == "SETUP_IOS_SIMULATOR":
                     udid = payload.get("udid")
@@ -266,6 +289,12 @@ class WsHandlerMixin:
 
                 elif payload.get("type") == "UNSET_MAC_PROXY":
                     await self._toggle_macos_proxy(websocket, enable=False)
+
+                elif payload.get("type") == "CHECK_CERT_TRUST":
+                    asyncio.create_task(self.handle_check_cert_trust(websocket))
+
+                elif payload.get("type") == "TRUST_CERT":
+                    asyncio.create_task(self.handle_trust_cert(websocket))
 
                 elif payload.get("type") == "SCRIPT_SAVE":
                     self.scripts_manager.save_script(

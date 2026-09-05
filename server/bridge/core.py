@@ -28,6 +28,7 @@ class BridgeCore:
         self.wg_enabled = False
         self.wg_port = 51820
         self._master = None     # set by run_proxy_forever; used for WG restart + inject
+        self._ip_onboarding_addon = None  # set by run_proxy_forever; serves mitm cert page on LOCAL_IP
         self._last_startup_error = ""   # captured from mitmproxy's log on startup failure
         self.pending_update_info = None  # cached until a client connects
 

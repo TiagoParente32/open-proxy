@@ -20,9 +20,7 @@ const MENUS = [
       { label: 'Compose Request', action: () => op()?.openComposeNew(),  hint: 'Ctrl+N' },
       { label: 'Clear Traffic',   action: () => op()?.clearTraffic(),    hint: 'Ctrl+K' },
       { type: 'separator' },
-      ...(window.electronAPI?.platform === 'darwin' ? [
-        { label: 'OS Proxy',   action: () => op()?.toggleMacProxy(), checked: () => macosProxyActive.value },
-      ] : []),
+      { label: 'OS Proxy', action: () => op()?.toggleMacProxy(), checked: () => macosProxyActive.value },
       { label: 'No Cache', action: () => op()?.bustCache(), checked: () => disableCache.value },
       { type: 'separator' },
       { label: 'HTTP/2',        action: () => op()?.toggleProxyHttp2(),        checked: () => proxyHttp2.value },

@@ -44,3 +44,26 @@ def list_adb_devices(adb_cmd):
         })
 
     return devices
+
+
+def list_avds(emulator_cmd):
+    """Returns the names of all configured AVDs (running or not) via `emulator -list-avds`."""
+    result = subprocess.run(
+        [emulator_cmd, "-list-avds"],
+        capture_output=True, text=True, timeout=10
+    )
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def get_avd_name_for_serial(adb_cmd, serial):
+    """Returns the AVD name backing a running emulator serial, or None if it can't be determined."""
+    try:
+        result = subprocess.run(
+            [adb_cmd, "-s", serial, "emu", "avd", "name"],
+            capture_output=True, text=True, timeout=5
+        )
+        # Output is the AVD name on the first line, "OK" on the second.
+        lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+        return lines[0] if lines else None
+    except Exception:
+        return None

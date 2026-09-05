@@ -3,9 +3,12 @@ import asyncio
 import websockets
 from mitmproxy import options
 from mitmproxy.tools.dump import DumpMaster
+from mitmproxy.addons import asgiapp
+from mitmproxy.addons.onboardingapp import app as _onboarding_wsgi_app
 
 from server.constants import APP_VERSION
 from server.updater import check_for_updates
+from server import system_helpers
 from server.system_helpers import _watch_local_ip
 
 # Global refs so background threads can reach the bridge and its event loop
@@ -27,6 +30,14 @@ async def run_proxy_forever(bridge, proxy_port):
             opts.update(mode=modes)
             master = DumpMaster(opts, with_termlog=False, with_dumper=False)
             master.addons.add(bridge)
+            # Chrome/Safari's "HTTPS-First" mode auto-upgrades http://mitm.it to https://
+            # (it's a public-looking hostname), which shows a cert warning instead of the
+            # cert download page. Private-network IPs are exempt from that upgrade, so we
+            # also serve the same onboarding app on the device's own LAN IP — used by the
+            # physical-device setup instructions/QR code. Kept in sync by _watch_local_ip().
+            ip_onboarding = asgiapp.WSGIApp(_onboarding_wsgi_app, system_helpers.LOCAL_IP, None)
+            master.addons.add(ip_onboarding)
+            bridge._ip_onboarding_addon = ip_onboarding
             bridge._master = master
             await master.run()
         except asyncio.CancelledError:

@@ -25,8 +25,10 @@ import IgnoreHostsModal from './components/IgnoreHostsModal.vue'
 import OnboardingModal from './components/OnboardingModal.vue'
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal.vue'
 import OsProxyWarningModal from './components/OsProxyWarningModal.vue'
+import CertTrustModal from './components/CertTrustModal.vue'
+// Import just the logic needed for the top-level app overlay (WebSockets & Context Menu)
 import {
-  initWebSocket, 
+  initWebSocket,
   closeContextMenu, 
   contextMenu, 
   formatUrl, 
@@ -616,12 +618,13 @@ const openBreakpointModalFromContext = () => {
     <BreakpointsModal />
     <ComposeModal />
     <HighlightModal />
+    <OsProxyWarningModal />
+    <CertTrustModal />
     <DeviceSetupModal />
     <ScriptingModal />
     <IgnoreHostsModal :show="showIgnoreHostsModal" @close="showIgnoreHostsModal = false" />
     <OnboardingModal v-if="showOnboardingModal" ref="onboardingModalRef" :app-version="appVersion" :prefill="onboardingPrefill" @done="showOnboardingModal = false" />
     <KeyboardShortcutsModal v-if="showShortcutsModal" @close="showShortcutsModal = false" />
-    <OsProxyWarningModal />
   </div>
 </template>
 

@@ -14,6 +14,8 @@ from server.bridge import ProxyUIBridge
 from server.system_helpers import get_free_port
 from server.runners import run_async_loop
 from server.macos_proxy import unset_macos_proxy
+from server.windows_proxy import unset_windows_proxy
+from server.linux_proxy import unset_linux_proxy
 
 
 if __name__ == "__main__":
@@ -26,14 +28,19 @@ if __name__ == "__main__":
     t.start()
 
     def _shutdown(*_args):
-        # If the user set the macOS system proxy this session, unset it on quit
-        # — otherwise their entire Mac keeps routing through OpenProxy after we
-        # exit. This will pop the admin password dialog one more time.
-        if sys.platform == "darwin" and bridge.is_mac_proxy_set:
+        # If the user set the OS-level system proxy this session, unset it on quit
+        # — otherwise their entire machine keeps routing through OpenProxy after
+        # we exit. On macOS this will pop the admin password dialog one more time.
+        if bridge.is_mac_proxy_set:
             try:
-                unset_macos_proxy()
+                if sys.platform == "darwin":
+                    unset_macos_proxy()
+                elif sys.platform == "win32":
+                    unset_windows_proxy()
+                elif sys.platform.startswith("linux"):
+                    unset_linux_proxy()
             except Exception as e:
-                print(f"[QUIT] Failed to unset macOS proxy: {e}", flush=True)
+                print(f"[QUIT] Failed to unset OS proxy: {e}", flush=True)
         os._exit(0)
 
     # Electron sends SIGTERM via pythonProcess.kill() on before-quit; SIGINT
