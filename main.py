@@ -462,6 +462,40 @@ def _launch_linux_script(script, needs_elevation):
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def _launch_macos_script(script, needs_elevation):
+    """Launch a bash update script, escalating via an osascript admin prompt if the
+    install path needs root — e.g. the app was installed by a different admin
+    account, or /Applications write access is restricted on a managed/MDM Mac.
+
+    Elevated runs hand the script to launchd via `launchctl submit` rather than
+    backgrounding it with nohup: the authorization session osascript opens for
+    "with administrator privileges" is torn down — killing its child processes,
+    nohup or not — as soon as the top-level command returns, so a plain
+    `nohup ... &` launcher gets reaped before the real script does any work
+    (verified: the update silently no-ops with this symptom). A launchd job is
+    supervised independently of that session and survives it. do_update.sh
+    removes its own launchd entry once it's done (see apply_update()).
+    """
+    if needs_elevation:
+        label = f"com.openproxy.update.{os.path.basename(os.path.dirname(script))}"
+        shell_cmd = f'launchctl submit -l {label} -- /bin/bash "{script}"'
+        as_string = shell_cmd.replace('\\', '\\\\').replace('"', '\\"')
+        osa_script = f'do shell script "{as_string}" with administrator privileges'
+
+        # Block until the user authenticates. Raises if cancelled/failed.
+        result = subprocess.run(['osascript', '-e', osa_script],
+                                 capture_output=True, text=True)
+        if result.returncode != 0:
+            err = result.stderr.strip()
+            if 'User canceled' in err or '-128' in err:
+                raise PermissionError("Elevation was cancelled.")
+            raise PermissionError(f"Elevation failed: {err or 'authentication failed'}")
+    else:
+        subprocess.Popen(['bash', script], close_fds=True,
+                         start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def apply_update(download_url, progress_cb=None):
     """
     Download the release zip, extract it, then launch a helper script that
@@ -473,10 +507,12 @@ def apply_update(download_url, progress_cb=None):
 
     install_path = _get_app_install_path()
 
-    # Check write access early; on Linux we can escalate via pkexec if needed.
+    # Check write access early; on macOS/Linux we can escalate (osascript /
+    # pkexec) if needed. Windows installs per-user by default (no perMachine
+    # override in package.json), so %LOCALAPPDATA% is always writable there.
     # macOS checks the parent dir (we need to replace the .app bundle itself).
     check_path = os.path.dirname(install_path) if sys.platform == 'darwin' else install_path
-    needs_elevation = sys.platform not in ('darwin', 'win32') and not os.access(check_path, os.W_OK)
+    needs_elevation = sys.platform != 'win32' and not os.access(check_path, os.W_OK)
 
     tmp_dir = tempfile.mkdtemp(prefix='openproxy_update_')
 
@@ -758,6 +794,11 @@ def apply_update(download_url, progress_cb=None):
         backup_path = install_path + '.old'
 
         log = os.path.join(os.path.expanduser("~"), ".openproxy", "update.log")
+        # Must exist before the script runs — it's the target of the script's very
+        # first line (exec > log). Created here (as the current user, pre-elevation)
+        # so it isn't left root-owned, which would block a future non-elevated update
+        # from writing to it.
+        os.makedirs(os.path.dirname(log), exist_ok=True)
         script = os.path.join(tmp_dir, 'do_update.sh')
         with open(script, 'w') as f:
             support_lines = ""
@@ -766,6 +807,14 @@ def apply_update(download_url, progress_cb=None):
 rm -rf "{old_support_dir}"
 mv -f "{new_support_dir}" "{old_support_dir}"
 xattr -cr "{old_support_dir}" 2>/dev/null || true"""
+
+            # Elevated runs are handed to launchd (see _launch_macos_script) instead
+            # of a backgrounded nohup process, so the job has to remove its own
+            # launchd entry once done — nothing else will.
+            cleanup_line = ""
+            if needs_elevation:
+                label = f"com.openproxy.update.{os.path.basename(tmp_dir)}"
+                cleanup_line = f'\nlaunchctl remove "{label}" 2>/dev/null || true\n'
 
             f.write(f"""#!/bin/bash
 exec >"{log}" 2>&1
@@ -808,13 +857,9 @@ xattr -cr "{install_path}" 2>/dev/null || true{support_lines}
 rm -rf "{backup_path}"
 
 open -n "{install_path}"
-""")
+{cleanup_line}""")
         os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
-        # start_new_session=True puts the script in its own process group so it
-        # is fully independent of Python — survives Python being killed by Electron.
-        subprocess.Popen(['bash', script], close_fds=True,
-                         start_new_session=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        _launch_macos_script(script, needs_elevation)
 
     elif sys.platform == 'win32':
         exe_name = APP_PRODUCT_NAME + '.exe'
