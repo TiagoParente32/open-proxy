@@ -1,22 +1,54 @@
-# <img src="icon.png" width="64" align="absmiddle" alt="OpenProxy Icon" /> OpenProxy
+<div align="center">
 
-OpenProxy is a fast, modern, lightweight network debugging proxy built for developers. It combines the raw power of `mitmproxy` with a sleek, native-feeling desktop UI built in **Electron**, **Vue 3**, and **Python**.
+<img src="icon.png" width="96" alt="OpenProxy icon" />
 
-Whether you need to mock API responses, rewrite routing rules on the fly, throttle your network, or automatically inject SSL certificates into an Android emulator, OpenProxy handles it without the bloat of traditional Java-based proxies.
+# OpenProxy
 
-![OpenProxy Interface](screenshots/example.png)
+**A fast, lightweight HTTP(S) debugging proxy with a native desktop UI.**<br/>
+The power of `mitmproxy`, wrapped in an Electron + Vue 3 app for macOS, Windows and Linux.
+
+[![Latest release](https://img.shields.io/github/v/release/TiagoParente32/open-proxy?label=release&color=2ea44f)](https://github.com/TiagoParente32/open-proxy/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/TiagoParente32/open-proxy/total?color=blue)](https://github.com/TiagoParente32/open-proxy/releases)
+[![Release workflow](https://img.shields.io/github/actions/workflow/status/TiagoParente32/open-proxy/release.yml?label=release%20build)](https://github.com/TiagoParente32/open-proxy/actions/workflows/release.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](#-installation)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+[![Electron](https://img.shields.io/badge/Electron-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![Vue 3](https://img.shields.io/badge/Vue_3-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
+[![Python](https://img.shields.io/badge/Python_3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![mitmproxy](https://img.shields.io/badge/mitmproxy-engine-ff6a00)](https://mitmproxy.org/)
+
+[Download](https://github.com/TiagoParente32/open-proxy/releases/latest) ·
+[Features](#-key-features) ·
+[Device setup](#-android-setup) ·
+[Contributing](CONTRIBUTING.md) ·
+[Report a bug](https://github.com/TiagoParente32/open-proxy/issues/new?template=bug_report.yml)
+
+</div>
+
+---
+
+OpenProxy is a network debugging proxy built for developers. Whether you need to mock API responses, rewrite routing rules on the fly, throttle your network, or automatically inject SSL certificates into an Android emulator, OpenProxy handles it without the bloat of traditional Java-based proxies.
+
+![OpenProxy interface](screenshots/example.png)
 
 ## 📑 Table of Contents
 
 - [✨ Key Features](#-key-features)
 - [📥 Installation](#-installation)
+- [🚀 Quick Start](#-quick-start)
 - [🤖 Android Setup](#-android-setup)
 - [🍎 iOS Setup](#-ios-setup)
 - [🖥️ Desktop & Browser Setup](#️-desktop--browser-setup)
+- [🔄 Auto-Update](#-auto-update)
 - [🛠️ Tech Stack](#️-tech-stack)
 - [💻 Local Development](#-local-development)
 - [📦 Building for Distribution](#-building-for-distribution)
-- [🔄 Auto-Update](#-auto-update)
+- [🤝 Contributing](#-contributing)
+- [🔒 Security](#-security)
+- [📄 License](#-license)
+- [🙏 Acknowledgements](#-acknowledgements)
 
 ---
 
@@ -28,6 +60,7 @@ Whether you need to mock API responses, rewrite routing rules on the fly, thrott
 * **Live Breakpoints**: Pause requests or responses mid-flight, edit their headers/bodies, and release them.
 * **VPN Mode**: Route device traffic through a WireGuard tunnel — no manual proxy configuration needed. Available for Android and iOS physical devices.
 * **Smart Android Setup**: 1-click ADB integration. Automatically detects rooted emulators to inject System Certificates, or gracefully falls back to User Certificates.
+* **One-click CA trust**: Prompts to install and trust the mitmproxy certificate on the host machine so browsers and CLI tools just work.
 * **Network Throttling**: Simulate "Fast 3G" or "Slow 3G" network conditions.
 * **Aggressive Cache Busting**: One-click toggle to strip caching headers and force fresh responses.
 * **Auto-Update**: The app checks for new releases on startup and can update itself in one click.
@@ -37,7 +70,13 @@ Whether you need to mock API responses, rewrite routing rules on the fly, thrott
 
 ## 📥 Installation
 
-Download the latest release for your platform from the [GitHub Releases](https://github.com/TiagoParente32/open-proxy/releases) page.
+Download the latest release for your platform from the [GitHub Releases](https://github.com/TiagoParente32/open-proxy/releases/latest) page.
+
+| Platform | Download | Notes |
+|---|---|---|
+| **macOS** (Apple Silicon & Intel) | `.dmg` | Unsigned — see the Gatekeeper note below |
+| **Windows** (x64) | `.exe` installer | SmartScreen warning on first run |
+| **Linux** (x64) | `.deb`, `.rpm`, `.AppImage` | AppImage needs `chmod +x` |
 
 ### macOS
 
@@ -56,6 +95,15 @@ Windows SmartScreen may warn that the app is from an unrecognized publisher (als
 ### Linux
 
 Install the `.deb`/`.rpm` package with your system's package manager, or make the `.AppImage` executable (`chmod +x`) and run it directly.
+
+---
+
+## 🚀 Quick Start
+
+1. **Launch OpenProxy.** The proxy starts listening on the port shown in the toolbar (defaults to `9090`).
+2. **Trust the certificate.** Accept the prompt to install the mitmproxy CA on this machine, or open **Devices** for per-device instructions.
+3. **Point a client at the proxy.** Use the **Devices** modal for Android, iOS and browser walk-throughs, or export `https_proxy=http://127.0.0.1:9090` for CLI tools.
+4. **Inspect and modify.** Requests appear live in the list. Right-click any flow to add a Map Local / Map Remote rule or set a breakpoint.
 
 ---
 
@@ -145,6 +193,20 @@ Export `http_proxy` / `https_proxy` environment variables pointing at OpenProxy,
 
 ---
 
+## 🔄 Auto-Update
+
+On startup OpenProxy checks the [GitHub Releases](https://github.com/TiagoParente32/open-proxy/releases) feed for a newer version. When one is available you'll see an **Update** prompt in the app — one click downloads the new build and relaunches.
+
+| Platform | Update artifact | Notes |
+|---|---|---|
+| macOS | `.zip` | Prompts for your admin password if `/Applications` isn't writable |
+| Windows | `.zip` | Replaces the installed app in place |
+| Linux | `.AppImage`, `.deb` or `.tar.gz` | Picks the format matching how the app was installed; uses `pkexec` when the install location needs root |
+
+Releases are cut automatically by the [release workflow](.github/workflows/release.yml) whenever a pull request labelled `release` is merged into `main`.
+
+---
+
 ## 🛠️ Tech Stack
 
 | Layer | Technology |
@@ -158,6 +220,17 @@ The app is structured as three loosely coupled pieces:
 - **Vue UI** (`ui/`) — the entire interface, communicating with the Python backend over a local WebSocket.
 - **Python backend** (`main.py`) — runs `mitmproxy` and streams proxy state to the UI.
 
+```
+open-proxy/
+├── electron/          # Electron main process, preload, tray, auto-update
+├── ui/                # Vue 3 + Vite frontend
+├── main.py            # Python backend (mitmproxy addon + WebSocket server)
+├── requirements.txt   # Python dependencies
+├── OpenProxy.spec     # PyInstaller spec for the backend binary
+├── build*.sh/.ps1     # Platform build scripts
+└── .github/workflows/ # Release automation
+```
+
 ---
 
 ## 💻 Local Development
@@ -166,7 +239,7 @@ The app is structured as three loosely coupled pieces:
 
 * Node.js 18+
 * Python 3.10+
-* ADB (Android Debug Bridge) in your system PATH *(Android features only)*p
+* ADB (Android Debug Bridge) in your system PATH *(Android features only)*
 * OpenSSL *(Android root certificate hashing only)*
 
 ### 1. Install Dependencies
@@ -262,3 +335,38 @@ sudo apt install fakeroot dpkg rpm
 | macOS | `.dmg`, `.zip` (arm64 + x64) | DMG for fresh install, ZIP used by auto-update |
 | Windows | NSIS `.exe`, `.zip` | EXE for fresh install, ZIP used by auto-update |
 | Linux | `.deb`, `.rpm`, `.AppImage`, `.tar.gz` (x64) | DEB/RPM install to app launcher; AppImage used by auto-update |
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, coding conventions, and how releases are cut. By participating you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+- 🐛 [Report a bug](https://github.com/TiagoParente32/open-proxy/issues/new?template=bug_report.yml)
+- 💡 [Request a feature](https://github.com/TiagoParente32/open-proxy/issues/new?template=feature_request.yml)
+- 🔀 [Open a pull request](https://github.com/TiagoParente32/open-proxy/compare)
+
+---
+
+## 🔒 Security
+
+OpenProxy installs a trusted root CA on your devices so it can decrypt HTTPS traffic. Treat that certificate like a password: only use it on machines and devices you control, and remove it when you're done. See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
+
+---
+
+## 📄 License
+
+OpenProxy is free software, released under the [GNU General Public License v3.0](LICENSE).
+
+You may use, study, share and modify it. If you distribute a modified version, you must make its source available under the same license — so forks stay open source.
+
+Copyright © 2026 Tiago Parente and [contributors](https://github.com/TiagoParente32/open-proxy/graphs/contributors).
+
+---
+
+## 🙏 Acknowledgements
+
+- [mitmproxy](https://mitmproxy.org/) — the interception engine that does the heavy lifting
+- [Electron](https://www.electronjs.org/) and [electron-builder](https://www.electron.build/) — desktop shell and packaging
+- [Vue 3](https://vuejs.org/), [Vite](https://vitejs.dev/), [CodeMirror](https://codemirror.net/) and [splitpanes](https://github.com/antoniandre/splitpanes) — the UI
+- [WireGuard](https://www.wireguard.com/) — VPN Mode transport
