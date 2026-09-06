@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/TiagoParente32/open-proxy/security/advisories/new
+    about: Please report security issues privately. See SECURITY.md for details.
+  - name: 💬 Questions & discussion
+    url: https://github.com/TiagoParente32/open-proxy/discussions
+    about: Ask setup questions or share how you use OpenProxy.

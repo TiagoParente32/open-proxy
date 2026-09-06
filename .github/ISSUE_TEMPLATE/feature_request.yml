@@ -1,0 +1,59 @@
+name: 💡 Feature request
+description: Suggest an idea or improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion! Describing the problem you're trying to solve helps more than a specific solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the situation and why the current behaviour falls short.
+      placeholder: I often need to replay the same request with a different header, but I have to set a breakpoint and edit it every time.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How would you like OpenProxy to behave? Mockups or examples from other tools are welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds you use today, or other approaches you thought about.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Traffic inspection / filtering
+        - Map Local / Map Remote
+        - Breakpoints
+        - Android setup
+        - iOS setup
+        - Browser / desktop setup
+        - VPN Mode
+        - Throttling / cache busting
+        - Auto-update / packaging
+        - UI / UX
+        - Other
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this has not been requested yet.
+          required: true
+        - label: I am willing to help implement this.

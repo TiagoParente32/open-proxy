@@ -1,0 +1,93 @@
+name: 🐛 Bug report
+description: Something isn't working as expected
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please make sure you are on the [latest release](https://github.com/TiagoParente32/open-proxy/releases/latest) before filing.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: When I enable Map Local on a request, the response body is still the original one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps that trigger the problem.
+      placeholder: |
+        1. Open OpenProxy
+        2. Right-click a request → Map Local
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows
+        - Linux (.deb / .rpm)
+        - Linux (AppImage)
+        - Linux (other)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: OpenProxy version
+      description: Shown in the app's About / update dialog, or on the Releases page.
+      placeholder: "1.0.30"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: client
+    attributes:
+      label: Which client were you proxying?
+      multiple: true
+      options:
+        - Android emulator
+        - Android physical device
+        - iOS Simulator
+        - iOS physical device
+        - Desktop browser
+        - curl / CLI tool
+        - VPN Mode (WireGuard)
+        - Other / not applicable
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Paste relevant console output or attach screenshots. Please remove any secrets (tokens, cookies, internal hostnames).
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this has not been reported yet.
+          required: true
+        - label: I am running the latest release.
+          required: true
