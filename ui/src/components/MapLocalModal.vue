@@ -36,7 +36,6 @@ const selectMethod = (m) => {
 
 // --- 2. PARAMETER SYNC LOGIC (Defined first to avoid init errors) ---
 
-// URL/PATTERN -> GRID
 const syncPatternToParams = () => {
   if (!activeRule.value) return
 
@@ -72,7 +71,6 @@ const syncPatternToParams = () => {
   queryParams.value = newParams
 }
 
-// GRID -> URL/PATTERN
 const syncParamsToPattern = () => {
   if (!activeRule.value) return
 
@@ -108,7 +106,6 @@ const removeParamRow = (index) => {
   syncParamsToPattern()
 }
 
-// HEADERS JSON -> GRID
 const syncRuleToHeaders = () => {
   if (!activeRule.value) return
 
@@ -126,7 +123,6 @@ const syncRuleToHeaders = () => {
   responseHeaders.value = newHeaders
 }
 
-// GRID -> HEADERS JSON
 const syncHeadersToRule = () => {
   if (!activeRule.value) return
 
@@ -153,7 +149,6 @@ const removeHeaderRow = (index) => {
   syncHeadersToRule()
 }
 
-// REQ_HEADERS_MOD OBJECT -> GRID
 const syncRuleToReqHeaders = () => {
   if (!activeRule.value) return
 
@@ -169,7 +164,6 @@ const syncRuleToReqHeaders = () => {
   reqHeadersMod.value = newHeaders
 }
 
-// GRID -> REQ_HEADERS_MOD OBJECT
 const syncReqHeadersToRule = () => {
   if (!activeRule.value) return
 
@@ -198,14 +192,12 @@ const removeReqHeaderRow = (index) => {
 
 // --- 3. WATCHERS ---
 
-// Auto-select the first rule if nothing is selected but rules exist
 watch(mapLocalRules, (newRules) => {
   if (newRules.length > 0 && !selectedRuleId.value) {
     selectedRuleId.value = newRules[0].id
   }
 }, { immediate: true, deep: true })
 
-// Sync params and headers when the active rule changes (e.g. clicking a different rule in the sidebar)
 watch(activeRule, (rule) => {
   if (rule) {
     syncPatternToParams()
@@ -214,7 +206,6 @@ watch(activeRule, (rule) => {
   }
 }, { immediate: true })
 
-// Sync params and headers when the modal opens (e.g. intercepted request triggered it)
 watch(showMapModal, (isOpen) => {
   if (isOpen && activeRule.value) {
     syncPatternToParams()
@@ -706,12 +697,10 @@ const browseFile = async () => {
   color: var(--fg-muted); font-style: italic; font-size: 12px;
 }
 
-/* Text Stack */
 .pm-rule-text-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .pm-rule-pattern { font-family: 'Consolas', monospace; font-size: 11px; color: var(--fg-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
 .pm-rule-subtext { font-size: 9px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 
-/* Checkbox */
 .pm-checkbox-container { display: flex; align-items: center; justify-content: center; position: relative; width: 16px; height: 16px; flex-shrink: 0; cursor: pointer; }
 .pm-checkbox-container input { position: absolute; opacity: 0; }
 .pm-checkmark { position: absolute; top: 0; left: 0; height: 16px; width: 16px; background-color: var(--bg-deepest); border: 1px solid var(--fg-muted); border-radius: 4px; transition: border-color 0.2s, background-color 0.2s; box-sizing: border-box; }
@@ -720,11 +709,9 @@ const browseFile = async () => {
 .pm-checkmark:after { content: ""; position: absolute; display: none; left: 50%; top: 45%; width: 4px; height: 9px; border: solid white; border-width: 0 2px 2px 0; transform: translate(-50%, -50%) rotate(45deg); }
 .pm-checkbox-container input:checked ~ .pm-checkmark:after { display: block; }
 
-/* Delete button */
 .pm-rule-del { background: transparent; border: 1px solid transparent; color: var(--fg-muted); cursor: pointer; padding: 4px; border-radius: 5px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0; }
 .pm-rule-del:hover { background: var(--error-muted) !important; border-color: rgba(239,68,68,.3) !important; color: var(--error) !important; }
 
-/* Sidebar footer */
 .pm-sidebar-footer { padding: 14px 16px; background: var(--bg-modal); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
 .toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--fg-muted); font-weight: 600; font-size: 12px; }
 .toggle.active { color: var(--accent); }
@@ -736,7 +723,6 @@ const browseFile = async () => {
 .ghost-btn { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; background: transparent; border: 1px solid var(--border); color: var(--fg-muted); border-radius: 5px; cursor: pointer; font-size: 11px; font-weight: 500; transition: all 0.15s; }
 .ghost-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); border-color: var(--fg-muted); }
 
-/* MAIN EDITOR */
 .pm-main-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-main); min-width: 0; }
 .pm-header { display: flex; justify-content: space-between; align-items: center; padding: 0 16px; height: 44px; background: var(--bg-sidebar); border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .pm-title { font-size: 13px; font-weight: 600; color: var(--fg-primary); }
@@ -889,10 +875,8 @@ const browseFile = async () => {
 }
 .pm-kv-del:hover { color: var(--error); }
 
-/* Request headers override section */
 .pm-req-headers-label { border-top: 1px solid var(--border); margin-top: 0; flex-shrink: 0; }
 
-/* Body source toggle */
 .pm-body-source-bar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 6px 24px; background: var(--bg-card); border-bottom: 1px solid var(--border);
@@ -902,7 +886,6 @@ const browseFile = async () => {
 .pm-source-btn { background: transparent; border: none; color: var(--fg-muted); padding: 4px 14px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
 .pm-source-btn.active { background: var(--accent); color: #fff; }
 
-/* File picker */
 .pm-file-picker { display: flex; flex-direction: column; gap: 12px; padding: 20px 24px; }
 .pm-file-row { display: flex; gap: 8px; align-items: center; }
 .pm-file-input {

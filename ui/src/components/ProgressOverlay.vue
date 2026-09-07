@@ -63,7 +63,6 @@ const closeOnFail = () => {
 .icon-success { color: var(--success); width: 16px; height: 16px; }
 .icon-error { color: var(--error); width: 16px; height: 16px; }
 
-/* Beautiful SVG Spinner */
 .spinner { animation: rotate 2s linear infinite; width: 18px; height: 18px; }
 .spinner .path { stroke: var(--accent); stroke-linecap: round; animation: dash 1.5s ease-in-out infinite; }
 

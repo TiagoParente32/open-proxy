@@ -2,7 +2,6 @@
 import { ref, computed, nextTick } from 'vue'
 import { isFocusMode, activeFilter, deviceTrafficTree, pinnedSources, proxyIgnoreHosts, proxyAllowHosts, proxyHostFilterMode, showIgnoreHostsModal, pinSource, unpinSource, isPinnedSource, deviceNicknames, addDeviceHighlightRule } from '../store.js'
 
-// --- FOLDER LOGIC ---
 const expandedFolders = ref(new Set())
 
 const toggleFolder = (ip) => {
@@ -23,7 +22,6 @@ const selectDomain = (ip, domain) => {
   activeFilter.value = { type: 'device_domain', ip: ip, domain: domain }
 }
 
-// --- DEVICE CONTEXT MENU ---
 const deviceMenu = ref({ show: false, x: 0, y: 0, ip: null, label: null })
 
 const openDeviceMenu = (e, node) => {
@@ -48,7 +46,6 @@ const highlightDevice = () => {
   addDeviceHighlightRule(ip, label)
 }
 
-// --- INLINE RENAME ---
 const editingIp = ref(null)
 const editingValue = ref('')
 const renameInput = ref(null)
@@ -65,7 +62,6 @@ const commitRename = (ip) => {
   editingIp.value = null
 }
 
-// Host filter display
 const hostFilterLabel = computed(() => {
   if (proxyHostFilterMode.value === 'allow') {
     const count = proxyAllowHosts.value.length
@@ -75,7 +71,6 @@ const hostFilterLabel = computed(() => {
   return count ? `Ignoring ${count} host${count !== 1 ? 's' : ''}` : 'All traffic'
 })
 
-// --- PINNED LOGIC ---
 const newPinnedSource = ref('')
 
 const addPinnedSource = (sourceToAdd = null) => {
@@ -161,15 +156,12 @@ const togglePinnedDomain = (domain, event) => {
           <svg class="chevron-icon" :class="{ 'rotated': expandedFolders.has(node.ip) }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="9 18 15 12 9 6"></polyline>
           </svg>
-          <!-- Local System (Mac/laptop) -->
           <svg v-if="node.type === 'local'" class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2" y="4" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="18" x2="12" y2="21"/>
           </svg>
-          <!-- VPN device -->
           <svg v-else-if="node.type === 'vpn'" class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           </svg>
-          <!-- Wi-Fi / physical device -->
           <svg v-else class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/>
           </svg>
@@ -214,7 +206,6 @@ const togglePinnedDomain = (domain, event) => {
 
     </div>
 
-    <!-- Host Filter footer -->
     <div class="host-filter-section">
       <div class="host-filter-row">
         <span class="host-filter-label">Host Filter</span>
@@ -234,7 +225,6 @@ const togglePinnedDomain = (domain, event) => {
 
   </div>
 
-  <!-- Device context menu -->
   <Teleport to="body">
     <div v-if="deviceMenu.show" class="device-ctx-overlay" @mousedown="closeDeviceMenu">
       <div class="device-ctx-menu" :style="{ top: deviceMenu.y + 'px', left: deviceMenu.x + 'px' }" @mousedown.stop>
@@ -267,14 +257,12 @@ const togglePinnedDomain = (domain, event) => {
   user-select: none;
 }
 
-/* Global SVG Styling */
 .ui-icon { width: 14px; height: 14px; min-width: 14px; opacity: 0.8; }
 .outline-icon { opacity: 0.5; }
 .chevron-icon { width: 12px; height: 12px; min-width: 12px; opacity: 0.5; transition: transform 0.2s ease; }
 .chevron-icon.rotated { transform: rotate(90deg); }
 
-/* Focus Mode */
-.focus-mode-wrapper { 
+.focus-mode-wrapper {
   padding: 14px 16px; 
   display: flex; 
   align-items: center; 
@@ -294,8 +282,7 @@ const togglePinnedDomain = (domain, event) => {
 .toggle-switch.on { background: var(--accent); border-color: var(--accent); }
 .toggle-switch.on::after { transform: translateX(14px); background: #fff; }
 
-/* Subheaders */
-.sidebar-subheader { 
+.sidebar-subheader {
   padding: 0 8px; 
   margin-top: 24px; 
   margin-bottom: 8px; 
@@ -307,7 +294,6 @@ const togglePinnedDomain = (domain, event) => {
 
 .empty-state { padding: 0 8px; font-size: 12px; color: var(--fg-placeholder); font-style: italic; }
 
-/* Tree Layout */
 .tree-container { padding: 8px; overflow-y: auto; flex: 1; }
 
 .tree-item { 
@@ -329,7 +315,6 @@ const togglePinnedDomain = (domain, event) => {
 
 .main-item { margin-bottom: 8px; font-weight: 500; color: var(--fg-secondary); }
 
-/* Pin Input & Items */
 .pin-input-group { padding: 0 8px; margin-bottom: 8px; display: flex; gap: 6px; }
 .filter-input-small { 
   flex: 1; background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-secondary); 
@@ -387,7 +372,6 @@ const togglePinnedDomain = (domain, event) => {
   color: #fff;
 }
 
-/* Folders (IDE Style) */
 .folder-group { margin-bottom: 4px; }
 .folder-header { gap: 6px; }
 .folder-label { font-weight: 500; color: var(--fg-secondary); }
@@ -407,7 +391,6 @@ const togglePinnedDomain = (domain, event) => {
 .pin-icon { color: var(--accent); }
 .tree-item.active .pin-icon { color: #fff; }
 
-/* Device context menu */
 .device-ctx-overlay { position: fixed; inset: 0; z-index: 9999; }
 .device-ctx-menu {
   position: fixed;
@@ -429,7 +412,6 @@ const togglePinnedDomain = (domain, event) => {
 }
 .ctx-item:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
 
-/* Inline rename input */
 .rename-input {
   flex: 1; min-width: 0;
   background: var(--bg-deepest);
@@ -446,7 +428,6 @@ const togglePinnedDomain = (domain, event) => {
   background: rgba(255,255,255,0.1);
 }
 
-/* Host Filter footer */
 .host-filter-section {
   border-top: 1px solid var(--border);
   padding: 10px 16px;

@@ -12,7 +12,6 @@ import {
   wsConnection,
 } from '../store.js'
 
-// ── Local draft for the selected script ──────────────────────────────────────
 const draftContent = ref('')
 const draftName    = ref('')
 const draftEnabled = ref(false)
@@ -23,7 +22,6 @@ const { modalStyle, startResize } = useEdgeResize(modalRef, { minW: 500, minH: 3
 
 const selectedScript = computed(() => scripts.value.find(s => s.id === selectedScriptId.value) ?? null)
 
-// Sync draft when selection changes or scripts list updates from backend
 watch(selectedScript, (s) => {
   if (!s) return
   draftContent.value = s.content
@@ -47,7 +45,6 @@ const extensions = computed(() => [
   EditorView.lineWrapping,
 ])
 
-// ── WS helpers ────────────────────────────────────────────────────────────────
 const send = (msg) => {
   if (wsConnection?.readyState === WebSocket.OPEN)
     wsConnection.send(JSON.stringify(msg))
@@ -56,7 +53,6 @@ const send = (msg) => {
 const openApiDocs = () =>
   window.electronAPI?.openExternal('https://docs.mitmproxy.org/stable/api/mitmproxy/http.html')
 
-// ── Actions ───────────────────────────────────────────────────────────────────
 const save = () => {
   if (!selectedScript.value) return
   saving.value = true
@@ -88,8 +84,6 @@ const deleteScript = (id) => {
 }
 
 const toggleScriptEnabled = (id, enabled) => {
-  // If the currently selected script is being toggled and content matches saved,
-  // reflect in draft too
   if (id === selectedScriptId.value) draftEnabled.value = enabled
   send({ type: 'SCRIPT_TOGGLE', id, enabled })
 }
@@ -113,7 +107,6 @@ const formatCode = () => {
 
   let lines = draftContent.value.split('\n')
 
-  // Tabs → 4 spaces, strip trailing whitespace
   lines = lines.map(l => l.replace(/\t/g, '    ').trimEnd())
 
   // Collapse runs of more than 2 consecutive blank lines
@@ -172,7 +165,6 @@ const formatCode = () => {
       <span class="resize-edge resize-w"  @mousedown.prevent.stop="startResize('w',  $event)"></span>
       <span class="resize-edge resize-nw" @mousedown.prevent.stop="startResize('nw', $event)"></span>
 
-      <!-- Header -->
       <div class="modal-header">
         <div class="header-left">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -192,7 +184,6 @@ const formatCode = () => {
       <!-- Body: sidebar + editor -->
       <div class="modal-body">
 
-        <!-- Sidebar -->
         <div class="sidebar">
           <div class="sidebar-list">
             <div
@@ -232,10 +223,8 @@ const formatCode = () => {
           </button>
         </div>
 
-        <!-- Editor panel -->
         <div class="editor-panel" v-if="selectedScript">
 
-          <!-- Editor toolbar -->
           <div class="editor-toolbar">
             <input
               class="name-input"
@@ -276,7 +265,6 @@ const formatCode = () => {
             </div>
           </div>
 
-          <!-- CodeMirror -->
           <div class="editor-wrap">
             <Codemirror
               v-model="draftContent"
@@ -286,7 +274,6 @@ const formatCode = () => {
             />
           </div>
 
-          <!-- Error panel -->
           <div v-if="selectedScript.error" class="error-panel">
             <div class="error-panel-header">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px">
@@ -305,7 +292,6 @@ const formatCode = () => {
 
       </div>
 
-      <!-- Footer hint -->
       <div class="modal-footer-hint">
         Hooks: <code>request(flow)</code> · <code>response(flow)</code> · <code>websocket_message(flow)</code> · <code>error(flow)</code>
         &nbsp;·&nbsp;
@@ -347,7 +333,6 @@ const formatCode = () => {
 .resize-ne { top: 0; right: 0; cursor: nesw-resize; } .resize-nw { top: 0; left: 0; cursor: nwse-resize; }
 .resize-se { bottom: 0; right: 0; cursor: nwse-resize; } .resize-sw { bottom: 0; left: 0; cursor: nesw-resize; }
 
-/* Header */
 .modal-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 11px 14px 10px;
@@ -365,14 +350,12 @@ const formatCode = () => {
 }
 .close-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
 
-/* Body layout */
 .modal-body {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
 
-/* Sidebar */
 .sidebar {
   width: 180px;
   flex-shrink: 0;
@@ -403,7 +386,6 @@ const formatCode = () => {
 .script-row.active { background: var(--bg-active); color: var(--fg-primary); }
 .script-row.errored .script-name { color: var(--setup-error); }
 
-/* Checkbox */
 .script-checkbox {
   display: flex; align-items: center; justify-content: center;
   position: relative; cursor: pointer; user-select: none;
@@ -430,7 +412,6 @@ const formatCode = () => {
 
 .script-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Trashcan */
 .script-del {
   background: transparent; border: 1px solid transparent;
   cursor: pointer; color: var(--fg-muted); padding: 3px;
@@ -450,7 +431,6 @@ const formatCode = () => {
 }
 .add-btn:hover { background: var(--surface-hover); color: var(--fg-primary); border-color: var(--fg-muted); }
 
-/* Editor panel */
 .editor-panel {
   flex: 1;
   display: flex;
@@ -462,7 +442,6 @@ const formatCode = () => {
   color: var(--fg-placeholder); font-size: 13px;
 }
 
-/* Editor toolbar */
 .editor-toolbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 7px 12px;
@@ -525,14 +504,12 @@ const formatCode = () => {
 .format-btn:hover { background: var(--surface-hover); color: var(--fg-primary); border-color: var(--fg-muted); }
 .format-btn.done { color: var(--setup-success); border-color: rgba(16,185,129,.4); }
 
-/* Editor */
 .editor-wrap {
   flex: 1; overflow: hidden;
 }
 .editor-wrap :deep(.cm-editor) { height: 100%; }
 .editor-wrap :deep(.cm-scroller) { overflow: auto; }
 
-/* Error panel */
 .error-panel {
   flex-shrink: 0;
   background: rgba(239,68,68,.07);
@@ -551,7 +528,6 @@ const formatCode = () => {
   margin: 0; font-family: 'Menlo', 'Consolas', monospace; line-height: 1.5;
 }
 
-/* Footer */
 .modal-footer-hint {
   flex-shrink: 0;
   padding: 7px 14px;

@@ -81,7 +81,6 @@ const setChip = (category, value) => {
 </template>
 
 <style scoped>
-/* --- Ultra Compact Bar --- */
 .filter-bar {
   display: flex;
   align-items: center;
@@ -93,16 +92,14 @@ const setChip = (category, value) => {
   user-select: none;
 }
 
-/* Hide scrollbar for a cleaner look */
 .filter-bar::-webkit-scrollbar { display: none; }
 
 .chip-group {
   display: flex;
   align-items: center;
-  gap: 2px; /* Very tight spacing between chips */
+  gap: 2px;
 }
 
-/* --- The Chips --- */
 .chip {
   background: transparent;
   border: 1px solid transparent;
@@ -138,7 +135,6 @@ const setChip = (category, value) => {
   flex-shrink: 0;
 }
 
-/* --- Tiny Color Indicators inside the buttons --- */
 .color-indicator {
   display: inline-block;
   width: 9px;

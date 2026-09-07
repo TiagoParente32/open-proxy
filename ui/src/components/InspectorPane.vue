@@ -392,7 +392,6 @@ const getHexRows = (req, type) => {
 .url-action-btn { background: var(--accent); color: #fff; border: none; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.2s; flex-shrink: 0; white-space: nowrap; }
 .url-action-btn:hover { background: var(--accent-hover); }
 
-/* --- Code Tab Styles --- */
 .code-tab-container { height: 100%; display: flex; flex-direction: column; }
 .code-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: var(--bg-main); border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .lang-pills { display: flex; gap: 6px; overflow-x: auto; }
@@ -444,14 +443,12 @@ const getHexRows = (req, type) => {
   background-color: var(--surface-hover);
 }
 
-/* Column 1: Offset */
 .hex-offset {
   width: 70px;
   color: var(--fg-muted);
   flex-shrink: 0;
 }
 
-/* Column 2: The Bytes */
 .hex-bytes {
   display: flex;
   gap: 6px;
@@ -463,14 +460,13 @@ const getHexRows = (req, type) => {
   text-align: center;
 }
 .hex-bytes span.empty {
-  color: var(--border); /* Faded out dashed lines for empty bytes */
+  color: var(--border);
 }
 /* Creates the classic 8-byte visual gap in the middle */
 .hex-bytes span:nth-child(8) {
   margin-right: 8px;
 }
 
-/* Column 3: Decoded ASCII */
 .hex-ascii {
   width: 130px;
   color: var(--fg-muted);
@@ -480,7 +476,6 @@ const getHexRows = (req, type) => {
   letter-spacing: 1px;
 }
 
-/* Truncation Warning Banner */
 .hex-warning {
   background: var(--warning-muted);
   color: var(--method-put);
@@ -497,7 +492,6 @@ const getHexRows = (req, type) => {
    ULTRA-SLEEK CODEMIRROR SEARCH PANEL (MATCHES APP DESIGN)
    ========================================================== */
 
-/* The Main Toolbar Container */
 :deep(.cm-panel.cm-search) {
   background-color: var(--bg-sidebar) !important;
   border-bottom: 1px solid var(--border) !important;
@@ -510,7 +504,6 @@ const getHexRows = (req, type) => {
   color: var(--fg-secondary) !important;
 }
 
-/* The Search Input Field */
 :deep(.cm-panel.cm-search .cm-textfield) {
   background-color: var(--bg-deepest) !important;
   border: 1px solid var(--border) !important;
@@ -530,7 +523,7 @@ const getHexRows = (req, type) => {
   box-shadow: 0 0 0 1px rgba(59,130,246,0.3), inset 0 1px 2px rgba(0,0,0,0.3) !important;
 }
 
-/* The Next / Prev / All Buttons (Mimicking .secondary-pill) */
+/* Mimics .secondary-pill so the search UI matches the app's button style */
 :deep(.cm-panel.cm-search .cm-button) {
   display: inline-flex !important;
   align-items: center !important;
@@ -557,7 +550,6 @@ const getHexRows = (req, type) => {
   background: var(--bg-card) !important;
 }
 
-/* The Checkboxes (Match Case, Regex) */
 :deep(.cm-panel.cm-search label) {
   display: inline-flex !important;
   align-items: center !important;
@@ -578,9 +570,8 @@ const getHexRows = (req, type) => {
   height: 12px !important;
 }
 
-/* The Close Button (X) */
 :deep(.cm-panel.cm-search button[name="close"]) {
-  margin-left: auto !important; /* Pushes it completely to the right */
+  margin-left: auto !important;
   background: transparent !important;
   border: none !important;
   color: var(--fg-muted) !important;
