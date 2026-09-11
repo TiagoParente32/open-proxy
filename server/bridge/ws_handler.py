@@ -1,9 +1,7 @@
 import sys
 import json
-import ssl
 import asyncio
 import threading
-import urllib.request
 
 from server import system_helpers
 from server.scripting import DEFAULT_SCRIPT
@@ -37,6 +35,11 @@ class WsHandlerMixin:
 
             async for message in websocket:
                 payload = json.loads(message)
+
+                # Automation clients (MCP/CLI) speak a request/response
+                # protocol with its own envelope — see AgentApiMixin.
+                if await self.handle_agent_message(websocket, payload):
+                    continue
 
                 if payload.get("type") == "UPDATE_MAP_LOCAL_RULES":
                     self.map_local_rules = payload.get("rules", [])
@@ -128,52 +131,9 @@ class WsHandlerMixin:
                         asyncio.create_task(self.revert_ios_simulator(websocket, udid))
 
                 elif payload.get("type") == "REPEAT_REQUEST":
-                    req_data = payload.get("request", {})
-
-                    def _replay():
-                        try:
-                            url = req_data.get("url")
-                            if not url or url == "https://":
-                                print("[WARNING] Invalid URL in composer.")
-                                return
-
-                            method = req_data.get("method", "GET").upper()
-                            req = urllib.request.Request(url, method=method)
-
-                            raw_headers = req_data.get("req_headers", {})
-                            if isinstance(raw_headers, str):
-                                try:
-                                    raw_headers = json.loads(raw_headers)
-                                except Exception:
-                                    raw_headers = {}
-
-                            for k, v in raw_headers.items():
-                                if k.lower() not in ["host", "content-length", "accept-encoding"]:
-                                    req.add_header(k, str(v))
-
-                            body = req_data.get("req_body")
-                            if body and method in ["POST", "PUT", "PATCH"]:
-                                if not req_data.get("req_is_image") and not str(body).startswith("//"):
-                                    req.data = body.encode('utf-8')
-                                    req.add_header('Content-Length', str(len(req.data)))
-
-                            proxy_handler = urllib.request.ProxyHandler({
-                                'http': f'http://127.0.0.1:{self.proxy_port}',
-                                'https': f'http://127.0.0.1:{self.proxy_port}'
-                            })
-
-                            ctx = ssl.create_default_context()
-                            ctx.check_hostname = False
-                            ctx.verify_mode = ssl.CERT_NONE
-
-                            opener = urllib.request.build_opener(proxy_handler, urllib.request.HTTPSHandler(context=ctx))
-                            opener.open(req, timeout=300)
-                            print(f"[INFO] Successfully injected {method} to {url}")
-
-                        except Exception as e:
-                            print(f"[ERROR] Replay failed: {e}")
-
-                    threading.Thread(target=_replay, daemon=True).start()
+                    # Shared with the agent's replay tool so both paths produce
+                    # identical traffic — see AgentApiMixin.replay_request.
+                    self.replay_request(payload.get("request", {}))
 
                 elif payload.get("type") == "TOGGLE_BREAKPOINTS":
                     self.breakpoints_enabled = payload.get("enabled", True)
@@ -376,4 +336,13 @@ class WsHandlerMixin:
                         threading.Thread(target=_run_update, daemon=True).start()
 
         finally:
-            self.connected_clients.remove(websocket)
+            self.connected_clients.discard(websocket)
+            if websocket in self.agent_clients:
+                self.agent_clients.discard(websocket)
+                # Don't leave mocks installed by an agent that has gone away:
+                # the user would be left with silently rewritten traffic and
+                # nothing in the UI explaining why.
+                if not self.agent_clients and self.agent_scenario:
+                    name = self.agent_scenario.get("name")
+                    print(f"[Agent] Disconnected — clearing scenario '{name}'", flush=True)
+                    await self._agent_clear_scenario()

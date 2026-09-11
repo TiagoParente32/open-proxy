@@ -52,14 +52,99 @@ class ProxyHooksMixin:
                 "error": "WireGuard started but could not retrieve client config.",
             })
 
+    def _effective_throttle(self) -> str:
+        """Agent scenarios can pin a throttle profile for their duration.
+
+        Returns the UI's profile unless a scenario overrode it, so clearing a
+        scenario hands control straight back to whatever the user had set.
+        """
+        if self.agent_throttle_profile is not None:
+            return self.agent_throttle_profile
+        return self.throttle_profile
+
+    async def _throttle(self):
+        profile = self._effective_throttle()
+        if profile == "Slow 3G":
+            await asyncio.sleep(2.0)
+        elif profile == "Fast 3G":
+            await asyncio.sleep(0.5)
+
+    async def _apply_map_local_rule(self, flow: http.HTTPFlow, rule) -> bool:
+        """Build a canned response for `rule` if it matches. True when served.
+
+        Shared by the agent scenario rules and the UI's own map-local list so
+        both honour identical matching and body-source semantics.
+        """
+        pattern = rule.get("pattern", "")
+        strict_regex = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
+        rule_method = rule.get("method", "ANY").upper()
+
+        method_match = rule_method == "ANY" or rule_method == flow.request.method.upper()
+        if not (rule.get("active") and method_match
+                and re.search(strict_regex, flow.request.pretty_url)):
+            return False
+
+        try:
+            status_code = int(rule.get("status", 200))
+            headers_dict = {}
+            try:
+                if rule.get("headers"):
+                    headers_dict = json.loads(rule.get("headers"))
+            except json.JSONDecodeError:
+                headers_dict = {"Content-Type": "text/plain"}
+
+            req_headers_mod = rule.get("req_headers_mod", {})
+            if isinstance(req_headers_mod, dict):
+                for k, v in req_headers_mod.items():
+                    if k:
+                        flow.request.headers[k] = str(v)
+
+            file_path = rule.get("file_path", "")
+            body_source = rule.get("body_source", "inline")
+            if body_source == "file" and file_path and os.path.isfile(file_path):
+                import mimetypes
+                body_bytes = await asyncio.to_thread(lambda p=file_path: open(p, "rb").read())
+                if "Content-Type" not in headers_dict:
+                    mime, _ = mimetypes.guess_type(file_path)
+                    headers_dict["Content-Type"] = mime or "application/octet-stream"
+            else:
+                body_bytes = rule.get("body", "").encode("utf-8")
+
+            headers_dict["X-Map-Local"] = "Active"
+            flow.response = http.Response.make(status_code, body_bytes, headers_dict)
+        except Exception as e:
+            flow.response = http.Response.make(500, f"Editor Error: {e}".encode())
+        return True
+
+    def _apply_map_remote_rules(self, flow: http.HTTPFlow, rules) -> bool:
+        """Apply every matching rewrite rule in order. True if any matched.
+
+        Deliberately does not stop at the first match: each rule is evaluated
+        against the URL left by the previous one, so rewrites chain. That has
+        always been the behaviour of the UI's rule list and some setups rely on
+        it (e.g. host swap followed by a path rewrite).
+        """
+        matched = False
+        for rule in rules:
+            if not rule.get("active"):
+                continue
+            try:
+                pattern = rule.get("pattern", "")
+                target = rule.get("target", "")
+                if re.search(pattern, flow.request.pretty_url):
+                    new_url = re.sub(pattern, target, flow.request.pretty_url)
+                    flow.request.url = new_url
+                    flow.request.headers["Host"] = flow.request.host
+                    matched = True
+            except re.error:
+                pass
+        return matched
+
     async def request(self, flow: http.HTTPFlow):
         if not self.is_recording:
             return
 
-        if self.throttle_profile == "Slow 3G":
-            await asyncio.sleep(2.0)
-        elif self.throttle_profile == "Fast 3G":
-            await asyncio.sleep(0.5)
+        await self._throttle()
 
         if self.disable_cache:
             flow.request.headers.pop("If-Modified-Since", None)
@@ -132,59 +217,30 @@ class ProxyHooksMixin:
         except RuntimeError:
             pass
 
+        # Retain for automation clients, which query history rather than
+        # listening to the broadcast above.
+        self.flow_store.record_request(
+            flow_id=flow.id,
+            method=flow.request.method,
+            url=flow.request.pretty_url,
+            client_ip=raw_ip,
+            headers=flow.request.headers,
+            body=req_body,
+            is_image=req_is_image,
+            is_binary=req_is_binary,
+            req_bytes=request_data["req_bytes"],
+        )
+
+        # Agent scenario rules run ahead of the user's so a scenario can shadow
+        # a hand-built mock for its duration without destroying it.
         if self.map_remote_enabled:
-            for rule in self.map_remote_rules:
-                if rule.get("active"):
-                    try:
-                        pattern = rule.get("pattern", "")
-                        target = rule.get("target", "")
-                        if re.search(pattern, flow.request.pretty_url):
-                            new_url = re.sub(pattern, target, flow.request.pretty_url)
-                            flow.request.url = new_url
-                            flow.request.headers["Host"] = flow.request.host
-                    except re.error:
-                        pass
+            if not self._apply_map_remote_rules(flow, self.agent_map_remote_rules):
+                self._apply_map_remote_rules(flow, self.map_remote_rules)
 
         if self.map_local_enabled:
-            for rule in self.map_local_rules:
-                pattern = rule.get("pattern", "")
-                strict_regex = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
-                rule_method = rule.get("method", "ANY").upper()
-
-                method_match = rule_method == "ANY" or rule_method == flow.request.method.upper()
-                if rule.get("active") and method_match and re.search(strict_regex, flow.request.pretty_url):
-                    try:
-                        status_code = int(rule.get("status", 200))
-                        headers_dict = {}
-                        try:
-                            if rule.get("headers"):
-                                headers_dict = json.loads(rule.get("headers"))
-                        except json.JSONDecodeError:
-                            headers_dict = {"Content-Type": "text/plain"}
-
-                        req_headers_mod = rule.get("req_headers_mod", {})
-                        if isinstance(req_headers_mod, dict):
-                            for k, v in req_headers_mod.items():
-                                if k:
-                                    flow.request.headers[k] = str(v)
-
-                        file_path = rule.get("file_path", "")
-                        body_source = rule.get("body_source", "inline")
-                        if body_source == "file" and file_path and os.path.isfile(file_path):
-                            import mimetypes
-                            body_bytes = await asyncio.to_thread(lambda p=file_path: open(p, "rb").read())
-                            if "Content-Type" not in headers_dict:
-                                mime, _ = mimetypes.guess_type(file_path)
-                                headers_dict["Content-Type"] = mime or "application/octet-stream"
-                        else:
-                            body_bytes = rule.get("body", "").encode("utf-8")
-
-                        headers_dict["X-Map-Local"] = "Active"
-                        flow.response = http.Response.make(status_code, body_bytes, headers_dict)
-                        return
-                    except Exception as e:
-                        flow.response = http.Response.make(500, f"Editor Error: {e}".encode())
-                        return
+            for rule in list(self.agent_map_local_rules) + list(self.map_local_rules):
+                if await self._apply_map_local_rule(flow, rule):
+                    return
 
         if self.breakpoints_enabled:
             for rule in self.breakpoint_rules:
@@ -231,10 +287,7 @@ class ProxyHooksMixin:
         if not self.is_recording:
             return
 
-        if self.throttle_profile == "Slow 3G":
-            await asyncio.sleep(2.0)
-        elif self.throttle_profile == "Fast 3G":
-            await asyncio.sleep(0.5)
+        await self._throttle()
 
         if self.disable_cache:
             flow.response.headers.pop("ETag", None)
@@ -331,6 +384,20 @@ class ProxyHooksMixin:
         except RuntimeError:
             pass
 
+        # Completing the store entry is what releases any agent blocked in
+        # wait_for() — see FlowStore._resolve_waiters.
+        self.flow_store.record_response(
+            flow_id=flow.id,
+            status=flow.response.status_code,
+            headers=flow.response.headers,
+            body=res_body,
+            is_image=res_is_image,
+            is_binary=res_is_binary,
+            res_bytes=update_data["res_bytes"],
+            duration_ms=round(duration_ms),
+            mocked=update_data["map_local"],
+        )
+
     async def websocket_message(self, flow: http.HTTPFlow):
         if not self.is_recording:
             return
@@ -367,3 +434,11 @@ class ProxyHooksMixin:
         """mitmproxy lifecycle hook — connection/protocol errors."""
         if self.scripts_manager.call_hooks('error', flow):
             await self._broadcast_scripts_list()
+
+        # A failed exchange is a result an agent may be waiting on ("did the
+        # app cope with the connection dropping?"), so it has to land in the
+        # store too — otherwise wait_for() sits there until it times out.
+        self.flow_store.record_error(
+            flow.id,
+            str(flow.error) if flow.error else "Connection error",
+        )

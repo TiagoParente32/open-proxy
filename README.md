@@ -41,6 +41,7 @@ OpenProxy is a network debugging proxy built for developers. Whether you need to
 - [🤖 Android Setup](#-android-setup)
 - [🍎 iOS Setup](#-ios-setup)
 - [🖥️ Desktop & Browser Setup](#️-desktop--browser-setup)
+- [🧠 AI Agent Integration (MCP)](#-ai-agent-integration-mcp)
 - [🔄 Auto-Update](#-auto-update)
 - [🛠️ Tech Stack](#️-tech-stack)
 - [💻 Local Development](#-local-development)
@@ -64,6 +65,7 @@ OpenProxy is a network debugging proxy built for developers. Whether you need to
 * **Network Throttling**: Simulate "Fast 3G" or "Slow 3G" network conditions.
 * **Aggressive Cache Busting**: One-click toggle to strip caching headers and force fresh responses.
 * **Auto-Update**: The app checks for new releases on startup and can update itself in one click.
+* **AI Agent Integration (MCP)**: Let Claude Code, Cursor, or any MCP client read captured traffic and mock endpoints — including traffic from mobile apps an agent otherwise can't see.
 * **Pro-Grade UI**: Ultra-compact toolbar, dark mode, right-click context menus, and split-pane layout.
 
 ---
@@ -190,6 +192,29 @@ Safari uses macOS system proxy and certificate settings — configure proxies un
 
 ### curl / CLI tools
 Export `http_proxy` / `https_proxy` environment variables pointing at OpenProxy, or pass `-x` directly to curl along with `--cacert ~/.mitmproxy/mitmproxy-ca-cert.pem` (macOS/Linux) or `%USERPROFILE%\.mitmproxy\mitmproxy-ca-cert.pem` (Windows). This works for curl, wget, pip, npm, and most HTTP clients.
+
+---
+
+## 🧠 AI Agent Integration (MCP)
+
+OpenProxy ships an [MCP](https://modelcontextprotocol.io) server that lets AI agents — Claude Code, Claude Desktop, Cursor, Zed — read captured traffic and mock endpoints while you work.
+
+The point isn't automating the UI. An agent can already `curl` an endpoint it controls; what it can't do is see what a **mobile app, native app, or third-party SDK** actually sent. That's the gap this closes.
+
+```bash
+pip install -e ./mcp-server
+claude mcp add openproxy -- openproxy-mcp
+```
+
+Then ask for things like:
+
+> Mock `/api/profile` to return a 500 and tell me how the Android app handles it.
+
+The agent installs the mock, you (or it, via `adb`) trigger the app, and it reports what happened — reading the *traffic that followed the mock*, which is usually a better signal than a screenshot: did the app retry in a tight loop, keep using a stale token after a 401, or leak an auth header to a third party on the retry?
+
+Mocks set by an agent are kept separate from the ones you build by hand in the UI, are matched ahead of them, and are cleared automatically if the agent disconnects — so a crashed agent never strands you with silently mocked traffic.
+
+See [`mcp-server/README.md`](mcp-server/README.md) for the full tool list and client configuration.
 
 ---
 

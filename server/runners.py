@@ -1,3 +1,4 @@
+import os
 import asyncio
 
 import websockets
@@ -76,15 +77,25 @@ async def run_proxy_forever(bridge, proxy_port):
                     pass
             await asyncio.sleep(1.5)
 
+def get_ws_port() -> int:
+    """UI/automation control port. Override to run a dev build alongside the
+    installed app, which already holds the default."""
+    try:
+        return int(os.environ.get("OPENPROXY_WS_PORT", "8765"))
+    except ValueError:
+        return 8765
+
+
 async def run_ws_forever(bridge):
     """Keeps the WebSocket server alive with Ping/Pong to detect dead sockets."""
+    ws_port = get_ws_port()
     while True:
         try:
-            print("[INFO] Starting WebSocket server on port 8765...")
+            print(f"[INFO] Starting WebSocket server on port {ws_port}...")
             async with websockets.serve(
                 bridge.websocket_handler,
                 "127.0.0.1",
-                8765,
+                ws_port,
                 ping_interval=20,
                 ping_timeout=20
             ):

@@ -1,0 +1,27 @@
+[project]
+name = "openproxy-mcp"
+version = "0.1.0"
+description = "MCP server for OpenProxy — read captured HTTP traffic and mock endpoints from an AI agent"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+dependencies = [
+    # 2.x renamed FastMCP -> MCPServer and moved the import path; server.py
+    # uses the 2.x surface, so don't relax this to allow 1.x.
+    "mcp>=2.0.0",
+    "websockets>=12.0",
+]
+
+[project.scripts]
+openproxy-mcp = "openproxy_mcp.server:main"
+
+[project.urls]
+Homepage = "https://github.com/TiagoParente32/open-proxy"
+Issues = "https://github.com/TiagoParente32/open-proxy/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["openproxy_mcp"]
