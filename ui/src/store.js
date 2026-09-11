@@ -174,6 +174,14 @@ export const activeChips = ref(loadState('activeChips', {
 export const throttleProfile = ref(loadState('throttleProfile', 'None'))
 export const disableCache = ref(loadState('disableCache', false))
 
+// Agent (MCP) activity.
+// Deliberately NOT persisted: this mirrors live backend state, and a stale
+// "agent is mocking your traffic" banner restored from localStorage would be
+// worse than no banner at all.
+export const agentConnected = ref(false)
+export const agentClients = ref([])
+export const agentScenario = ref(null)
+
 // Map Local
 export const showMapModal = ref(false)
 export const mapLocalRules = ref(loadState('mapLocalRules', []))
@@ -1155,6 +1163,24 @@ watch(toolbarVisibility, (val) => {
 let reconnectTimeout = null;
 let reconnectDelay = 1000;
 
+/**
+ * Force-clear whatever mock scenario an agent installed.
+ *
+ * The user must always be able to take their proxy back without hunting down
+ * the agent that grabbed it — an agent left mid-run is otherwise indistinguishable
+ * from a broken app.
+ */
+export const stopAgentScenario = () => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    wsConnection.send(JSON.stringify({
+        type: "AGENT_CLEAR_SCENARIO",
+        req_id: `ui-${Date.now()}`,
+    }))
+    // Optimistic: the backend broadcasts AGENT_STATE right after, which is
+    // what actually settles this.
+    agentScenario.value = null
+}
+
 export const toggleWgMode = (enabled, port) => {
     if (wsConnection?.readyState !== WebSocket.OPEN) return
     wgEnabled.value = enabled
@@ -1241,7 +1267,10 @@ export const initWebSocket = () => {
         reconnectTimeout = null;
     }
 
-    wsConnection = new WebSocket("ws://127.0.0.1:8765")
+    // Mirrors the backend's OPENPROXY_WS_PORT override. Without this, a dev
+    // build would silently attach to an installed OpenProxy's backend on 8765
+    // and show you that instance's traffic instead of its own.
+    wsConnection = new WebSocket(`ws://127.0.0.1:${import.meta.env.VITE_OPENPROXY_WS_PORT || 8765}`)
 
     wsConnection.onopen = () => {
         connectionStatus.value = '🟢 Intercepting Traffic'
@@ -1271,6 +1300,11 @@ export const initWebSocket = () => {
         }
         else if (payload.type === "ALERT") {
             alert(payload.message)
+        }
+        else if (payload.type === "AGENT_STATE") {
+            agentConnected.value = !!payload.data?.connected
+            agentClients.value = payload.data?.clients || []
+            agentScenario.value = payload.data?.scenario || null
         }
         else if (payload.type === "NEW_REQUEST") {
             _pendingNew.push(payload.data)
@@ -1626,6 +1660,12 @@ export const initWebSocket = () => {
 
     wsConnection.onclose = () => {
         connectionStatus.value = `🟡 Reconnecting in ${reconnectDelay / 1000}s...`
+
+        // We can no longer see what an agent is doing, so stop claiming to.
+        // The backend resends AGENT_STATE on reconnect.
+        agentConnected.value = false
+        agentClients.value = []
+        agentScenario.value = null
 
         reconnectTimeout = setTimeout(() => {
             initWebSocket()

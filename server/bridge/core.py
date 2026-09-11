@@ -15,6 +15,7 @@ class BridgeCore:
         # Subset of connected_clients that identified as automation clients and
         # are therefore excluded from UI broadcasts (see broadcast_to_ui).
         self.agent_clients = set()
+        self.agent_client_names = {}    # websocket -> client name, for the UI banner
         self.bg_tasks = set()
 
         self.is_recording = True

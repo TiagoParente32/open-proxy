@@ -69,11 +69,15 @@ class ProxyHooksMixin:
         elif profile == "Fast 3G":
             await asyncio.sleep(0.5)
 
-    async def _apply_map_local_rule(self, flow: http.HTTPFlow, rule) -> bool:
+    async def _apply_map_local_rule(self, flow: http.HTTPFlow, rule,
+                                    by_agent=False) -> bool:
         """Build a canned response for `rule` if it matches. True when served.
 
         Shared by the agent scenario rules and the UI's own map-local list so
-        both honour identical matching and body-source semantics.
+        both honour identical matching and body-source semantics. `by_agent`
+        tags the response so the UI can tell the user *why* a request was
+        mocked — traffic altered by an agent with no visible explanation is how
+        people end up debugging a problem that isn't theirs.
         """
         pattern = rule.get("pattern", "")
         strict_regex = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
@@ -111,6 +115,9 @@ class ProxyHooksMixin:
                 body_bytes = rule.get("body", "").encode("utf-8")
 
             headers_dict["X-Map-Local"] = "Active"
+            if by_agent:
+                scenario = (self.agent_scenario or {}).get("name", "agent")
+                headers_dict["X-OpenProxy-Agent"] = scenario
             flow.response = http.Response.make(status_code, body_bytes, headers_dict)
         except Exception as e:
             flow.response = http.Response.make(500, f"Editor Error: {e}".encode())
@@ -238,7 +245,10 @@ class ProxyHooksMixin:
                 self._apply_map_remote_rules(flow, self.map_remote_rules)
 
         if self.map_local_enabled:
-            for rule in list(self.agent_map_local_rules) + list(self.map_local_rules):
+            for rule in self.agent_map_local_rules:
+                if await self._apply_map_local_rule(flow, rule, by_agent=True):
+                    return
+            for rule in self.map_local_rules:
                 if await self._apply_map_local_rule(flow, rule):
                     return
 
@@ -373,7 +383,10 @@ class ProxyHooksMixin:
             "res_body": res_body,
             "res_is_image": res_is_image,
             "res_is_binary": res_is_binary,
-            "map_local": flow.response.headers.get("X-Map-Local") == "Active"
+            "map_local": flow.response.headers.get("X-Map-Local") == "Active",
+            # Names the scenario when an agent mocked this, so the UI can
+            # attribute it rather than showing an unexplained mock badge.
+            "agent_mock": flow.response.headers.get("X-OpenProxy-Agent"),
         }
 
         try:

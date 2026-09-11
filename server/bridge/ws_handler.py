@@ -33,6 +33,11 @@ class WsHandlerMixin:
 
             await websocket.send(json.dumps({"type": "SCRIPTS_LIST", "data": {"scripts": self.scripts_manager.state_list()}}))
 
+            # A UI opened mid-session must immediately see that an agent is
+            # attached and what it has mocked — otherwise the user debugs
+            # traffic an agent is quietly rewriting.
+            await websocket.send(json.dumps({"type": "AGENT_STATE", "data": self.agent_state()}))
+
             async for message in websocket:
                 payload = json.loads(message)
 
@@ -339,10 +344,13 @@ class WsHandlerMixin:
             self.connected_clients.discard(websocket)
             if websocket in self.agent_clients:
                 self.agent_clients.discard(websocket)
+                self.agent_client_names.pop(websocket, None)
                 # Don't leave mocks installed by an agent that has gone away:
                 # the user would be left with silently rewritten traffic and
                 # nothing in the UI explaining why.
                 if not self.agent_clients and self.agent_scenario:
                     name = self.agent_scenario.get("name")
                     print(f"[Agent] Disconnected — clearing scenario '{name}'", flush=True)
-                    await self._agent_clear_scenario()
+                    await self._agent_clear_scenario()   # broadcasts agent state
+                else:
+                    await self.broadcast_agent_state()

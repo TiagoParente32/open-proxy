@@ -200,6 +200,99 @@ async def test_ui_not_regressed(ws_port):
               ))
 
 
+async def test_ui_sees_agent_activity(ws_port):
+    """The UI must always be able to show who is driving the proxy and how.
+
+    Agent-mocked traffic that the user can't attribute is the failure mode this
+    whole surface exists to avoid — they end up debugging a problem that isn't
+    theirs. Every transition below has to reach the UI.
+    """
+    print("\n== UI sees agent activity ==")
+    ui = await websockets.connect(f"ws://127.0.0.1:{ws_port}")
+    try:
+        # Connect handshake now carries agent state so a UI opened mid-session
+        # isn't blind to an agent that attached earlier.
+        seen = {}
+        for _ in range(3):
+            msg = json.loads(await asyncio.wait_for(ui.recv(), timeout=10))
+            seen[msg["type"]] = msg
+        check("UI gets AGENT_STATE on connect", "AGENT_STATE" in seen, str(list(seen)))
+        proxy_port = seen["SYSTEM_INFO"]["data"]["port"]
+        check("no agent reported before one connects",
+              seen.get("AGENT_STATE", {}).get("data", {}).get("connected") is False)
+
+        agent = await websockets.connect(f"ws://127.0.0.1:{ws_port}")
+        try:
+            await agent_call(agent, "AGENT_HELLO", {"client": "test-agent"}, req_id="u1")
+            state = await _await_payload(ui, lambda m: m.get("type") == "AGENT_STATE"
+                                         and m["data"]["connected"])
+            check("UI is told when an agent connects", state is not None)
+            check("UI learns the agent's name",
+                  state and "test-agent" in state["data"]["clients"],
+                  str(state and state["data"]["clients"]))
+            check("connected-but-idle reports no scenario",
+                  state and state["data"]["scenario"] is None)
+
+            await agent_call(agent, "AGENT_RUN_SCENARIO", {
+                "name": "checkout 503",
+                "map_local": [{"active": True, "pattern": "*/api/checkout*",
+                               "method": "ANY", "status": 503, "body": "down"}],
+                "throttle": "Slow 3G",
+            }, req_id="u2")
+
+            state = await _await_payload(ui, lambda m: m.get("type") == "AGENT_STATE"
+                                         and m["data"]["scenario"])
+            check("UI is told when a scenario starts", state is not None)
+            scen = state["data"]["scenario"] if state else {}
+            check("UI gets the scenario name", scen.get("name") == "checkout 503")
+            check("UI gets the mocked patterns, not just a count",
+                  scen.get("mocks") and scen["mocks"][0]["pattern"] == "*/api/checkout*",
+                  str(scen.get("mocks")))
+            check("UI gets the mocked method", scen.get("mocks", [{}])[0].get("method") == "ANY")
+            check("UI gets the mocked status", scen.get("mocks", [{}])[0].get("status") == 503)
+            check("UI gets the throttle override", scen.get("throttle") == "Slow 3G")
+
+            # A mocked response must be attributable in the traffic table.
+            asyncio.create_task(asyncio.to_thread(
+                http_get, "http://mock.test/api/checkout", proxy_port))
+            upd = await _await_payload(
+                ui, lambda m: m.get("type") == "UPDATE_REQUEST" and m["data"].get("agent_mock"),
+                timeout=25)
+            check("mocked request is attributed to the agent in the traffic feed",
+                  upd is not None and upd["data"]["agent_mock"] == "checkout 503",
+                  str(upd and upd["data"].get("agent_mock")))
+
+            # The user must be able to take their proxy back without hunting
+            # down the agent.
+            await ui.send(json.dumps({"type": "AGENT_CLEAR_SCENARIO", "req_id": "ui-stop"}))
+            state = await _await_payload(ui, lambda m: m.get("type") == "AGENT_STATE"
+                                         and m["data"]["scenario"] is None)
+            check("UI can force-stop an agent scenario", state is not None)
+            code, _ = await asyncio.to_thread(http_get, "http://mock.test/api/checkout", proxy_port)
+            check("traffic really is unmocked after the UI stops it", code != 503, f"got {code}")
+        finally:
+            await agent.close()
+
+        state = await _await_payload(ui, lambda m: m.get("type") == "AGENT_STATE"
+                                     and not m["data"]["connected"])
+        check("UI is told when the agent disconnects", state is not None)
+    finally:
+        await ui.close()
+
+
+async def _await_payload(ws, predicate, timeout=20):
+    """Like _await_message but returns the matching payload (or None)."""
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
+        try:
+            msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
+        except asyncio.TimeoutError:
+            return None
+        if predicate(msg):
+            return msg
+    return None
+
+
 async def _await_message(ws, predicate, timeout=20):
     deadline = asyncio.get_running_loop().time() + timeout
     while asyncio.get_running_loop().time() < deadline:
@@ -260,6 +353,7 @@ async def main():
 
         await test_agent_surface(ws_port)
         await test_ui_not_regressed(ws_port)
+        await test_ui_sees_agent_activity(ws_port)
         await test_disconnect_clears_scenario(ws_port)
     finally:
         proc.terminate()

@@ -67,7 +67,9 @@ class AgentApiMixin:
                 # because the server can't tell a UI from an agent until asked.
                 self.agent_clients.add(websocket)
                 client = payload.get("client", "unknown")
+                self.agent_client_names[websocket] = client
                 print(f"[Agent] '{client}' connected", flush=True)
+                await self.broadcast_agent_state()
                 await self._agent_reply(websocket, req_id, data=self._agent_status())
                 return True
 
@@ -187,17 +189,24 @@ class AgentApiMixin:
             "name": name,
             "started_seq": self.flow_store.watermark(),
             "started_at": time.time(),
-            "map_local": len(normalised_local),
-            "map_remote": len(normalised_remote),
             "throttle": throttle,
+            # Rule summaries, not just counts: the UI shows the user exactly
+            # which endpoints an agent is intercepting, so unexpected responses
+            # are self-explanatory rather than a debugging rabbit hole.
+            "mocks": [
+                {"pattern": r["pattern"], "method": r["method"], "status": r["status"]}
+                for r in normalised_local
+            ],
+            "rewrites": [
+                {"pattern": r["pattern"], "target": r["target"]}
+                for r in normalised_remote
+            ],
         }
 
         print(f"[Agent] Scenario '{name}': {len(normalised_local)} mock(s), "
               f"{len(normalised_remote)} rewrite(s), throttle={throttle}", flush=True)
 
-        # Surface it to any connected UI. The Vue store ignores message types it
-        # doesn't know, so this is safe ahead of UI support landing.
-        await self.broadcast_to_ui("AGENT_SCENARIO", self.agent_scenario)
+        await self.broadcast_agent_state()
 
         return {"scenario": self.agent_scenario, "watermark": self.agent_scenario["started_seq"]}
 
@@ -226,8 +235,27 @@ class AgentApiMixin:
         self.agent_map_remote_rules = []
         self.agent_throttle_profile = None
         self.agent_scenario = None
-        await self.broadcast_to_ui("AGENT_SCENARIO", None)
+        await self.broadcast_agent_state()
         return {"cleared": previous}
+
+    # ---- UI visibility ---------------------------------------------------
+
+    def agent_state(self):
+        """What the UI needs to show who is driving the proxy and how.
+
+        Sent on UI connect and re-broadcast on every change, so a user can
+        always see that an agent is attached and which endpoints it has taken
+        over. Without this, agent-mocked traffic looks like a bug in the app
+        under test.
+        """
+        return {
+            "connected": len(self.agent_clients) > 0,
+            "clients": sorted(self.agent_client_names.values()),
+            "scenario": self.agent_scenario,
+        }
+
+    async def broadcast_agent_state(self):
+        await self.broadcast_to_ui("AGENT_STATE", self.agent_state())
 
     async def _agent_wait_for_flows(self, websocket, req_id, payload):
         try:

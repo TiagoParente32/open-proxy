@@ -26,6 +26,7 @@ import OnboardingModal from './components/OnboardingModal.vue'
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal.vue'
 import OsProxyWarningModal from './components/OsProxyWarningModal.vue'
 import CertTrustModal from './components/CertTrustModal.vue'
+import AgentActivityBanner from './components/AgentActivityBanner.vue'
 // Import just the logic needed for the top-level app overlay (WebSockets & Context Menu)
 import {
   initWebSocket,
@@ -416,6 +417,7 @@ const openBreakpointModalFromContext = () => {
   <div class="app-wrapper">
     <TitleBar />
     <AppToolbar />
+    <AgentActivityBanner />
     <FilterBar />
 
     <!-- Update Modal -->
