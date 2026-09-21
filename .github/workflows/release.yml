@@ -34,7 +34,14 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # The default GITHUB_TOKEN authenticates as github-actions[bot], which
+          # the "main" ruleset's pull_request rule can't bypass on a personal
+          # (non-org) repo — only the "Repository admin" role can be added to
+          # its bypass list. RELEASE_PAT is a fine-grained PAT (Contents:
+          # read/write, scoped to this repo) belonging to the repo admin, so
+          # the version-bump push below authenticates as an actor the ruleset
+          # is actually allowed to let through.
+          token: ${{ secrets.RELEASE_PAT }}
 
       - name: Skip if last commit is already a release bump
         id: guard
