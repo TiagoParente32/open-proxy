@@ -1707,6 +1707,12 @@ class ScriptsManager:
 # ============================================================================
 # 2. CORE BRIDGE LOGIC (Mitmproxy -> Vue UI)
 # ============================================================================
+# Raw byte cap for images inlined as base64 into a UI broadcast. Kept well
+# under the ~1MB WS message limit browsers enforce (base64 alone inflates
+# size ~33%, plus JSON/header overhead) so a large image can't kill every
+# connected client's WebSocket the moment it's captured.
+MAX_INLINE_IMAGE_BYTES = 700_000
+
 class ProxyUIBridge:
     def __init__(self, proxy_port):
         self.proxy_port = proxy_port
@@ -1812,12 +1818,18 @@ class ProxyUIBridge:
             if len(flow.request.raw_content) > 1000000 and not content_type.startswith("image/"):
                 req_body = "// [Request Body too large to display (Over 1MB)]"
             elif content_type.startswith("image/"):
-                try:
-                    b64_data = base64.b64encode(flow.request.raw_content).decode('utf-8')
-                    req_body = f"data:{content_type};base64,{b64_data}"
-                    req_is_image = True
-                except Exception:
-                    req_body = "// [Error encoding image data]"
+                # base64 inflates size ~33%, and this frame still has to fit under the
+                # WS client's hard ~1MB per-message limit alongside headers/metadata — a
+                # raw image with no cap here can blow past that and kill the connection.
+                if len(flow.request.raw_content) > MAX_INLINE_IMAGE_BYTES:
+                    req_body = "// [Request Body too large to display (Over 1MB)]"
+                else:
+                    try:
+                        b64_data = base64.b64encode(flow.request.raw_content).decode('utf-8')
+                        req_body = f"data:{content_type};base64,{b64_data}"
+                        req_is_image = True
+                    except Exception:
+                        req_body = "// [Error encoding image data]"
             else:
                 text = flow.request.get_text(strict=False)
                 if text is None:
@@ -1988,12 +2000,15 @@ class ProxyUIBridge:
             if len(flow.response.raw_content) > 1000000 and not content_type.startswith("image/"):
                 res_body = "// [Response Body too large to display (Over 1MB)]"
             elif content_type.startswith("image/"):
-                try:
-                    b64_data = base64.b64encode(flow.response.raw_content).decode('utf-8')
-                    res_body = f"data:{content_type};base64,{b64_data}"
-                    res_is_image = True
-                except Exception:
-                    res_body = "// [Error encoding image data]"
+                if len(flow.response.raw_content) > MAX_INLINE_IMAGE_BYTES:
+                    res_body = "// [Response Body too large to display (Over 1MB)]"
+                else:
+                    try:
+                        b64_data = base64.b64encode(flow.response.raw_content).decode('utf-8')
+                        res_body = f"data:{content_type};base64,{b64_data}"
+                        res_is_image = True
+                    except Exception:
+                        res_body = "// [Error encoding image data]"
             else:
                 flow.response.decode(strict=False)
                 text = flow.response.get_text(strict=False)
@@ -2034,12 +2049,15 @@ class ProxyUIBridge:
                             res_is_binary = False
                             content_type = flow.response.headers.get("Content-Type", "").lower()
                             if content_type.startswith("image/") and flow.response.raw_content:
-                                try:
-                                    b64_data = base64.b64encode(flow.response.raw_content).decode('utf-8')
-                                    res_body = f"data:{content_type};base64,{b64_data}"
-                                    res_is_image = True
-                                except Exception:
-                                    pass
+                                if len(flow.response.raw_content) > MAX_INLINE_IMAGE_BYTES:
+                                    res_body = "// [Response Body too large to display (Over 1MB)]"
+                                else:
+                                    try:
+                                        b64_data = base64.b64encode(flow.response.raw_content).decode('utf-8')
+                                        res_body = f"data:{content_type};base64,{b64_data}"
+                                        res_is_image = True
+                                    except Exception:
+                                        pass
                             break
                     except re.error:
                         pass
@@ -3334,7 +3352,13 @@ async def run_ws_forever(bridge):
                 "127.0.0.1",
                 8765,
                 ping_interval=20,
-                ping_timeout=20
+                ping_timeout=20,
+                # This socket only ever talks to our own Electron renderer on the
+                # same machine, never an untrusted network client. The library's
+                # default 1MB max_size was rejecting legitimate large payloads
+                # (e.g. a user's saved Map Local rules with big mock bodies) and
+                # closing the connection with code 1009 on every reconnect.
+                max_size=None
             ):
                 await asyncio.Future()
         except asyncio.CancelledError:
