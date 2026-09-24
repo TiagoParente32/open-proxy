@@ -201,7 +201,6 @@ const saveAndApplyRules = () => {
 </template>
 
 <style scoped>
-/* OVERLAY & MODAL */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--overlay); z-index: 99999; display: flex; justify-content: center; align-items: center; }
 .pm-split-modal { background: var(--bg-main); border-radius: 10px; border: 1px solid var(--border); width: 1000px; height: 650px; min-width: 600px; min-height: 420px; max-width: calc(100vw - 20px); max-height: calc(100vh - 40px); display: flex; flex-direction: row; box-shadow: var(--shadow-lg); overflow: hidden; position: relative; }
 .resize-edge { position: absolute; z-index: 10; }
@@ -212,7 +211,6 @@ const saveAndApplyRules = () => {
 .resize-ne { top: 0; right: 0; cursor: nesw-resize; } .resize-nw { top: 0; left: 0; cursor: nwse-resize; }
 .resize-se { bottom: 0; right: 0; cursor: nwse-resize; } .resize-sw { bottom: 0; left: 0; cursor: nesw-resize; }
 
-/* SIDEBAR STYLES */
 .pm-sidebar { width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
 .pm-sidebar-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-sidebar); }
 .pm-add-btn { background: var(--accent-muted); color: var(--accent); border: 1px solid var(--accent-border); padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
@@ -223,7 +221,6 @@ const saveAndApplyRules = () => {
 .pm-rule-item:hover { background: var(--bg-active); }
 .pm-rule-item.active { background: var(--accent-muted); border-left: 3px solid var(--accent); padding-left: 11px; }
 
-/* Checkbox */
 .pm-checkbox-container { display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer; user-select: none; width: 16px; height: 16px; flex-shrink: 0; margin: 0; }
 .pm-checkbox-container input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
 .pm-checkmark { position: absolute; top: 0; left: 0; height: 16px; width: 16px; background-color: var(--bg-deepest); border: 1px solid var(--fg-muted); border-radius: 4px; transition: border-color 0.2s, background-color 0.2s; box-sizing: border-box; }
@@ -233,7 +230,6 @@ const saveAndApplyRules = () => {
 .pm-checkbox-container input:checked ~ .pm-checkmark:after { display: block; }
 .pm-checkbox-container .pm-checkmark:after { left: 50%; top: 45%; width: 4px; height: 9px; border: solid white; border-width: 0 2px 2px 0; transform: translate(-50%, -50%) rotate(45deg); }
 
-/* Stacked Rule Text & Badges */
 .pm-rule-text-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; justify-content: center; gap: 4px; }
 .pm-rule-pattern { font-family: 'Consolas', monospace; font-size: 11px; color: var(--fg-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1; }
 .pm-rule-item.active .pm-rule-pattern { color: var(--fg-primary); font-weight: bold; }
@@ -243,13 +239,11 @@ const saveAndApplyRules = () => {
 .pm-badge.res { color: var(--success); background: var(--success-muted); border-color: rgba(16,185,129,0.3); }
 .pm-badge.none { color: var(--fg-muted); background: var(--bg-active); border-color: var(--border); }
 
-/* Delete button */
 .pm-rule-del { background: transparent; border: 1px solid transparent; color: var(--fg-muted); cursor: pointer; padding: 4px; border-radius: 5px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0; }
 .pm-rule-del:hover { background: var(--error-muted) !important; border-color: rgba(239,68,68,.3) !important; color: var(--error) !important; }
 
 .pm-empty-sidebar { padding: 40px 20px; text-align: center; color: var(--fg-placeholder); font-size: 12px; line-height: 1.6; }
 
-/* Sidebar Footer & Toggles */
 .pm-sidebar-footer { padding: 14px 16px; background: var(--bg-modal); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
 .toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--fg-muted); font-weight: 600; font-size: 12px; }
 .toggle.active { color: var(--accent); }
@@ -262,7 +256,6 @@ const saveAndApplyRules = () => {
 .ghost-btn { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; background: transparent; border: 1px solid var(--border); color: var(--fg-muted); border-radius: 5px; cursor: pointer; font-size: 11px; font-weight: 500; transition: all 0.15s; }
 .ghost-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); border-color: var(--fg-muted); }
 
-/* MAIN EDITOR STYLES */
 .pm-main-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-main); min-width: 0; }
 .pm-main-empty { flex: 1; display: flex; justify-content: center; align-items: center; color: var(--fg-placeholder); font-size: 13px; }
 .pm-header { display: flex; justify-content: space-between; align-items: center; padding: 0 16px; height: 44px; background: var(--bg-sidebar); border-bottom: 1px solid var(--border); flex-shrink: 0; }
@@ -272,7 +265,6 @@ const saveAndApplyRules = () => {
 
 .pm-editor-area { flex: 1; padding: 24px; display: flex; flex-direction: column; overflow-y: auto; }
 
-/* Configuration boxes */
 .pm-routing-box { background: var(--bg-sidebar); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
 .pm-routing-header { background: var(--bg-active); padding: 10px 16px; font-size: 12px; font-weight: 700; color: var(--fg-secondary); border-bottom: 1px solid var(--border); }
 .pm-routing-header.target-header { background: var(--accent-muted); color: var(--accent); border-bottom-color: var(--accent-border); }
@@ -285,7 +277,6 @@ const saveAndApplyRules = () => {
 .pm-routing-helper { font-size: 11px; color: var(--fg-muted); margin-top: 4px; }
 .pm-routing-arrow { display: flex; justify-content: center; align-items: center; padding: 16px 0; flex-shrink: 0; }
 
-/* Phase checkboxes */
 .pm-phase-options { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
 .pm-custom-checkbox-large { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 14px 16px; background: var(--bg-active); border: 1px solid var(--border); border-radius: 6px; transition: all 0.2s; user-select: none; }
 .pm-custom-checkbox-large:hover { border-color: var(--fg-muted); background: var(--bg-active); }

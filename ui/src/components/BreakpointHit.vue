@@ -32,7 +32,6 @@ const selectMethod = (method) => {
   showMethodMenu.value = false
 }
 
-// --- TWO-WAY URL SYNCING ---
 const syncUrlToParams = () => {
   if (!currentFlow.value) return
   const url = currentFlow.value.url || '';
@@ -73,22 +72,20 @@ const removeParamRow = (index) => {
   syncParamsToUrl()
 }
 
-// --- ACTIONS ---
 const execute = () => {
   if (!currentFlow.value) return
-  
+
   let parsedHeaders = {}
-  try { 
-    // This was the silent killer! Now it will loudly warn you.
-    parsedHeaders = JSON.parse(currentFlow.value.headersStr) 
+  try {
+    parsedHeaders = JSON.parse(currentFlow.value.headersStr)
   } catch(e) {
     alert("⚠️ Invalid JSON in Headers! Please remove trailing commas or fix quotes before executing.");
-    return; // Stops the UI from freezing the request!
+    return;
   }
-  
+
   resolveTrappedFlow('execute', currentFlow.value.id, {
     ...currentFlow.value,
-    // Safely enforce Integer types for status codes so Python doesn't crash
+    // Coerce to Integer — the Python backend expects an int status code, not a string
     status: currentFlow.value.status ? parseInt(currentFlow.value.status) : undefined,
     headers: parsedHeaders
   })
@@ -198,27 +195,22 @@ const drop = () => {
 </template>
 
 <style scoped>
-/* OVERLAY & MODAL */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--overlay); z-index: 99999; display: flex; justify-content: center; align-items: center; }
 .pm-modal { background: var(--bg-main); border-radius: 8px; width: 850px; height: 650px; display: flex; flex-direction: column; overflow: hidden; }
 
-/* BREAKPOINT SPECIFIC GLOW */
 .breakpoint-glow { border: 1px solid var(--color-breakpoint); box-shadow: 0 10px 40px var(--warning-muted); }
 .text-amber { color: var(--color-breakpoint) !important; }
 
-/* HEADER */
 .pm-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: var(--bg-card); border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .pm-title { font-size: 13px; font-weight: 700; }
 .pm-queue-badge { background: var(--warning-muted); color: var(--color-breakpoint); padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; border: 1px solid rgba(245,158,11,0.4); }
 
-/* OMNIBAR */
 .pm-omnibar-container { display: flex; gap: 8px; padding: 16px 20px 8px 20px; flex-shrink: 0; }
 .pm-omnibar { display: flex; flex: 1; align-items: center; background: var(--bg-deepest); border: 1px solid var(--border); border-radius: 6px; transition: border-color 0.2s; }
 .pm-omnibar:focus-within { border-color: var(--color-breakpoint); }
 .pm-divider { width: 1px; height: 24px; background: var(--border); }
 .pm-url-input { flex: 1; background: transparent; border: none; color: var(--fg-secondary); padding: 10px 12px; font-size: 13px; outline: none; font-family: 'Consolas', monospace; }
 
-/* RESPONSE OMNIBAR STYLES */
 .read-only-bar { background: var(--bg-sidebar); border-color: var(--border); }
 .read-only-url { flex: 1; color: var(--fg-muted); padding: 10px 12px; font-size: 13px; font-family: 'Consolas', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pm-status-wrapper { display: flex; align-items: center; padding: 0 12px; gap: 8px; }
@@ -226,7 +218,6 @@ const drop = () => {
 .pm-status-input { background: var(--bg-deepest); border: 1px solid var(--border); color: var(--success); padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; width: 60px; text-align: center; outline: none; transition: border 0.2s; }
 .pm-status-input:focus { border-color: var(--success); }
 
-/* CUSTOM METHOD DROPDOWN */
 .pm-method-wrapper { position: relative; user-select: none; }
 .pm-method-display { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 10px 16px; font-weight: 700; font-size: 13px; min-width: 90px; transition: background 0.2s; border-radius: 6px 0 0 6px; cursor: pointer; }
 .pm-method-display:hover { background: var(--surface-hover); }
@@ -238,7 +229,6 @@ const drop = () => {
 .pm-method-option { padding: 8px 16px; font-size: 12px; font-weight: 700; cursor: pointer; transition: background 0.1s; }
 .pm-method-option:hover { background: var(--surface-hover-strong); }
 
-/* Method Colors */
 .get { color: var(--method-get); }
 .post { color: var(--method-post); }
 .put { color: var(--method-put); }
@@ -246,20 +236,17 @@ const drop = () => {
 .patch { color: var(--method-patch); }
 .options, .head { color: var(--method-other); }
 
-/* TABS */
 .pm-tabs { display: flex; gap: 24px; padding: 0 24px; border-bottom: 1px solid var(--border); flex-shrink: 0; margin-top: 8px; }
 .pm-tab { color: var(--fg-muted); font-size: 13px; font-weight: 500; padding: 10px 0; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
 .pm-tab:hover { color: var(--fg-secondary); }
 .pm-tab.active { color: var(--fg-secondary); border-bottom-color: var(--color-breakpoint); }
 
-/* EDITOR AREA */
 .pm-editor-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-deepest); overflow: hidden; }
 .pm-editor-wrapper { display: flex; flex-direction: column; height: 100%; }
 .pm-helper-text { font-size: 11px; color: var(--fg-muted); padding: 8px 24px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-card); }
 .pm-codemirror { flex: 1; overflow: hidden; font-size: 13px; }
 .pm-codemirror :deep(.cm-editor) { height: 100% !important; }
 
-/* PARAMS GRID */
 .pm-params-container { padding: 16px 24px; overflow-y: auto; flex: 1; }
 .pm-param-header { display: flex; font-size: 11px; color: var(--fg-muted); font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
 .pm-param-col { flex: 1; padding: 0 8px; }
@@ -270,7 +257,6 @@ const drop = () => {
 .pm-param-del { background: transparent; border: none; color: var(--fg-placeholder); cursor: pointer; width: 32px; font-size: 14px; transition: color 0.2s; display: flex; align-items: center; justify-content: center; height: 100%; }
 .pm-param-del:hover { color: var(--error); }
 
-/* FOOTER ACTIONS */
 .pm-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 20px; background: var(--bg-sidebar); border-top: 1px solid var(--border); flex-shrink: 0; }
 .pm-btn-drop { background: transparent; color: var(--error); border: 1px solid var(--error-muted); border-radius: 6px; padding: 8px 24px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; }
 .pm-btn-drop:hover { background: var(--error-muted); border-color: var(--error); }

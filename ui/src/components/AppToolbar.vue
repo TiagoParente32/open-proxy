@@ -96,12 +96,10 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
         @click="toggleRecording"
         :title="isRecording ? 'Pause Intercepting' : 'Start Intercepting'"
       >
-        <!-- Pause icon -->
         <svg v-if="isRecording" style="min-width: 11px; min-height: 11px; fill: currentColor; stroke: none;" width="11" height="11" viewBox="0 0 24 24">
           <rect x="5" y="3" width="4" height="18" rx="1"/>
           <rect x="15" y="3" width="4" height="18" rx="1"/>
         </svg>
-        <!-- Play icon -->
         <svg v-else style="min-width: 11px; min-height: 11px; fill: currentColor; stroke: none;" width="11" height="11" viewBox="0 0 24 24">
           <polygon points="5,3 19,12 5,21"/>
         </svg>
@@ -318,7 +316,6 @@ button,
 .toolbar-group.right { justify-content: flex-end; }
 .toolbar-center     { display: flex; align-items: center; justify-content: center; flex: 0 1 auto; }
 
-/* --- Record / Pause --- */
 .action-btn {
   display: flex; align-items: center; justify-content: center;
   height: 22px; width: 22px;
@@ -336,7 +333,6 @@ button,
 .action-btn.record-action { background: rgba(16,185,129,.15); color: var(--success); border-color: rgba(16,185,129,.3); }
 .action-btn.record-action:hover { background: rgba(16,185,129,.25); }
 
-/* --- Icon buttons (Compose, Clear) --- */
 .icon-btn {
   display: flex; align-items: center; justify-content: center;
   height: 22px; width: 24px;
@@ -352,7 +348,6 @@ button,
 .icon-btn.danger:hover { background: rgba(239,68,68,.1); }
 .icon-btn.danger:hover svg { stroke: var(--error) !important; }
 
-/* --- Center badge --- */
 .app-badge {
   display: flex; align-items: center; gap: 6px;
   height: 22px;
@@ -374,7 +369,6 @@ button,
 .divider-dot { color: var(--fg-placeholder); font-size: 9px; }
 .host       { color: var(--fg-muted); font-family: 'Consolas', monospace; font-size: 10px; }
 
-/* --- Pill buttons --- */
 .secondary-pill {
   display: flex; align-items: center; justify-content: center;
   height: 20px;
@@ -427,11 +421,9 @@ button,
   border-color: var(--accent);
 }
 
-/* --- Cert / Throttle wrappers --- */
 .cert-wrapper,
 .throttle-wrapper { position: relative; }
 
-/* --- Dropdown --- */
 .custom-dropdown-menu {
   position: absolute;
   top: calc(100% + 4px);
@@ -459,7 +451,6 @@ button,
 .dropdown-item.selected { color: #10b981; background: rgba(16,185,129,.1); }
 .dropdown-sep { height: 1px; background: var(--border); margin: 4px 0; }
 
-/* --- Bust Cache toggle --- */
 .divider { width: 1px; height: 14px; background: var(--border); margin: 0 2px; flex-shrink: 0; }
 .toggle {
   display: flex; align-items: center; gap: 4px;
