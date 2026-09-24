@@ -9,6 +9,7 @@ from mitmproxy import http
 from mitmproxy.proxy.mode_servers import WireGuardServerInstance
 
 from server import system_helpers
+from server.constants import MAX_INLINE_IMAGE_BYTES
 
 
 class ProxyHooksMixin:
@@ -80,12 +81,18 @@ class ProxyHooksMixin:
             if len(flow.request.raw_content) > 1000000 and not content_type.startswith("image/"):
                 req_body = "// [Request Body too large to display (Over 1MB)]"
             elif content_type.startswith("image/"):
-                try:
-                    b64_data = base64.b64encode(flow.request.raw_content).decode('utf-8')
-                    req_body = f"data:{content_type};base64,{b64_data}"
-                    req_is_image = True
-                except Exception:
-                    req_body = "// [Error encoding image data]"
+                # base64 inflates size ~33%, and this frame still has to fit under the
+                # WS client's hard ~1MB per-message limit alongside headers/metadata — a
+                # raw image with no cap here can blow past that and kill the connection.
+                if len(flow.request.raw_content) > MAX_INLINE_IMAGE_BYTES:
+                    req_body = "// [Request Body too large to display (Over 1MB)]"
+                else:
+                    try:
+                        b64_data = base64.b64encode(flow.request.raw_content).decode('utf-8')
+                        req_body = f"data:{content_type};base64,{b64_data}"
+                        req_is_image = True
+                    except Exception:
+                        req_body = "// [Error encoding image data]"
             else:
                 text = flow.request.get_text(strict=False)
                 if text is None:
@@ -254,12 +261,15 @@ class ProxyHooksMixin:
             if len(flow.response.raw_content) > 1000000 and not content_type.startswith("image/"):
                 res_body = "// [Response Body too large to display (Over 1MB)]"
             elif content_type.startswith("image/"):
-                try:
-                    b64_data = base64.b64encode(flow.response.raw_content).decode('utf-8')
-                    res_body = f"data:{content_type};base64,{b64_data}"
-                    res_is_image = True
-                except Exception:
-                    res_body = "// [Error encoding image data]"
+                if len(flow.response.raw_content) > MAX_INLINE_IMAGE_BYTES:
+                    res_body = "// [Response Body too large to display (Over 1MB)]"
+                else:
+                    try:
+                        b64_data = base64.b64encode(flow.response.raw_content).decode('utf-8')
+                        res_body = f"data:{content_type};base64,{b64_data}"
+                        res_is_image = True
+                    except Exception:
+                        res_body = "// [Error encoding image data]"
             else:
                 flow.response.decode(strict=False)
                 text = flow.response.get_text(strict=False)
@@ -300,12 +310,15 @@ class ProxyHooksMixin:
                             res_is_binary = False
                             content_type = flow.response.headers.get("Content-Type", "").lower()
                             if content_type.startswith("image/") and flow.response.raw_content:
-                                try:
-                                    b64_data = base64.b64encode(flow.response.raw_content).decode('utf-8')
-                                    res_body = f"data:{content_type};base64,{b64_data}"
-                                    res_is_image = True
-                                except Exception:
-                                    pass
+                                if len(flow.response.raw_content) > MAX_INLINE_IMAGE_BYTES:
+                                    res_body = "// [Response Body too large to display (Over 1MB)]"
+                                else:
+                                    try:
+                                        b64_data = base64.b64encode(flow.response.raw_content).decode('utf-8')
+                                        res_body = f"data:{content_type};base64,{b64_data}"
+                                        res_is_image = True
+                                    except Exception:
+                                        pass
                             break
                     except re.error:
                         pass

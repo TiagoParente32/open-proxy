@@ -86,7 +86,13 @@ async def run_ws_forever(bridge):
                 "127.0.0.1",
                 8765,
                 ping_interval=20,
-                ping_timeout=20
+                ping_timeout=20,
+                # This socket only ever talks to our own Electron renderer on the
+                # same machine, never an untrusted network client. The library's
+                # default 1MB max_size was rejecting legitimate large payloads
+                # (e.g. a user's saved Map Local rules with big mock bodies) and
+                # closing the connection with code 1009 on every reconnect.
+                max_size=None
             ):
                 await asyncio.Future()
         except asyncio.CancelledError:

@@ -1154,6 +1154,7 @@ watch(toolbarVisibility, (val) => {
 // ============================================================================
 let reconnectTimeout = null;
 let reconnectDelay = 1000;
+let stableConnectionTimeout = null;
 
 export const toggleWgMode = (enabled, port) => {
     if (wsConnection?.readyState !== WebSocket.OPEN) return
@@ -1245,7 +1246,11 @@ export const initWebSocket = () => {
 
     wsConnection.onopen = () => {
         connectionStatus.value = '🟢 Intercepting Traffic'
-        reconnectDelay = 1000;
+        // Only reset the backoff once the connection has actually stayed open a
+        // few seconds — resetting it immediately would let a connect-then-die
+        // failure (e.g. an oversized broadcast) retry every second forever
+        // instead of backing off like the exponential delay below intends.
+        stableConnectionTimeout = setTimeout(() => { reconnectDelay = 1000 }, 3000)
 
         syncMapLocalRules()
         syncBreakpointRules()
@@ -1625,6 +1630,11 @@ export const initWebSocket = () => {
     }
 
     wsConnection.onclose = () => {
+        if (stableConnectionTimeout) {
+            clearTimeout(stableConnectionTimeout);
+            stableConnectionTimeout = null;
+        }
+
         connectionStatus.value = `🟡 Reconnecting in ${reconnectDelay / 1000}s...`
 
         reconnectTimeout = setTimeout(() => {

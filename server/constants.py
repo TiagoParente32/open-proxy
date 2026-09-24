@@ -29,3 +29,9 @@ GITHUB_REPO      = "TiagoParente32/open-proxy"
 OPENPROXY_DATA_DIR = os.path.join(os.path.expanduser("~"), ".openproxy")
 SCRIPTS_DIR        = os.path.join(OPENPROXY_DATA_DIR, "scripts")
 SCRIPTS_META_FILE  = os.path.join(OPENPROXY_DATA_DIR, "scripts_meta.json")
+
+# Raw byte cap for images inlined as base64 into a UI broadcast. Kept well
+# under the ~1MB WS message limit browsers enforce (base64 alone inflates
+# size ~33%, plus JSON/header overhead) so a large image can't kill every
+# connected client's WebSocket the moment it's captured.
+MAX_INLINE_IMAGE_BYTES = 700_000
