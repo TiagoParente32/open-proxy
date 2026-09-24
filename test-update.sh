@@ -19,6 +19,8 @@
 #   - Click "Update Now" to test the full download + replace flow
 #   - The app will quit and relaunch from /Applications/OpenProxy.app
 #   - Check /tmp/openproxy_update_*/update.log if anything goes wrong
+#   - Once it's back, the script checks the MCP launcher in ~/.openproxy/bin
+#     points at the updated bundle and still answers an MCP initialize
 set -e
 cd "$(dirname "$0")"
 
@@ -32,13 +34,15 @@ if [ "$NO_BUILD" != "--no-build" ]; then
 fi
 
 # ── 2. Find the right zip for this machine ────────────────────────────────────
+# Newest first (-t): dist-electron/ accumulates zips from earlier versions, and
+# alphabetical order would quietly serve the oldest one as the "update".
 ARCH=$(uname -m)
 if [ "$ARCH" = "arm64" ]; then
-  ZIP=$(ls dist-electron/*arm64-mac*.zip 2>/dev/null | head -1)
-  [ -z "$ZIP" ] && ZIP=$(ls dist-electron/*-mac*.zip 2>/dev/null | head -1)
+  ZIP=$(ls -t dist-electron/*arm64-mac*.zip 2>/dev/null | head -1)
+  [ -z "$ZIP" ] && ZIP=$(ls -t dist-electron/*-mac*.zip 2>/dev/null | head -1)
 else
-  ZIP=$(ls dist-electron/*-mac*.zip 2>/dev/null | grep -v arm64 | head -1)
-  [ -z "$ZIP" ] && ZIP=$(ls dist-electron/*-mac*.zip 2>/dev/null | head -1)
+  ZIP=$(ls -t dist-electron/*-mac*.zip 2>/dev/null | grep -v arm64 | head -1)
+  [ -z "$ZIP" ] && ZIP=$(ls -t dist-electron/*-mac*.zip 2>/dev/null | head -1)
 fi
 
 if [ -z "$ZIP" ]; then
@@ -102,3 +106,30 @@ APP_PID=$!
 wait $APP_PID 2>/dev/null || true
 kill $SERVER_PID 2>/dev/null || true
 echo "✓ Done. Server stopped."
+
+# ── 6. MCP launcher check against the relaunched app ─────────────────────────
+# The update swapped the bundle; the launcher the backend writes on startup
+# must now point into the new one and still serve MCP. This is the "register
+# once, keep updating" contract for agents, so it's checked here rather than
+# left to the user to notice.
+SHIM="$HOME/.openproxy/bin/openproxy-mcp"
+echo ""
+echo "→ Waiting for the relaunched app (up to 90s)..."
+for i in $(seq 1 90); do
+  if nc -z 127.0.0.1 8765 2>/dev/null; then break; fi
+  sleep 1
+done
+sleep 2
+if [ ! -x "$SHIM" ]; then
+  echo "✗ MCP launcher missing: $SHIM"; exit 1
+fi
+if ! grep -q "$(cd "$(dirname "$APP")" && pwd)/$(basename "$APP")" "$SHIM"; then
+  echo "✗ MCP launcher does not point at the relaunched app:"; tail -1 "$SHIM"; exit 1
+fi
+echo "✓ Launcher points at the relaunched bundle: $(tail -1 "$SHIM")"
+INIT='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-update","version":"0"}}}'
+if printf '%s\n' "$INIT" | "$SHIM" 2>/dev/null | head -c 4000 | grep -q '"serverInfo"'; then
+  echo "✓ MCP launcher answers initialize from the updated app"
+else
+  echo "✗ MCP launcher did not answer initialize"; exit 1
+fi

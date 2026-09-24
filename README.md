@@ -201,10 +201,13 @@ OpenProxy ships an [MCP](https://modelcontextprotocol.io) server that lets AI ag
 
 The point isn't automating the UI. An agent can already `curl` an endpoint it controls; what it can't do is see what a **mobile app, native app, or third-party SDK** actually sent. That's the gap this closes.
 
+The server ships inside the app — nothing to install. Open **Tools → Connect an AI Agent (MCP)…** for the exact path, or:
+
 ```bash
-pip install -e ./mcp-server
-claude mcp add openproxy -- openproxy-mcp
+claude mcp add openproxy --scope user -- ~/.openproxy/bin/openproxy-mcp
 ```
+
+That launcher is refreshed on every start to run the installed build, so it keeps working across updates.
 
 Then ask for things like:
 
