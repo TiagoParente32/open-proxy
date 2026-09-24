@@ -55,6 +55,7 @@ const MENUS = [
           { label: 'Browser / Desktop', action: () => op()?.openCertSetup('browser') },
         ],
       },
+      { label: 'Connect an AI Agent (MCP)…', action: () => op()?.openMcpSetup() },
       { type: 'separator' },
       {
         label: 'Throttle',

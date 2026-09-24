@@ -174,6 +174,99 @@ export const activeChips = ref(loadState('activeChips', {
 export const throttleProfile = ref(loadState('throttleProfile', 'None'))
 export const disableCache = ref(loadState('disableCache', false))
 
+// Agent (MCP) activity.
+// Deliberately NOT persisted: this mirrors live backend state, and a stale
+// "agent is mocking your traffic" banner restored from localStorage would be
+// worse than no banner at all.
+export const agentConnected = ref(false)
+export const agentClients = ref([])
+export const agentScenario = ref(null)
+
+// Setup walkthrough for the MCP server. Not persisted — it's a reference
+// window, not a state machine, so it always opens at step 1.
+export const showMcpSetupModal = ref(false)
+
+// Absolute path of the launcher the backend writes for the bundled MCP server
+// (~/.openproxy/bin/openproxy-mcp). Stable across updates and relocations, so
+// it's what the setup window tells people to register. Null until the backend
+// reports it, or if it couldn't write the file.
+export const mcpCommand = ref(null)
+
+// Agent-owned rules, surfaced in the Map Local / Map Remote modals alongside
+// the user's own. These mirror backend state and are deliberately kept out of
+// `mapLocalRules` / `mapRemoteRules`: those two are persisted to localStorage
+// and pushed back to the backend as the user's rules on every change, so
+// merging agent rules in would both outlive the agent and overwrite the user's
+// setup. The backend keeps the two lists apart for the same reason (see
+// server/bridge/agent_api.py).
+//
+// They're not read-only, though — see `agentRuleProxy`, which lets the normal
+// editors write to them as per-field overrides.
+export const agentMocks = computed(() => agentScenario.value?.mocks || [])
+export const agentRewrites = computed(() => agentScenario.value?.rewrites || [])
+
+// Which agent mock the Map Local editor is showing. Lives here rather than in
+// the modal so the traffic table can open the editor on the rule that mocked a
+// given row. Mutually exclusive with `selectedRuleId` — the modal enforces it.
+export const selectedAgentMockKey = ref(null)
+
+// Anchored glob, same as the backend's map-local matcher.
+const globMatches = (pattern, url) => {
+    if (!pattern) return false
+    const re = '^' + pattern.split('*').map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$'
+    try { return new RegExp(re).test(url) } catch { return false }
+}
+
+/** Open Map Local on the agent rule that mocked `req`, if it's still live. */
+export const openMapLocalForAgentMock = (req) => {
+    const method = (req.method || '').toUpperCase()
+    const hit = agentMocks.value.find(m =>
+        ((m.method || 'ANY') === 'ANY' || m.method.toUpperCase() === method)
+        && globMatches(m.pattern, req.url)
+    )
+    if (hit) {
+        selectedAgentMockKey.value = hit.key
+        selectedRuleId.value = null
+    }
+    closeAllModals()
+    showMapModal.value = true
+}
+
+// One line describing a mock's agent-only extras (latency, response sequence),
+// or null. The editor has no controls for these, so it shows them as text.
+export const describeMockExtras = (rule) => {
+    if (!rule) return null
+    const parts = []
+    const seq = rule.responses
+    if (Array.isArray(seq) && seq.length) {
+        const steps = seq.map(s => s.status ?? rule.status ?? 200).join(' → ')
+        parts.push(`Serves ${steps}${rule.sequence_mode === 'cycle' ? ', then repeats' : ', then holds the last'}`)
+    }
+    if (rule.delay_ms) parts.push(`+${rule.delay_ms} ms delay`)
+    return parts.length ? parts.join(' · ') : null
+}
+
+// Recent agent actions, for the banner's one-line "what is it doing" strip.
+// Not persisted — same reasoning as the scenario itself.
+export const agentActivity = ref([])
+export const latestAgentActivity = computed(() =>
+    agentActivity.value.length ? agentActivity.value[agentActivity.value.length - 1] : null
+)
+
+// Fields the user has taken over on agent-owned rules, keyed by the identity
+// the backend filed them under. Persisted and replayed on connect so a hand
+// edit survives both the agent's next scenario and an app restart.
+export const agentRuleOverrides = ref(loadState('agentRuleOverrides', {}))
+export const agentRemoteOverrides = ref(loadState('agentRemoteOverrides', {}))
+
+// Who to credit in the rule lists. Matches AgentActivityBanner's wording.
+export const agentLabel = computed(() => {
+    const names = agentClients.value
+    if (names.length === 1) return names[0]
+    if (names.length > 1) return `${names.length} agents`
+    return 'MCP agent'
+})
+
 // Map Local
 export const showMapModal = ref(false)
 export const mapLocalRules = ref(loadState('mapLocalRules', []))
@@ -372,6 +465,7 @@ export const closeAllModals = () => {
     showDeviceSetupModal.value  = false
     showScriptingModal.value    = false
     showIgnoreHostsModal.value  = false
+    showMcpSetupModal.value     = false
 }
 
 // ============================================================================
@@ -1091,6 +1185,9 @@ watch(mapLocalRules, (newVals) => {
     syncMapLocalRules()
 }, { deep: true })
 
+watch(agentRuleOverrides, (val) => saveState('agentRuleOverrides', val), { deep: true })
+watch(agentRemoteOverrides, (val) => saveState('agentRemoteOverrides', val), { deep: true })
+
 watch(enableMapRemote, (val) => {
     saveState('enableMapRemote', val)
     if (wsConnection?.readyState === WebSocket.OPEN) {
@@ -1154,6 +1251,213 @@ watch(toolbarVisibility, (val) => {
 // ============================================================================
 let reconnectTimeout = null;
 let reconnectDelay = 1000;
+
+/**
+ * Force-clear whatever mock scenario an agent installed.
+ *
+ * The user must always be able to take their proxy back without hunting down
+ * the agent that grabbed it — an agent left mid-run is otherwise indistinguishable
+ * from a broken app.
+ */
+export const stopAgentScenario = () => {
+    if (wsConnection?.readyState !== WebSocket.OPEN) return
+    wsConnection.send(JSON.stringify({
+        type: "AGENT_CLEAR_SCENARIO",
+        req_id: `ui-${Date.now()}`,
+    }))
+    // Optimistic: the backend broadcasts AGENT_STATE right after, which is
+    // what actually settles this.
+    agentScenario.value = null
+}
+
+const overrideTable = (kind) => (kind === 'remote' ? agentRemoteOverrides : agentRuleOverrides)
+
+// Keystrokes are coalesced per rule+kind. Without this, every character typed
+// into a mock body is a round trip that rebuilds and rebroadcasts the whole
+// scenario, and the echo lands mid-word.
+const _pendingOverrides = new Map()
+const OVERRIDE_FLUSH_MS = 250
+
+/**
+ * Take over one or more fields of an agent-owned rule.
+ *
+ * The edit is filed against the rule's identity rather than its position, so it
+ * re-applies when the agent reinstalls the same rule in a later scenario.
+ * That's the whole point: an agent re-running a test must not silently undo a
+ * hand edit the user made to it.
+ */
+export const setAgentRuleOverride = (key, fields, kind = 'local') => {
+    if (!key) return
+    const table = overrideTable(kind)
+    table.value = {
+        ...table.value,
+        [key]: { ...(table.value[key] || {}), ...fields },
+    }
+
+    const id = `${kind}:${key}`
+    const pending = _pendingOverrides.get(id) || { fields: {}, timer: null }
+    Object.assign(pending.fields, fields)
+    clearTimeout(pending.timer)
+    pending.timer = setTimeout(() => {
+        _pendingOverrides.delete(id)
+        if (wsConnection?.readyState === WebSocket.OPEN) {
+            wsConnection.send(JSON.stringify({
+                type: "SET_AGENT_RULE_OVERRIDE", kind, key, fields: pending.fields,
+            }))
+        }
+    }, OVERRIDE_FLUSH_MS)
+    _pendingOverrides.set(id, pending)
+}
+
+/** Hand a rule (or all of them) back to the agent, restoring its own values. */
+export const clearAgentRuleOverride = (key, kind = 'local') => {
+    const table = overrideTable(kind)
+    if (key) {
+        _pendingOverrides.delete(`${kind}:${key}`)
+        const next = { ...table.value }
+        delete next[key]
+        table.value = next
+    } else {
+        table.value = {}
+    }
+    if (wsConnection?.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({
+            type: "CLEAR_AGENT_RULE_OVERRIDE", kind, key: key || null,
+        }))
+    }
+}
+
+/**
+ * A live agent-owned rule dressed up as an ordinary editable rule.
+ *
+ * This exists so the Map Local and Map Remote editors need exactly one code
+ * path. An agent's rule looks like any other rule to them — `v-model` works,
+ * the status autocomplete works, the header grids work — but every write turns
+ * into a per-field override instead of mutating a list we don't own.
+ *
+ * Reads go through `live()` rather than capturing the rule object, because the
+ * backend replaces the whole scenario snapshot on each broadcast. That also
+ * keeps the proxy's *identity* stable per key, which matters: the editors watch
+ * `activeRule` to reload their header/param grids, and a fresh object on every
+ * broadcast would wipe those grids out from under someone mid-edit.
+ */
+const _agentProxies = new Map()
+export const agentRuleProxy = (key, kind = 'local') => {
+    const id = `${kind}:${key}`
+    if (_agentProxies.has(id)) return _agentProxies.get(id)
+
+    const live = () => (kind === 'remote' ? agentRewrites.value : agentMocks.value)
+        .find(r => r.key === key)
+
+    const proxy = new Proxy({}, {
+        get(_t, prop) {
+            if (prop === 'agentKind') return kind
+            if (prop === 'key') return key
+            // The editors key their lists and watchers off `id`. Agent rules
+            // have none, so hand out a stable synthetic one.
+            if (prop === 'id') return id
+            return live()?.[prop]
+        },
+        set(_t, prop, value) {
+            const rule = live()
+            if (!rule || prop === 'id' || prop === 'key' || prop === 'overridden') return true
+            if (rule[prop] === value) return true
+            // Write locally first so typing stays responsive; the debounced
+            // send below is what actually makes it stick.
+            rule[prop] = value
+            if (!rule.overridden?.includes(prop)) {
+                rule.overridden = [...(rule.overridden || []), prop].sort()
+            }
+            setAgentRuleOverride(key, { [prop]: value }, kind)
+            return true
+        },
+        has(_t, prop) { return prop in (live() || {}) },
+        ownKeys() { return Reflect.ownKeys(live() || {}) },
+        getOwnPropertyDescriptor(_t, prop) {
+            const rule = live()
+            if (!rule || !(prop in rule)) return undefined
+            return { value: rule[prop], writable: true, enumerable: true, configurable: true }
+        },
+    })
+    _agentProxies.set(id, proxy)
+    return proxy
+}
+
+/**
+ * Overlay locally-held overrides onto a scenario snapshot from the backend.
+ *
+ * The backend applies the same overrides, so this normally changes nothing —
+ * it matters for the window between a keystroke and the debounced send, where
+ * an unrelated broadcast (the agent installing a rule elsewhere, say) would
+ * otherwise echo back the pre-edit value and undo what was just typed.
+ */
+const mergeAgentOverrides = (scenario) => {
+    if (!scenario) return scenario
+    const overlay = (rules, table) => (rules || []).map(rule => {
+        const fields = table.value[rule.key]
+        if (!fields) return rule
+        return {
+            ...rule, ...fields,
+            overridden: [...new Set([...(rule.overridden || []), ...Object.keys(fields)])].sort(),
+        }
+    })
+    return {
+        ...scenario,
+        mocks: overlay(scenario.mocks, agentRuleOverrides),
+        rewrites: overlay(scenario.rewrites, agentRemoteOverrides),
+    }
+}
+
+/**
+ * Copy an agent's rules into the user's own lists.
+ *
+ * Runs automatically (switched off) when an agent disconnects mid-scenario, and
+ * on demand from the "Copy to my rules" button. Rules are matched by
+ * method+pattern so adopting twice updates in place instead of piling up
+ * duplicates the user then has to prune by hand.
+ */
+export const adoptAgentScenario = (scenario, { active = false } = {}) => {
+    if (!scenario) return { mocks: 0, rewrites: 0 }
+
+    const localKey = (r) => `${(r.method || 'ANY').toUpperCase()}|${r.pattern || ''}`
+    const existingLocal = new Map(mapLocalRules.value.map(r => [localKey(r), r]))
+
+    for (const m of scenario.mocks || []) {
+        const adopted = {
+            active,
+            pattern: m.pattern || '',
+            method: m.method || 'ANY',
+            status: m.status ?? 200,
+            headers: typeof m.headers === 'string' ? m.headers : JSON.stringify(m.headers || {}),
+            body: m.body || '',
+            body_source: m.body_source || 'inline',
+            file_path: m.file_path || '',
+            req_headers_mod: m.req_headers_mod || {},
+            // Agent-only behaviour comes along too, so the copy serves what
+            // the original did. The backend honours these on user rules.
+            delay_ms: m.delay_ms || 0,
+            responses: Array.isArray(m.responses) && m.responses.length ? m.responses : undefined,
+            sequence_mode: m.responses?.length ? (m.sequence_mode || 'hold') : undefined,
+            // A label the user typed themselves wins; otherwise keep the
+            // provenance visible in their own list.
+            label: m.label || `${scenario.name || 'MCP scenario'} (from MCP)`,
+        }
+        const hit = existingLocal.get(localKey(m))
+        if (hit) Object.assign(hit, adopted, { id: hit.id })
+        else mapLocalRules.value.push({ id: Date.now() + Math.random(), ...adopted })
+    }
+
+    const remoteKey = (r) => r.pattern || ''
+    const existingRemote = new Map(mapRemoteRules.value.map(r => [remoteKey(r), r]))
+    for (const r of scenario.rewrites || []) {
+        const adopted = { active, pattern: r.pattern || '', target: r.target || '' }
+        const hit = existingRemote.get(remoteKey(r))
+        if (hit) Object.assign(hit, adopted, { id: hit.id })
+        else mapRemoteRules.value.push({ id: Date.now() + Math.random(), ...adopted })
+    }
+
+    return { mocks: (scenario.mocks || []).length, rewrites: (scenario.rewrites || []).length }
+}
 
 export const toggleWgMode = (enabled, port) => {
     if (wsConnection?.readyState !== WebSocket.OPEN) return
@@ -1241,7 +1545,10 @@ export const initWebSocket = () => {
         reconnectTimeout = null;
     }
 
-    wsConnection = new WebSocket("ws://127.0.0.1:8765")
+    // Mirrors the backend's OPENPROXY_WS_PORT override. Without this, a dev
+    // build would silently attach to an installed OpenProxy's backend on 8765
+    // and show you that instance's traffic instead of its own.
+    wsConnection = new WebSocket(`ws://127.0.0.1:${import.meta.env.VITE_OPENPROXY_WS_PORT || 8765}`)
 
     wsConnection.onopen = () => {
         connectionStatus.value = '🟢 Intercepting Traffic'
@@ -1249,6 +1556,13 @@ export const initWebSocket = () => {
 
         syncMapLocalRules()
         syncBreakpointRules()
+        // Overrides live here rather than on the backend so a hand edit to an
+        // agent's mock survives an app restart, same as the user's own rules.
+        wsConnection.send(JSON.stringify({
+            type: "RESTORE_AGENT_OVERRIDES",
+            overrides: agentRuleOverrides.value,
+            remote_overrides: agentRemoteOverrides.value,
+        }))
         syncMapRemoteRules()
         wsConnection.send(JSON.stringify({ type: "UPDATE_THROTTLE", profile: throttleProfile.value }))
         wsConnection.send(JSON.stringify({ type: "TOGGLE_MAP_LOCAL", enabled: enableMapLocal.value }))
@@ -1268,9 +1582,29 @@ export const initWebSocket = () => {
             if (typeof payload.data.mac_proxy_active === 'boolean') {
                 macosProxyActive.value = payload.data.mac_proxy_active
             }
+            if ('mcp_command' in payload.data) mcpCommand.value = payload.data.mcp_command || null
         }
         else if (payload.type === "ALERT") {
             alert(payload.message)
+        }
+        else if (payload.type === "AGENT_STATE") {
+            agentConnected.value = !!payload.data?.connected
+            agentClients.value = payload.data?.clients || []
+            agentScenario.value = mergeAgentOverrides(payload.data?.scenario || null)
+            if (Array.isArray(payload.data?.activity)) agentActivity.value = payload.data.activity
+
+            // An agent that vanished mid-scenario leaves its rules behind for
+            // the user to take over. They arrive switched off: the point is not
+            // to lose the work, not to keep mocking traffic on behalf of
+            // something that's no longer there.
+            const last = payload.data?.last_scenario
+            if (payload.data?.end_reason === 'disconnect' && last) {
+                adoptAgentScenario(last, { active: false })
+                wsConnection?.send(JSON.stringify({ type: "DISMISS_AGENT_LAST_SCENARIO" }))
+            }
+        }
+        else if (payload.type === "AGENT_ACTIVITY") {
+            agentActivity.value = [...agentActivity.value, payload.data].slice(-20)
         }
         else if (payload.type === "NEW_REQUEST") {
             _pendingNew.push(payload.data)
@@ -1627,6 +1961,12 @@ export const initWebSocket = () => {
     wsConnection.onclose = () => {
         connectionStatus.value = `🟡 Reconnecting in ${reconnectDelay / 1000}s...`
 
+        // We can no longer see what an agent is doing, so stop claiming to.
+        // The backend resends AGENT_STATE on reconnect.
+        agentConnected.value = false
+        agentClients.value = []
+        agentScenario.value = null
+
         reconnectTimeout = setTimeout(() => {
             initWebSocket()
         }, reconnectDelay)
@@ -1714,6 +2054,7 @@ export const importSettings = async () => {
         'isFocusMode', 'pinnedSources', 'activeChips', 'sortOrder',
         'mapLocalRules', 'enableMapLocal',
         'mapRemoteRules', 'enableMapRemote',
+        'agentRuleOverrides', 'agentRemoteOverrides',
         'breakpointRules', 'breakpointsEnabled',
         'highlightRules', 'highlightsEnabled',
         'proxyIgnoreHosts', 'proxyAllowHosts', 'proxyHostFilterMode',

@@ -248,6 +248,61 @@ def _launch_macos_script(script, needs_elevation):
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def stop_mcp_servers(timeout=3):
+    """Stop MCP servers that agents launched from this install (``--mcp``).
+
+    They run the bundled binary but aren't children of the app, so they don't
+    exit when it quits. Left alone they stall every update script's
+    wait-for-exit loop until it times out (30s on Windows, 15s on Linux), and
+    once the swap goes through they keep running code from the old, deleted
+    install against the new app. Stopping them up front makes the agent's
+    client reconnect through the launcher to the new build instead.
+
+    Only OpenProxy's own binaries are matched, never an unrelated ``--mcp``.
+    Returns how many were stopped.
+    """
+    import psutil
+
+    names = {
+        'openproxy-server', 'openproxy-server.exe',
+        APP_PRODUCT_NAME.lower(), APP_PRODUCT_NAME.lower() + '.exe',
+        APP_LINUX_EXE_NAME.lower(),
+    }
+    appimage = os.environ.get('APPIMAGE')
+    me = os.getpid()
+
+    procs = []
+    for p in psutil.process_iter(['name', 'cmdline']):
+        try:
+            cmd = p.info['cmdline'] or []
+            if p.pid == me or '--mcp' not in cmd[1:]:
+                continue
+            ours = (
+                (p.info['name'] or '').lower() in names
+                or os.path.basename(cmd[0]).lower() in names
+                or (appimage and cmd[0] == appimage)
+            )
+            if ours:
+                procs.append(p)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, IndexError):
+            continue
+
+    for p in procs:
+        try:
+            p.terminate()
+        except psutil.NoSuchProcess:
+            pass
+    _, alive = psutil.wait_procs(procs, timeout=timeout)
+    for p in alive:
+        try:
+            p.kill()
+        except psutil.NoSuchProcess:
+            pass
+    if procs:
+        print(f"[Update] Stopped {len(procs)} MCP server process(es) before the swap", flush=True)
+    return len(procs)
+
+
 def apply_update(download_url, progress_cb=None):
     """
     Download the release zip, extract it, then launch a helper script that
@@ -255,6 +310,18 @@ def apply_update(download_url, progress_cb=None):
     progress_cb(pct) is called with 0-100 during download.
     Raises on any error so the caller can surface it to the UI.
     """
+    _stage_update(download_url, progress_cb)
+    # Only once the swap is definitely going ahead: a failed download or a
+    # cancelled elevation prompt must not cost agents their connection.
+    try:
+        stop_mcp_servers()
+    except Exception as e:
+        # Never fail an update over this; the scripts' wait loops still cope.
+        print(f"[Update] Could not stop MCP servers: {e}", flush=True)
+
+
+def _stage_update(download_url, progress_cb=None):
+    """Download, extract and launch the platform's swap script (see apply_update)."""
     import tempfile, zipfile, shutil, stat
 
     install_path = _get_app_install_path()

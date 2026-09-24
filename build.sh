@@ -25,7 +25,7 @@ node -e "require('fs').writeFileSync('version.json', JSON.stringify({ version: r
 # ── 1. Vue UI ────────────────────────────────────────────────────
 echo ""
 echo "→ [1/3] Building Vue UI..."
-cd ui && npm install --silent && npm run build && cd ..
+(cd ui && npm install --silent && npm run build)
 
 # ── 2. Python backend (PyInstaller) ──────────────────────────────
 echo ""
@@ -33,12 +33,25 @@ echo "→ [2/3] Bundling Python backend..."
 [ -f "venv/bin/activate" ] && source venv/bin/activate
 
 rm -rf backend-dist build-pyinstaller
-pyinstaller \
+# --paths/--hidden-import/--collect-submodules bundle the MCP server (see
+# mcp-server/) so `OpenProxy-server --mcp` works from the packaged app. Only the
+# subpackages we use: `mcp.cli` needs typer, which isn't installed.
+# Fail here, not at the user's first tool call: the MCP server is bundled from
+# this interpreter's site-packages, so `mcp` must be importable by it. Invoking
+# PyInstaller as a module (not the `pyinstaller` script) guarantees the bundle is
+# built from the same interpreter — a stale console script can point elsewhere.
+python -c "import mcp, sys; sys.path.insert(0, 'mcp-server'); import openproxy_mcp.server" \
+  || { echo "ERROR: 'mcp' is not installed for $(which python) — run: pip install -r requirements.txt"; exit 1; }
+python -m PyInstaller \
   --name "OpenProxy-server" \
   --distpath backend-dist \
   --workpath build-pyinstaller \
   --clean \
   --noconfirm \
+  --paths mcp-server \
+  --hidden-import openproxy_mcp.server \
+  --collect-submodules mcp.server \
+  --collect-submodules mcp.shared \
   main.py
 
 rm -rf build-pyinstaller OpenProxy-server.spec
