@@ -10,10 +10,10 @@ let win, tray, pythonProcess, isQuitting = false
 
 // ── MCP passthrough ───────────────────────────────────────────────────────────
 // `OpenProxy --mcp` runs the bundled MCP server instead of the app: stdio is
-// handed straight to `OpenProxy-server --mcp` and we exit with its status. The
-// launcher the backend writes to ~/.openproxy/bin uses this on Linux AppImage,
-// where the backend binary sits inside a mount that moves on every launch, so
-// the only stable thing to point at is the AppImage file itself.
+// handed straight to `OpenProxy-server --mcp` and we exit with its status. A
+// convenience for running MCP from the app's own executable; the launcher in
+// ~/.openproxy/bin doesn't use it, since on AppImage it would need a FUSE
+// mount (see server/mcp_shim.py).
 if (process.argv.includes('--mcp')) {
   const { spawnSync } = require('child_process')
   let exe, args

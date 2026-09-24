@@ -35,7 +35,7 @@ echo "Building OpenProxy (linux/${TARGET_ARCH}) v${VERSION}"
 
 # 1. Build UI
 echo "\n→ [1/3] Building Vue UI..."
-cd ui && npm install --silent && npm run build && cd ..
+(cd ui && npm install --silent && npm run build)
 
 # 2. Bundle Python backend
 echo "\n→ [2/3] Bundling Python backend..."

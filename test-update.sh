@@ -24,6 +24,11 @@
 set -e
 cd "$(dirname "$0")"
 
+# Everything below is macOS-specific (.app bundle, mac zip, `defaults`).
+if [ "$(uname -s)" = "Linux" ]; then
+  exec bash test-update-linux.sh "$@"
+fi
+
 PORT=9999
 NO_BUILD="${1:-}"
 

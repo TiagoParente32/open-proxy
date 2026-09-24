@@ -25,7 +25,7 @@ node -e "require('fs').writeFileSync('version.json', JSON.stringify({ version: r
 # ── 1. Vue UI ────────────────────────────────────────────────────
 echo ""
 echo "→ [1/3] Building Vue UI..."
-cd ui && npm install --silent && npm run build && cd ..
+(cd ui && npm install --silent && npm run build)
 
 # ── 2. Python backend (PyInstaller) ──────────────────────────────
 echo ""
