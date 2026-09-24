@@ -96,6 +96,27 @@ class ProxyHooksMixin:
                     headers_dict = json.loads(rule.get("headers"))
             except json.JSONDecodeError:
                 headers_dict = {"Content-Type": "text/plain"}
+            body_text = rule.get("body", "")
+
+            # Sequenced responses: the Nth hit on this rule serves the Nth
+            # entry. Fields the user has taken over in the UI keep winning —
+            # the sequence only fills in what they haven't touched.
+            step = self._sequence_step(rule)
+            if step is not None:
+                key = rule.get("_key")
+                overridden = set(self.agent_rule_overrides.get(key) or {}) if key else set()
+                if "status" in step and "status" not in overridden:
+                    status_code = int(step["status"])
+                if "body" in step and "body" not in overridden:
+                    body_text = step["body"] or ""
+                if isinstance(step.get("headers"), dict) and "headers" not in overridden:
+                    headers_dict.update(step["headers"])
+
+            # Simulated latency for this endpoint only, on top of any global
+            # throttle. Lets a scenario test the app's timeout handling.
+            delay_ms = rule.get("delay_ms") or 0
+            if delay_ms:
+                await asyncio.sleep(min(float(delay_ms), 60_000) / 1000.0)
 
             req_headers_mod = rule.get("req_headers_mod", {})
             if isinstance(req_headers_mod, dict):
@@ -112,7 +133,7 @@ class ProxyHooksMixin:
                     mime, _ = mimetypes.guess_type(file_path)
                     headers_dict["Content-Type"] = mime or "application/octet-stream"
             else:
-                body_bytes = rule.get("body", "").encode("utf-8")
+                body_bytes = body_text.encode("utf-8")
 
             headers_dict["X-Map-Local"] = "Active"
             if by_agent:
@@ -122,6 +143,25 @@ class ProxyHooksMixin:
         except Exception as e:
             flow.response = http.Response.make(500, f"Editor Error: {e}".encode())
         return True
+
+    def _sequence_step(self, rule):
+        """Pick this hit's entry from a rule's `responses` list, or None.
+
+        `sequence_mode` "hold" (default) sticks on the last entry once the
+        list is exhausted — the shape of "fail twice, then recover". "cycle"
+        wraps around, for a permanently flaky endpoint.
+        """
+        responses = rule.get("responses")
+        if not responses:
+            return None
+        key = rule.get("_key") or rule.get("id")
+        if key is None:
+            return responses[0]
+        n = self.agent_rule_hits.get(key, 0)
+        self.agent_rule_hits[key] = n + 1
+        if rule.get("sequence_mode") == "cycle":
+            return responses[n % len(responses)]
+        return responses[min(n, len(responses) - 1)]
 
     def _apply_map_remote_rules(self, flow: http.HTTPFlow, rules) -> bool:
         """Apply every matching rewrite rule in order. True if any matched.
@@ -162,6 +202,11 @@ class ProxyHooksMixin:
         # User script hooks — run after built-in mutations, before recording to UI
         if self.scripts_manager.call_hooks('request', flow):
             await self._broadcast_scripts_list()
+
+        # A request injected by the agent's send/replay carries a correlation
+        # id so the caller can find *its* flow. Strip it before the request
+        # goes upstream — the real server has no business seeing it.
+        replay_id = flow.request.headers.pop("X-OpenProxy-Replay-Id", None)
 
         req_body = ""
         req_is_image = False
@@ -210,6 +255,9 @@ class ProxyHooksMixin:
             "req_body": req_body,
             "req_is_image": req_is_image,
             "req_is_binary": req_is_binary,
+            # Set when an agent injected this request (send/replay), so the
+            # table can tell it apart from traffic the app itself produced.
+            "agent_sent": replay_id,
             "res_headers": {},
             "res_body": "",
             "res_is_image": False,
@@ -236,6 +284,7 @@ class ProxyHooksMixin:
             is_image=req_is_image,
             is_binary=req_is_binary,
             req_bytes=request_data["req_bytes"],
+            replay_id=replay_id,
         )
 
         # Agent scenario rules run ahead of the user's so a scenario can shadow
@@ -428,6 +477,11 @@ class ProxyHooksMixin:
         except UnicodeDecodeError:
             content_str = f"<Binary Data: {len(latest_msg.content)} bytes>"
 
+        # Retain for agents: the UI gets frames pushed, but an agent asking
+        # "what did the app say over the socket" has to be able to read back.
+        self.flow_store.record_ws_message(
+            flow.id, latest_msg.from_client, content_str, len(latest_msg.content))
+
         payload = {
             "type": "WS_MESSAGE",
             "id": str(flow.id),
@@ -437,11 +491,14 @@ class ProxyHooksMixin:
             "timestamp": time.time()
         }
 
-        for ws in list(self.connected_clients):
-            try:
-                await ws.send(json.dumps(payload))
-            except Exception as e:
-                print(f"[DEBUG WS ERROR] Failed to send to UI: {e}")
+        # Same fan-out as every other UI event, so agent sockets (which opt
+        # out via AGENT_HELLO) aren't sent frames they immediately discard.
+        # The UI expects this message's fields at the top level, not under
+        # `data`, hence the raw send rather than broadcast_to_ui.
+        targets = [c for c in self.connected_clients if c not in self.agent_clients]
+        if targets:
+            message = json.dumps(payload)
+            await asyncio.gather(*(c.send(message) for c in targets), return_exceptions=True)
 
     async def error(self, flow: http.HTTPFlow):
         """mitmproxy lifecycle hook — connection/protocol errors."""

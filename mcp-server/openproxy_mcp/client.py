@@ -25,11 +25,19 @@ def _default_url() -> str:
     return f"ws://127.0.0.1:{port}"
 
 
-DEFAULT_URL = _default_url()
 CONNECT_TIMEOUT = 5.0
 DEFAULT_CALL_TIMEOUT = 30.0
+# The handshake is answered synchronously by the backend, so anything slower
+# than this means we're talking to a build that predates the agent API (it
+# ignores unknown message types rather than erroring) — fail fast and say so.
+HELLO_TIMEOUT = 5.0
 
 CLIENT_NAME = "openproxy-mcp"
+
+# Must match AGENT_PROTOCOL_VERSION in server/bridge/agent_api.py. Both ship in
+# the same app bundle, so they only differ when an old MCP process outlives an
+# update; the backend then tells us so in the handshake reply.
+PROTOCOL_VERSION = 1
 
 
 class OpenProxyUnavailable(RuntimeError):
@@ -54,6 +62,9 @@ class OpenProxyClient:
         self._pending: dict[str, asyncio.Future] = {}
         self._req_counter = 0
         self._lock = asyncio.Lock()
+        # Set from the handshake when the backend reports a protocol mismatch;
+        # every tool result carries it until the process is restarted.
+        self.protocol_warning: str | None = None
 
     # ---- connection ------------------------------------------------------
 
@@ -76,7 +87,19 @@ class OpenProxyClient:
 
         # Identify as automation so the backend stops broadcasting the UI
         # event stream at us. Also doubles as a health check.
-        await self._call("AGENT_HELLO", {"client": CLIENT_NAME}, reconnect=False)
+        try:
+            hello = await self._call(
+                "AGENT_HELLO", {"client": CLIENT_NAME, "protocol": PROTOCOL_VERSION},
+                timeout=HELLO_TIMEOUT, reconnect=False,
+            )
+            self.protocol_warning = hello.get("warning") if isinstance(hello, dict) else None
+        except OpenProxyError as e:
+            await self._teardown()
+            raise OpenProxyUnavailable(
+                f"OpenProxy at {self.url} accepted the connection but did not "
+                "answer the agent handshake. It is probably an older build "
+                "without the agent API — update the OpenProxy desktop app."
+            ) from e
 
     def _closed(self) -> bool:
         ws = self._ws
@@ -124,10 +147,14 @@ class OpenProxyClient:
         except asyncio.CancelledError:
             raise
         except Exception:
-            # Socket died; surface it to anyone waiting rather than hanging.
+            pass
+        finally:
+            # Whether the socket died or closed cleanly (the app quitting ends
+            # the iterator without raising), nobody is going to answer these —
+            # fail them now rather than letting each sit out its full timeout.
             for fut in self._pending.values():
                 if not fut.done():
-                    fut.set_exception(OpenProxyUnavailable("Connection to OpenProxy dropped"))
+                    fut.set_exception(OpenProxyUnavailable("Connection to OpenProxy closed"))
             self._pending.clear()
 
     # ---- calls -----------------------------------------------------------

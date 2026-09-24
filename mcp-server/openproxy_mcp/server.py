@@ -11,11 +11,12 @@ the traffic that *follows* the mock: whether the app retried, refreshed its
 token, fell back to a cache, or leaked a credential on the retry.
 """
 
-import json
-import asyncio
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from mcp.server.mcpserver import MCPServer
+from mcp.types import ToolAnnotations
+from pydantic import Field
+from typing_extensions import NotRequired, TypedDict
 
 from openproxy_mcp import __version__
 from openproxy_mcp.client import (
@@ -37,6 +38,66 @@ mcp = MCPServer(
 )
 _client = OpenProxyClient()
 
+# Tool annotations let MCP clients decide how much ceremony a call needs: a
+# read-only tool can run without a permission prompt, a destructive one
+# shouldn't. They are hints, not enforcement.
+READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+MUTATES_PROXY = ToolAnnotations(read_only_hint=False, destructive_hint=False,
+                                idempotent_hint=True, open_world_hint=False)
+DESTRUCTIVE = ToolAnnotations(read_only_hint=False, destructive_hint=True,
+                              idempotent_hint=True, open_world_hint=False)
+# Replay sends real traffic to whatever host the URL names.
+SENDS_TRAFFIC = ToolAnnotations(read_only_hint=False, destructive_hint=False,
+                                idempotent_hint=False, open_world_hint=True)
+
+ThrottleProfile = Literal["None", "Fast 3G", "Slow 3G"]
+
+
+class MockResponse(TypedDict, total=False):
+    """One step of a mock's `responses` sequence. Fields left out fall back to
+    the mock's own status/body/headers."""
+
+    status: Annotated[int, Field(description="HTTP status for this step.", ge=100, le=599)]
+    body: Annotated[str, Field(description="Body for this step.")]
+    headers: Annotated[dict[str, str], Field(description="Headers merged over the mock's.")]
+
+
+class MockRule(TypedDict):
+    """A canned response served instead of contacting the real server."""
+
+    url_pattern: Annotated[str, Field(description=(
+        "ANCHORED glob matched against the full URL, so you almost always want "
+        "leading and trailing `*`, e.g. \"*/api/v1/profile*\". A pattern without "
+        "`*` must equal the entire URL."
+    ))]
+    status: NotRequired[Annotated[int, Field(
+        description="HTTP status to return.", ge=100, le=599)]]
+    body: NotRequired[Annotated[str, Field(
+        description='Response body as a string; "" for an empty body.')]]
+    headers: NotRequired[Annotated[dict[str, str], Field(
+        description='Response headers, e.g. {"Content-Type": "application/json"}.')]]
+    method: NotRequired[Annotated[str, Field(
+        description='Limit to one verb ("GET", "POST", ...). Default: any method.')]]
+    delay_ms: NotRequired[Annotated[int, Field(
+        description="Hold the response this long before serving it, to test the "
+                    "app's timeout handling. Max 60000.", ge=0, le=60000)]]
+    responses: NotRequired[Annotated[list[MockResponse], Field(
+        description="Serve a different response on each hit: the Nth request gets "
+                    "the Nth entry. Test 'fail twice then recover' with "
+                    "[{status: 500}, {status: 500}, {status: 200}]. Fields a step "
+                    "omits come from the mock itself.")]]
+    sequence_mode: NotRequired[Annotated[Literal["hold", "cycle"], Field(
+        description="What happens after the last `responses` entry: 'hold' keeps "
+                    "serving it (default), 'cycle' starts over.")]]
+
+
+class RewriteRule(TypedDict):
+    """A map-remote redirect: traffic matching `pattern` is sent to `target`."""
+
+    pattern: Annotated[str, Field(description="Regex matched against the full URL.")]
+    target: Annotated[str, Field(
+        description='Replacement for the matched part, e.g. "staging.example.com".')]
+
 
 def _describe_error(e: Exception) -> dict:
     if isinstance(e, OpenProxyUnavailable):
@@ -48,12 +109,15 @@ def _describe_error(e: Exception) -> dict:
 
 async def _call(msg_type: str, payload: dict | None = None, timeout: float = 30.0) -> dict:
     try:
-        return await _client.call(msg_type, payload, timeout=timeout)
+        result = await _client.call(msg_type, payload, timeout=timeout)
     except Exception as e:  # surfaced to the model as data, not an exception
         return _describe_error(e)
+    if _client.protocol_warning and isinstance(result, dict):
+        result.setdefault("warning", _client.protocol_warning)
+    return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def get_proxy_status() -> dict:
     """Check that OpenProxy is running and see what it is currently doing.
 
@@ -64,7 +128,7 @@ async def get_proxy_status() -> dict:
     return await _call("AGENT_STATUS")
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def list_requests(
     url_pattern: str | None = None,
     method: str | None = None,
@@ -95,23 +159,100 @@ async def list_requests(
     })
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def get_request(flow_id: str) -> dict:
     """Fetch one captured flow in full: request/response headers and bodies.
 
     Takes the `id` from a list_requests or wait_for_requests result. Bodies are
-    truncated at 32KB and binary/image payloads are omitted — if you need those
+    truncated at 32KB and binary/image payloads are omitted; `req_body_complete`
+    and `res_body_complete` are false when that happened. If you need those
     bytes, inspect them in the OpenProxy UI instead.
     """
     return await _call("AGENT_GET_FLOW", {"id": flow_id})
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
+async def get_requests(flow_ids: list[str]) -> dict:
+    """Fetch several captured flows in full at once (max 20 per call).
+
+    Same content as get_request, for when you've identified a handful of flows
+    from list_requests or search_requests and want all of them. Ids that are no
+    longer in history come back under `missing` rather than failing the call.
+    """
+    if not flow_ids:
+        return {"error": "flow_ids must not be empty"}
+    if len(flow_ids) > 20:
+        return {"error": "At most 20 flow_ids per call — page through them"}
+    return await _call("AGENT_GET_FLOWS", {"ids": flow_ids})
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def search_requests(
+    text: str,
+    since_seq: int | None = None,
+    url_pattern: str | None = None,
+    limit: int = 50,
+) -> dict:
+    """Find captured requests containing `text` anywhere: URL, request or response
+    headers, bodies, or WebSocket frames. Case-insensitive substring match.
+
+    This is the tool for "did the app send this token / user id / email to any
+    host?" — one call instead of fetching every flow. Each match is a request
+    summary plus `hits`: where the text was found and a snippet around it.
+    Follow up with get_request on the ones that matter.
+
+    Only text stored in history is searched: bodies are capped at 32KB and
+    binary payloads are not indexed.
+    """
+    return await _call("AGENT_SEARCH_FLOWS", {
+        "text": text,
+        "since_seq": since_seq,
+        "url_pattern": url_pattern,
+        "limit": max(1, min(limit, 200)),
+    })
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def summarize_traffic(
+    since_seq: int | None = None,
+    url_pattern: str | None = None,
+    top: int = 15,
+) -> dict:
+    """Aggregate a window of traffic: counts by host, status and method, the
+    most-hit endpoints, error/mocked/pending totals, and latency p50/max.
+
+    Use this right after a scenario (pass its `watermark` as since_seq) to see
+    the shape of what the app did — which hosts it contacted, how many calls
+    failed, whether anything went to a third party — before drilling into
+    individual flows with list_requests or search_requests.
+    """
+    return await _call("AGENT_SUMMARIZE_FLOWS", {
+        "since_seq": since_seq,
+        "url_pattern": url_pattern,
+        "top": max(1, min(top, 100)),
+    })
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def get_websocket_messages(flow_id: str, offset: int = 0, limit: int = 100) -> dict:
+    """Read the frames exchanged over a captured WebSocket connection.
+
+    `flow_id` is the id of the HTTP upgrade request (it shows up in
+    list_requests with a `ws_messages` count). Frames are returned oldest first
+    with `from_client` telling direction; page with `next_offset`. The last 200
+    frames per connection are kept, each capped at 8KB.
+    """
+    return await _call("AGENT_GET_WS_MESSAGES", {
+        "id": flow_id, "offset": max(0, offset), "limit": max(1, min(limit, 200)),
+    })
+
+
+@mcp.tool(annotations=MUTATES_PROXY)
 async def run_mock_scenario(
     name: str,
-    mocks: list[dict[str, Any]] | None = None,
-    rewrites: list[dict[str, Any]] | None = None,
-    throttle: str | None = None,
+    mocks: list[MockRule] | None = None,
+    rewrites: list[RewriteRule] | None = None,
+    throttle: ThrottleProfile | None = None,
 ) -> dict:
     """Install a named set of mocks, replacing any scenario already active.
 
@@ -123,42 +264,39 @@ async def run_mock_scenario(
     setup. Scenarios replace each other wholesale, so rules never leak from one
     scenario into the next. Call clear_mocks when you are done.
 
-    Each entry in `mocks` accepts:
-      url_pattern  required. ANCHORED glob against the full URL, so you almost
-                   always want leading and trailing `*`, e.g.
-                   "*/api/v1/profile*". A pattern without `*` must match the
-                   entire URL exactly.
-      status       HTTP status to return (default 200)
-      body         response body as a string (use "" for an empty body)
-      headers      dict of response headers, e.g. {"Content-Type": "application/json"}
-      method       limit to one verb ("GET", "POST", ...); defaults to any
+    `mocks` serve canned responses; `rewrites` redirect traffic to another host.
+    A mock can also add latency (`delay_ms`) or serve a sequence of different
+    responses across successive hits (`responses`) — that's how you test retry
+    and recovery behaviour without writing a script.
 
-    Each entry in `rewrites` (map-remote) accepts `pattern` (a regex) and
-    `target` (its replacement) to redirect traffic to another host.
-
-    `throttle` pins the network profile for the scenario's duration: "Slow 3G",
-    "Fast 3G", or "None". Omit it to leave the user's setting alone.
+    `throttle` pins the network profile for the scenario's duration ("Slow 3G",
+    "Fast 3G", or "None" to force it off). Omit it to leave the user's setting
+    alone.
     """
     rules = []
-    for m in mocks or []:
-        pattern = m.get("url_pattern") or m.get("pattern")
+    for i, m in enumerate(mocks or []):
+        pattern = m.get("url_pattern")
         if not pattern:
-            return {"error": f"Mock entry missing url_pattern: {json.dumps(m)[:200]}"}
-        headers = m.get("headers")
-        rules.append({
+            return {"error": f"mocks[{i}] is missing url_pattern"}
+        rule = {
             "active": True,
             "pattern": pattern,
             "method": (m.get("method") or "ANY").upper(),
             "status": m.get("status", 200),
-            "headers": headers if headers is not None else {},
+            "headers": m.get("headers") or {},
             "body": m.get("body", ""),
             "body_source": "inline",
-        })
+        }
+        for extra in ("delay_ms", "responses", "sequence_mode"):
+            if m.get(extra) is not None:
+                rule[extra] = m[extra]
+        rules.append(rule)
 
-    remote = [
-        {"active": True, "pattern": r.get("pattern", ""), "target": r.get("target", "")}
-        for r in (rewrites or [])
-    ]
+    remote = []
+    for i, r in enumerate(rewrites or []):
+        if not r.get("pattern") or not r.get("target"):
+            return {"error": f"rewrites[{i}] needs both pattern and target"}
+        remote.append({"active": True, "pattern": r["pattern"], "target": r["target"]})
 
     return await _call("AGENT_RUN_SCENARIO", {
         "name": name,
@@ -168,7 +306,7 @@ async def run_mock_scenario(
     })
 
 
-@mcp.tool()
+@mcp.tool(annotations=MUTATES_PROXY)
 async def clear_mocks() -> dict:
     """Remove the active mock scenario and hand control back to the user's rules.
 
@@ -179,7 +317,7 @@ async def clear_mocks() -> dict:
     return await _call("AGENT_CLEAR_SCENARIO")
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def wait_for_requests(
     url_pattern: str | None = None,
     method: str | None = None,
@@ -214,38 +352,74 @@ async def wait_for_requests(
     }, timeout=capped + 10.0)
 
 
-@mcp.tool()
+@mcp.tool(annotations=SENDS_TRAFFIC)
 async def replay_request(
     flow_id: str,
     method: str | None = None,
     url: str | None = None,
     body: str | None = None,
     headers: dict[str, str] | None = None,
+    wait: bool = True,
+    timeout: float = 30.0,
 ) -> dict:
     """Re-send a captured request through the proxy, optionally modified.
 
     Useful for probing an endpoint with variations of a real request without
     touching the app. Any argument you pass overrides that part of the original.
 
-    The replay is proxied like any other traffic, so the result shows up in
-    history rather than being returned here: this returns a `watermark`, and you
-    read the outcome with wait_for_requests(since_seq=watermark).
+    Refuses to replay a request whose body was truncated or omitted in history
+    (bodies over 32KB, binary uploads) unless you pass `body` yourself — the
+    stored copy is not what went over the wire.
+
+    The replay goes through the proxy like any other traffic, so active mocks
+    apply to it and it lands in history. With `wait` (default) the resulting
+    flow is returned inline as `flow`, headers and bodies included, or
+    `timed_out: true` if nothing came back in `timeout` seconds. With
+    wait=false you get a `watermark` and `replay_id` to look it up later.
     """
-    original = await _call("AGENT_GET_FLOW", {"id": flow_id})
-    if "error" in original:
-        return original
+    overrides: dict[str, Any] = {}
+    if method is not None:
+        overrides["method"] = method
+    if url is not None:
+        overrides["url"] = url
+    if body is not None:
+        overrides["req_body"] = body
+    if headers is not None:
+        overrides["req_headers"] = headers
+    capped = max(1.0, min(timeout, 300.0))
+    return await _call("AGENT_REPLAY_REQUEST", {
+        "flow_id": flow_id, "overrides": overrides, "wait": wait, "timeout": capped,
+    }, timeout=capped + 10.0)
 
-    flow = original.get("flow", {})
-    request = {
-        "url": url or flow.get("url"),
-        "method": (method or flow.get("method") or "GET").upper(),
-        "req_headers": headers if headers is not None else flow.get("req_headers", {}),
-        "req_body": body if body is not None else flow.get("req_body", ""),
-    }
-    return await _call("AGENT_REPLAY_REQUEST", {"request": request})
+
+@mcp.tool(annotations=SENDS_TRAFFIC)
+async def send_request(
+    url: str,
+    method: str = "GET",
+    headers: dict[str, str] | None = None,
+    body: str | None = None,
+    wait: bool = True,
+    timeout: float = 30.0,
+) -> dict:
+    """Send a request of your own through the proxy, composed from scratch.
+
+    Use this to probe an endpoint the app hasn't hit yet, or to check what a
+    mock returns before pointing the app at it. Unlike a plain curl, the
+    request passes through OpenProxy, so active mocks and rewrites apply, it
+    is recorded in history, and the user can see it in the traffic table.
+
+    `url` must be absolute (http:// or https://). TLS verification is off, as
+    for all proxied traffic. With `wait` (default) the completed flow is
+    returned as `flow`; otherwise you get a `watermark` and `replay_id`.
+    """
+    capped = max(1.0, min(timeout, 300.0))
+    return await _call("AGENT_SEND_REQUEST", {
+        "url": url, "method": method, "headers": headers or {}, "body": body,
+        "wait": wait, "timeout": capped,
+    }, timeout=capped + 10.0)
 
 
-@mcp.tool()
+@mcp.tool(annotations=DESTRUCTIVE)
 async def clear_history() -> dict:
     """Drop captured flow history.
 

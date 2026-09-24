@@ -42,9 +42,33 @@ class BridgeCore:
         # to restore the user's setup exactly — only possible if we never
         # touched it. Matched ahead of the UI rules.
         self.agent_scenario = None      # {"name", "started_seq", "started_at"}
+        # The socket that installed the scenario. Its disconnect clears the
+        # scenario even if other agents are still attached — they didn't ask
+        # for those mocks and shouldn't inherit them.
+        self.agent_scenario_owner = None
+        # Per-rule hit counters for mocks with a `responses` sequence
+        # ("500, 500, then 200"). Keyed by the rule's override key; reset on
+        # every scenario install so a re-run starts the sequence over.
+        self.agent_rule_hits = {}
         self.agent_map_local_rules = []
         self.agent_map_remote_rules = []
         self.agent_throttle_profile = None   # None = inherit the UI's setting
+
+        # Fields the user has taken over on an agent's rules, keyed by
+        # method|pattern (mocks) or pattern (rewrites). Re-applied on every
+        # scenario install so an agent re-running the same test can't silently
+        # undo a hand edit. `_order` keeps the key each live rule was installed
+        # under, so an override that rewrites the pattern still resolves.
+        self.agent_rule_overrides = {}
+        self.agent_rule_originals = {}   # key -> the agent's untouched mock
+        self.agent_rule_order = []       # keys, in the order the agent sent them
+        self.agent_remote_overrides = {}
+        self.agent_remote_originals = {}
+        self.agent_remote_order = []
+        self.agent_last_scenario = None  # kept when an agent disconnects mid-run
+        self.agent_end_reason = None
+        self.agent_activity = []        # recent agent actions, for the UI strip
+        self.mcp_shim_path = None       # set by main.py once the launcher is written
 
         self.wg_enabled = False
         self.wg_port = 51820

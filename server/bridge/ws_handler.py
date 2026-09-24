@@ -24,6 +24,9 @@ class WsHandlerMixin:
                     "port": self.proxy_port,
                     "platform": sys.platform,
                     "mac_proxy_active": self.is_mac_proxy_set,
+                    # Stable launcher for the bundled MCP server; the setup
+                    # window shows it verbatim. None if it couldn't be written.
+                    "mcp_command": self.mcp_shim_path,
                 }
             }))
 
@@ -48,6 +51,38 @@ class WsHandlerMixin:
 
                 if payload.get("type") == "UPDATE_MAP_LOCAL_RULES":
                     self.map_local_rules = payload.get("rules", [])
+                    # Restart any sequenced user rules; keep the agent's counters.
+                    agent_keys = set(self.agent_rule_order)
+                    self.agent_rule_hits = {
+                        k: v for k, v in self.agent_rule_hits.items() if k in agent_keys
+                    }
+
+                elif payload.get("type") == "SET_AGENT_RULE_OVERRIDE":
+                    # The user edited a rule an agent installed; their values win
+                    # from here on, including across the agent's next scenario.
+                    await self.set_agent_rule_override(
+                        payload.get("key"),
+                        payload.get("fields") or {},
+                        kind=payload.get("kind", "local"),
+                    )
+
+                elif payload.get("type") == "CLEAR_AGENT_RULE_OVERRIDE":
+                    # key omitted = hand every rule of that kind back to the agent
+                    await self.clear_agent_rule_override(
+                        payload.get("key"), kind=payload.get("kind", "local")
+                    )
+
+                elif payload.get("type") == "RESTORE_AGENT_OVERRIDES":
+                    # Sent by the UI on connect: overrides live in the browser's
+                    # storage so they survive an app restart, the same way the
+                    # user's own map rules do.
+                    self.agent_rule_overrides = payload.get("overrides") or {}
+                    self.agent_remote_overrides = payload.get("remote_overrides") or {}
+
+                elif payload.get("type") == "DISMISS_AGENT_LAST_SCENARIO":
+                    self.agent_last_scenario = None
+                    self.agent_end_reason = None
+                    await self.broadcast_agent_state()
 
                 elif payload.get("type") == "UPDATE_THROTTLE":
                     self.throttle_profile = payload.get("profile", "None")
@@ -348,9 +383,12 @@ class WsHandlerMixin:
                 # Don't leave mocks installed by an agent that has gone away:
                 # the user would be left with silently rewritten traffic and
                 # nothing in the UI explaining why.
-                if not self.agent_clients and self.agent_scenario:
+                owns_scenario = self.agent_scenario_owner is websocket
+                if self.agent_scenario and (owns_scenario or not self.agent_clients):
                     name = self.agent_scenario.get("name")
                     print(f"[Agent] Disconnected — clearing scenario '{name}'", flush=True)
-                    await self._agent_clear_scenario()   # broadcasts agent state
+                    # "disconnect" tells the UI to keep the rules as adoptable
+                    # copies rather than dropping them on the floor.
+                    await self._agent_clear_scenario(reason="disconnect")
                 else:
                     await self.broadcast_agent_state()

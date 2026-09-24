@@ -10,6 +10,9 @@ dependencies = [
     # uses the 2.x surface, so don't relax this to allow 1.x.
     "mcp>=2.0.0",
     "websockets>=12.0",
+    # Already pulled in by mcp/pydantic; declared because server.py imports it
+    # directly for TypedDict/NotRequired on Python 3.10-3.11.
+    "typing_extensions>=4.6",
 ]
 
 [project.scripts]
