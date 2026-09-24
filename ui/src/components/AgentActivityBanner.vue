@@ -1,16 +1,10 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
-import { agentConnected, agentClients, agentScenario, stopAgentScenario } from '../store.js'
-
-// Collapsed by default so the strip stays out of the way; the summary line
-// already names how many endpoints are affected.
-const expanded = ref(false)
-
-// Collapse when a scenario ends, so the next one doesn't arrive pre-expanded
-// with rules the user never asked to see.
-watch(() => agentScenario.value?.name, (name) => {
-  if (!name) expanded.value = false
-})
+import { computed, ref, watch } from 'vue'
+import {
+  agentConnected, agentClients, agentScenario, latestAgentActivity, agentActivity,
+  stopAgentScenario, showMcpSetupModal, closeAllModals,
+  showMapModal, showMapRemoteModal,
+} from '../store.js'
 
 const hasScenario = computed(() => !!agentScenario.value)
 
@@ -28,17 +22,54 @@ const throttle = computed(() => {
   return t && t !== 'None' ? t : null
 })
 
+// The banner names the window to look in rather than reprinting every rule.
+// The rules already live in Map Local / Map Remote, and duplicating them here
+// meant the one place with the full story was the one place nobody looked.
+const target = computed(() => {
+  if (mocks.value.length) return { label: 'Map Local', open: openMapLocal }
+  if (rewrites.value.length) return { label: 'Map Remote', open: openMapRemote }
+  return null
+})
+
+const openMapLocal = () => { closeAllModals(); showMapModal.value = true }
+const openMapRemote = () => { closeAllModals(); showMapRemoteModal.value = true }
+
+// What the agent is doing, in one clause. Counts, not contents.
 const summary = computed(() => {
   const parts = []
   if (mocks.value.length) {
-    parts.push(`${mocks.value.length} endpoint${mocks.value.length === 1 ? '' : 's'} mocked`)
+    parts.push(`mocking ${mocks.value.length} endpoint${mocks.value.length === 1 ? '' : 's'}`)
   }
   if (rewrites.value.length) {
     parts.push(`${rewrites.value.length} rewrite${rewrites.value.length === 1 ? '' : 's'}`)
   }
   if (throttle.value) parts.push(`throttled to ${throttle.value}`)
-  return parts.length ? parts.join(' · ') : 'no traffic changes'
+  return parts.join(' · ')
 })
+
+// Last thing it did, so idle-but-connected still tells you something.
+const activityLine = computed(() => latestAgentActivity.value?.message || null)
+
+const openActivitySurface = () => {
+  const s = latestAgentActivity.value?.surface
+  if (s === 'map_local') openMapLocal()
+  else if (s === 'map_remote') openMapRemote()
+}
+
+// "What did it do while I was away" — the strip shows one line, the popover
+// shows the last twenty, newest first.
+const showHistory = ref(false)
+const history = computed(() => [...agentActivity.value].reverse())
+watch(agentConnected, (on) => { if (!on) showHistory.value = false })
+
+const relTime = (at) => {
+  if (!at) return ''
+  const s = Math.max(0, Math.round(Date.now() / 1000 - at))
+  if (s < 5) return 'just now'
+  if (s < 60) return `${s}s ago`
+  if (s < 3600) return `${Math.round(s / 60)}m ago`
+  return `${Math.round(s / 3600)}h ago`
+}
 </script>
 
 <template>
@@ -61,23 +92,46 @@ const summary = computed(() => {
 
         <span class="agent-text">
           <template v-if="hasScenario">
-            <strong>{{ clientLabel }}</strong> is changing your traffic —
-            <strong>&ldquo;{{ agentScenario.name }}&rdquo;</strong>
-            <span class="agent-summary">({{ summary }})</span>
+            <strong>{{ clientLabel }}</strong> is {{ summary }} —
+            <span class="agent-summary">check <strong>{{ target?.label }}</strong></span>
           </template>
           <template v-else>
             <strong>{{ clientLabel }}</strong> connected via MCP · not changing traffic
+            <span v-if="activityLine" class="agent-summary">· {{ activityLine }}</span>
           </template>
         </span>
 
         <div class="agent-actions">
           <button
-            v-if="hasScenario && (mocks.length || rewrites.length)"
+            v-if="agentActivity.length"
             class="agent-btn agent-btn--ghost"
-            :aria-expanded="expanded"
-            @click="expanded = !expanded"
+            :class="{ 'agent-btn--on': showHistory }"
+            title="Recent agent actions"
+            @click="showHistory = !showHistory"
           >
-            {{ expanded ? 'Hide' : 'Show' }} rules
+            History
+          </button>
+          <button
+            v-if="target"
+            class="agent-btn agent-btn--ghost"
+            :title="`Open ${target.label} to see and edit these rules`"
+            @click="target.open()"
+          >
+            Show rules
+          </button>
+          <button
+            v-else-if="latestAgentActivity?.surface"
+            class="agent-btn agent-btn--ghost"
+            @click="openActivitySurface"
+          >
+            Show
+          </button>
+          <button
+            class="agent-btn agent-btn--ghost"
+            title="How the MCP integration works"
+            @click="showMcpSetupModal = true"
+          >
+            What's this?
           </button>
           <button
             v-if="hasScenario"
@@ -90,19 +144,10 @@ const summary = computed(() => {
         </div>
       </div>
 
-      <div v-if="expanded && hasScenario" class="agent-rules">
-        <div v-for="(m, i) in mocks" :key="`m${i}`" class="agent-rule">
-          <span class="agent-tag agent-tag--mock">MOCK</span>
-          <span class="agent-method">{{ m.method === 'ANY' ? '*' : m.method }}</span>
-          <code class="agent-pattern">{{ m.pattern }}</code>
-          <span class="agent-arrow">&rarr;</span>
-          <span class="agent-status">{{ m.status }}</span>
-        </div>
-        <div v-for="(r, i) in rewrites" :key="`r${i}`" class="agent-rule">
-          <span class="agent-tag agent-tag--rewrite">REWRITE</span>
-          <code class="agent-pattern">{{ r.pattern }}</code>
-          <span class="agent-arrow">&rarr;</span>
-          <code class="agent-pattern">{{ r.target }}</code>
+      <div v-if="showHistory" class="agent-history">
+        <div v-for="(a, i) in history" :key="i" class="agent-history-row">
+          <span class="agent-history-time">{{ relTime(a.at) }}</span>
+          <span class="agent-history-msg">{{ a.message }}</span>
         </div>
       </div>
     </div>
@@ -206,6 +251,43 @@ const summary = computed(() => {
   background: var(--bg-hover);
 }
 
+.agent-btn--on {
+  background: var(--bg-active);
+  color: var(--fg-primary);
+}
+
+.agent-history {
+  max-height: 140px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border-subtle);
+  padding: 4px 10px 6px 25px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-history-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 10.5px;
+  color: var(--fg-secondary);
+}
+
+.agent-history-time {
+  flex-shrink: 0;
+  width: 56px;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-history-msg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .agent-btn--stop {
   background: var(--warning);
   color: #1a1b1c;
@@ -219,69 +301,6 @@ const summary = computed(() => {
 .agent-btn:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
-}
-
-.agent-rules {
-  padding: 2px 10px 7px 25px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  max-height: 132px;
-  overflow-y: auto;
-}
-
-.agent-rule {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10px;
-  min-width: 0;
-}
-
-.agent-tag {
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  padding: 1px 4px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
-.agent-tag--mock {
-  background: var(--warning);
-  color: #1a1b1c;
-}
-
-.agent-tag--rewrite {
-  background: var(--accent);
-  color: #ffffff;
-}
-
-.agent-method {
-  color: var(--fg-muted);
-  font-family: var(--font-mono, monospace);
-  flex-shrink: 0;
-  min-width: 30px;
-}
-
-.agent-pattern {
-  font-family: var(--font-mono, monospace);
-  color: var(--fg-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-arrow {
-  color: var(--fg-muted);
-  flex-shrink: 0;
-}
-
-.agent-status {
-  font-family: var(--font-mono, monospace);
-  color: var(--warning);
-  font-weight: 600;
-  flex-shrink: 0;
 }
 
 .agent-slide-enter-active,

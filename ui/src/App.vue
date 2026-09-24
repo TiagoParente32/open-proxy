@@ -27,6 +27,7 @@ import KeyboardShortcutsModal from './components/KeyboardShortcutsModal.vue'
 import OsProxyWarningModal from './components/OsProxyWarningModal.vue'
 import CertTrustModal from './components/CertTrustModal.vue'
 import AgentActivityBanner from './components/AgentActivityBanner.vue'
+import McpSetupModal from './components/McpSetupModal.vue'
 // Import just the logic needed for the top-level app overlay (WebSockets & Context Menu)
 import {
   initWebSocket,
@@ -54,6 +55,7 @@ import {
   showScriptingModal,
   deviceSetupType,
   showDeviceSetupModal,
+  showMcpSetupModal,
   throttleProfile,
   disableCache,
   updateInfo,
@@ -120,6 +122,7 @@ onMounted(() => {
     openHighlight:    () => { closeAllModals(); showHighlightModal.value = true },
     openScripting:    () => { closeAllModals(); showScriptingModal.value = true },
     openCertSetup:    (type) => { deviceSetupType.value = type; closeAllModals(); showDeviceSetupModal.value = true },
+    openMcpSetup:     () => { closeAllModals(); showMcpSetupModal.value = true },
     setThrottle:      (profile) => { throttleProfile.value = profile },
     bustCache:        () => { disableCache.value = !disableCache.value },
     toggleMacProxy:   () => toggleMacProxy(),
@@ -616,6 +619,7 @@ const openBreakpointModalFromContext = () => {
 
     <MapLocalModal />
     <MapRemoteModal />
+    <McpSetupModal />
     <BreakpointHit />
     <BreakpointsModal />
     <ComposeModal />
