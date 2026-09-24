@@ -88,10 +88,29 @@ $env:OPENPROXY_UPDATE_TEST_URL = $updateUrl
 $app = Start-Process $exePath -PassThru
 $env:OPENPROXY_UPDATE_TEST_URL = $null
 
+# Stand in for a connected agent: an MCP server running from this install with
+# its stdin held open, like a client keeps it. Before the fix this made the
+# update script wait its full 30s and then force-kill it.
+$psi = New-Object Diagnostics.ProcessStartInfo
+$psi.FileName = Join-Path $appDir.FullName "resources\backend\OpenProxy-server\OpenProxy-server.exe"
+$psi.Arguments = "--mcp"
+$psi.UseShellExecute = $false
+$psi.RedirectStandardInput = $true
+$psi.CreateNoWindow = $true
+$mcp = [Diagnostics.Process]::Start($psi)
+Write-Host "OK Fake agent MCP server running (PID $($mcp.Id))"
+
 # Wait for the app to exit, then clean up the server
 try { Wait-Process -Id $app.Id -ErrorAction SilentlyContinue } catch {}
 Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
 Write-Host "OK Done. Server stopped."
+
+Start-Sleep -Seconds 1
+if (-not $mcp.HasExited) {
+    Write-Host "x The update left the agent's MCP server running (PID $($mcp.Id))"
+    $mcp.Kill(); exit 1
+}
+Write-Host "OK The update stopped the agent's MCP server"
 
 # -- 6. MCP launcher check against the relaunched app ----------------------
 # The update swapped the install folder; the launcher the backend writes on
@@ -108,6 +127,14 @@ for ($i = 0; $i -lt 90; $i++) {
     } catch { Start-Sleep -Seconds 1 }
 }
 if (-not $up) { Write-Host "x Relaunched app never opened port 8765"; exit 1 }
+# The swap is done by now, so the log is complete. Nothing should have kept
+# the script waiting anywhere near its 30s limit.
+$log = Get-ChildItem $env:TEMP -Directory -Filter "openproxy_update_*" |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($log -and (Select-String -Path (Join-Path $log.FullName "update.log") -Pattern "\(2\d/30\)" -Quiet)) {
+    Write-Host "x The update script waited out its exit loop - see $($log.FullName)\update.log"; exit 1
+}
+Write-Host "OK The update script didn't have to wait out its exit loop"
 Start-Sleep -Seconds 2
 if (-not (Test-Path $shim)) { Write-Host "x MCP launcher missing: $shim"; exit 1 }
 $installDir = Split-Path -Parent $exePath

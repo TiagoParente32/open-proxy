@@ -102,10 +102,24 @@ BIN=$(defaults read "$(pwd)/$APP/Contents/Info" CFBundleExecutable 2>/dev/null |
 OPENPROXY_UPDATE_TEST_URL="$UPDATE_URL" "$APP/Contents/MacOS/$BIN" &
 APP_PID=$!
 
+# Stand in for a connected agent: an MCP server running from this bundle with
+# its stdin held open, like a client keeps it. The update must stop it rather
+# than leave it running code from the replaced bundle.
+sleep 100000 | "$APP/Contents/Resources/backend/OpenProxy-server/OpenProxy-server" --mcp >/dev/null 2>&1 &
+MCP_PID=$!
+echo "✓ Fake agent MCP server running (PID $MCP_PID)"
+
 # Wait for app to exit, then clean up server
 wait $APP_PID 2>/dev/null || true
 kill $SERVER_PID 2>/dev/null || true
 echo "✓ Done. Server stopped."
+
+sleep 1
+if kill -0 $MCP_PID 2>/dev/null; then
+  echo "✗ The update left the agent's MCP server running (PID $MCP_PID)"
+  kill $MCP_PID 2>/dev/null; exit 1
+fi
+echo "✓ The update stopped the agent's MCP server"
 
 # ── 6. MCP launcher check against the relaunched app ─────────────────────────
 # The update swapped the bundle; the launcher the backend writes on startup
