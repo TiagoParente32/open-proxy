@@ -1,4 +1,6 @@
-mitmproxy
+# mitmproxy 12+ is required: older releases pin h11/typing-extensions in ways
+# that clash with mcp>=2 (via httpx2/pydantic). Needs Python 3.13+ to resolve.
+mitmproxy>=12
 websockets
 psutil
 Pillow

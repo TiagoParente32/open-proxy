@@ -28,7 +28,7 @@ By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 | Tool | Version | Needed for |
 |---|---|---|
 | Node.js | 18+ | Electron shell and Vue UI |
-| Python | 3.10+ | Backend (`main.py`) |
+| Python | 3.13+ | Backend (`main.py`) |
 | ADB | any recent | Android device features |
 | OpenSSL | any recent | Android system-certificate hashing |
 | Xcode command line tools | latest | iOS Simulator features (macOS only) |

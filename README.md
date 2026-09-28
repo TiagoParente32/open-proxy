@@ -16,7 +16,7 @@ The power of `mitmproxy`, wrapped in an Electron + Vue 3 app for macOS, Windows 
 
 [![Electron](https://img.shields.io/badge/Electron-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![Vue 3](https://img.shields.io/badge/Vue_3-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
-[![Python](https://img.shields.io/badge/Python_3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python_3.13+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![mitmproxy](https://img.shields.io/badge/mitmproxy-engine-ff6a00)](https://mitmproxy.org/)
 
 [Download](https://github.com/TiagoParente32/open-proxy/releases/latest) ·
@@ -266,7 +266,7 @@ open-proxy/
 ### Prerequisites
 
 * Node.js 18+
-* Python 3.10+
+* Python 3.13+
 * ADB (Android Debug Bridge) in your system PATH *(Android features only)*
 * OpenSSL *(Android root certificate hashing only)*
 
