@@ -7,7 +7,6 @@ import {
   showMapModal, mapLocalRules, selectedRuleId, closeAllModals
 } from '../store.js'
 
-// ── Column resizing ──────────────────────────────────────────────────────────
 const columns = [
   { key: 'id',        label: 'ID',       width: 60  },
   { key: 'method',    label: 'Method',   width: 75  },
@@ -36,9 +35,8 @@ const startColResize = (e, idx) => {
   window.addEventListener('mouseup', onUp)
 }
 
-// ── Virtual scrolling ────────────────────────────────────────────────────────
 const ROW_HEIGHT = 26   // px — matches td padding (4px top + 4px bottom) + 12px font ~18px line = 26px
-const BUFFER     = 12   // extra rows rendered above and below the visible window
+const BUFFER     = 12
 
 const containerRef   = ref(null)
 const scrollTop      = ref(0)
@@ -258,7 +256,6 @@ onUnmounted(() => {
     <div class="table-toolbar">
       <div class="search-scope-wrapper">
 
-        <!-- Scope pill -->
         <button ref="scopeTriggerRef" class="scope-trigger" @click.stop="openScopeMenu">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -271,7 +268,6 @@ onUnmounted(() => {
 
         <div class="scope-divider" />
 
-        <!-- Match type pill -->
         <button ref="matchTriggerRef" class="match-trigger" @click.stop="openMatchMenu">
           <span class="scope-label">{{ searchMatchType }}</span>
           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" class="chevron" :class="{ open: showMatchMenu }">
@@ -281,7 +277,6 @@ onUnmounted(() => {
 
         <div class="scope-divider" />
 
-        <!-- Text input -->
         <input
           ref="searchInput"
           type="text"
@@ -291,14 +286,12 @@ onUnmounted(() => {
           @keydown.escape="clearSearch"
         />
 
-        <!-- Clear button -->
         <button v-if="searchQuery" class="clear-btn" @click="clearSearch" title="Clear (Esc)">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--fg-muted)" stroke-width="2.5" stroke-linecap="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
         </button>
 
-        <!-- Scope dropdown -->
         <Teleport to="body">
           <div v-if="showScopeMenu" class="scope-dropdown-portal" :style="scopeDropdownStyle">
             <template v-for="(s, i) in SCOPES" :key="i">
@@ -318,7 +311,6 @@ onUnmounted(() => {
           </div>
         </Teleport>
 
-        <!-- Match type dropdown -->
         <Teleport to="body">
           <div v-if="showMatchMenu" class="scope-dropdown-portal" :style="matchDropdownStyle">
             <template v-for="(m, i) in MATCH_TYPES" :key="i">
@@ -388,7 +380,6 @@ onUnmounted(() => {
             <td class="text-muted">{{ formatBytes(req.res_bytes) }}</td>
             <td></td>
           </tr>
-          <!-- bottom spacer -->
           <tr v-if="bottomPad > 0" :style="{ height: bottomPad + 'px' }" aria-hidden="true"><td colspan="9" style="padding:0;border:none;"></td></tr>
         </tbody>
       </table>
@@ -435,7 +426,6 @@ onUnmounted(() => {
   transform: translateX(-50%) translateY(-2px);
 }
 
-/* ── Search bar ───────────────────────────────────── */
 .table-toolbar {
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
@@ -506,10 +496,8 @@ onUnmounted(() => {
 }
 .clear-btn:hover { background: var(--surface-hover-strong); color: var(--fg-secondary); border-color: transparent; }
 
-/* ── Scope dropdown (teleported to body) ──────────── */
 /* dropdown styles moved to non-scoped block below */
 
-/* ── Table ────────────────────────────────────────── */
 .table-container { flex: 1; overflow: auto; display: flex; flex-direction: column; }
 
 .traffic-table {

@@ -9,7 +9,6 @@ const draftMode   = ref('allow')
 const draftIgnore = ref('')
 const draftAllow  = ref('')
 
-// Computed v-model — textarea always shows the active tab's list
 const draft = computed({
   get: () => draftMode.value === 'ignore' ? draftIgnore.value : draftAllow.value,
   set: (val) => draftMode.value === 'ignore' ? (draftIgnore.value = val) : (draftAllow.value = val),
@@ -54,7 +53,6 @@ const PRESETS = [
   { label: 'Apple CDN',          value: '*.apple.com' },
 ]
 
-// Load both lists (prettified) when modal opens
 watch(() => props.show, (open) => {
   if (open) {
     draftIgnore.value = proxyIgnoreHosts.value.map(prettifyPattern).join('\n')
@@ -91,7 +89,6 @@ const clear = () => { draft.value = '' }
 
 const importFilter = async () => {
   await importHostFilter()
-  // Reload drafts to reflect the newly imported data
   draftIgnore.value = proxyIgnoreHosts.value.map(prettifyPattern).join('\n')
   draftAllow.value  = proxyAllowHosts.value.map(prettifyPattern).join('\n')
   draftMode.value   = proxyHostFilterMode.value

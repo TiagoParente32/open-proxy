@@ -9,14 +9,12 @@ const emit = defineEmits(['done'])
 const TOTAL_STEPS = 4
 const step = ref(1)
 
-// Step 1 – theme
 const selectedTheme = ref(currentThemeId.value)
 const pickTheme = (id) => { selectedTheme.value = id; applyTheme(id) }
 
-// Step 2 – intercept mode
 const selected = ref(props.prefill ? proxyHostFilterMode.value : null)
 
-// Step 3 – add hosts (Selective Interception only — "Intercept Everything" skips this step,
+// Add hosts (Selective Interception only — "Intercept Everything" skips this step,
 // but the underlying ignore-list draft still tracks any existing exclusions so finishing
 // onboarding without touching this step doesn't silently wipe them out).
 const draft = ref(props.prefill
@@ -60,11 +58,9 @@ const draftHosts = computed(() => draft.value.split('\n').map(l => l.trim()).fil
 // user would knowingly want to finish onboarding in.
 const needsHost = computed(() => selected.value === 'allow' && draftHosts.value.length === 0)
 
-// Step 4 – quick settings
 const selectedSortOrder = ref(props.prefill ? sortOrder.value : 'desc')
 const enableNoCache = ref(props.prefill ? disableCache.value : false)
 
-// Navigation
 const canProceed = computed(() => {
   if (step.value === 2) return selected.value !== null
   if (step.value === 3) return !needsHost.value
@@ -227,7 +223,6 @@ defineExpose({ finish })
           <h2 class="ob-title" style="font-size:18px">Quick settings</h2>
           <p class="ob-subtitle">Set your defaults — all of these can be changed later from the toolbar.</p>
 
-          <!-- Sort order -->
           <div class="ob-setting-section">
             <div class="ob-setting-label">Request order</div>
             <div class="ob-cards" style="gap:10px">
@@ -258,7 +253,6 @@ defineExpose({ finish })
             </div>
           </div>
 
-          <!-- No Cache toggle -->
           <div class="ob-setting-section">
             <div class="ob-setting-label">No Cache</div>
             <div
@@ -302,7 +296,6 @@ defineExpose({ finish })
   max-height: 95vh; overflow-y: auto;
 }
 
-/* Step indicator */
 .ob-steps { display: flex; align-items: center; gap: 0; margin-bottom: 4px; }
 .ob-step {
   width: 28px; height: 28px; border-radius: 50%;
@@ -320,7 +313,6 @@ defineExpose({ finish })
 .ob-title { font-size: 20px; font-weight: 700; color: var(--fg-primary); margin: 0; text-align: center; }
 .ob-subtitle { font-size: 13px; color: var(--fg-muted); margin: 0; text-align: center; line-height: 1.5; }
 
-/* Theme grid */
 .ob-theme-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; }
 .ob-theme-card {
   position: relative; cursor: pointer;
@@ -339,7 +331,6 @@ defineExpose({ finish })
 .ob-swatch--accent { border-radius: 4px; }
 .ob-theme-name { font-size: 12px; font-weight: 600; color: var(--fg-primary); }
 
-/* Intercept mode cards */
 .ob-cards { display: flex; gap: 14px; width: 100%; }
 .ob-card {
   flex: 1; background: var(--bg-deepest); border: 2px solid var(--border);
@@ -363,7 +354,6 @@ defineExpose({ finish })
 .ob-note { font-size: 12px; color: var(--fg-muted); text-align: center; margin: 0; }
 .ob-note strong { color: var(--fg-secondary); }
 
-/* Step 3 – hosts */
 .ob-step2-header { width: 100%; text-align: center; }
 .ob-presets-label {
   width: 100%; font-size: 10px; font-weight: 600; color: var(--fg-muted);
@@ -391,7 +381,6 @@ defineExpose({ finish })
   padding: 1px 5px; border-radius: 3px; font-size: 10px;
 }
 
-/* Step 4 – quick settings */
 .ob-setting-section { width: 100%; display: flex; flex-direction: column; gap: 8px; }
 .ob-setting-label {
   font-size: 10px; font-weight: 600; color: var(--fg-muted);
@@ -421,7 +410,6 @@ defineExpose({ finish })
 }
 .ob-switch.on .ob-switch-thumb { transform: translateX(16px); }
 
-/* Footer / navigation */
 .ob-footer { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 4px; }
 .ob-btn-back {
   font-size: 12px; background: transparent; border: 1px solid var(--border);

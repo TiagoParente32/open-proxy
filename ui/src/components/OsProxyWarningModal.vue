@@ -129,7 +129,6 @@ const goToHostFilters = () => {
 }
 .warn-btn-primary:hover { background: var(--accent-hover, #1a7fd6); }
 
-/* Transition */
 .warn-fade-enter-active,
 .warn-fade-leave-active { transition: opacity 0.2s, transform 0.2s; }
 .warn-fade-enter-from,

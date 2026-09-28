@@ -6,14 +6,13 @@ const searchQuery = ref('')
 const scrollContainer = ref(null)
 const isAutoScrollPaused = ref(false)
 
-// 1. Base messages strictly for the currently selected request
 const baseMessages = computed(() => {
   if (!selectedRequest.value) return []
   const reqId = String(selectedRequest.value.id)
   return wsMessages.value[reqId] || []
 })
 
-// 2. Filtered messages (Supports "!" prefix to exclude terms)
+// Supports a leading "!" to invert the search and exclude matching terms
 const filteredMessages = computed(() => {
   let msgs = baseMessages.value
   if (!searchQuery.value.trim()) return msgs
@@ -40,11 +39,9 @@ const formatBytes = (bytes) => {
   return (bytes / 1024).toFixed(1) + ' KB'
 }
 
-// 3. Smart Scroll Handlers
 const handleScroll = () => {
   if (!scrollContainer.value) return
   const { scrollTop, scrollHeight, clientHeight } = scrollContainer.value
-  // If we are more than 20px from the bottom, pause auto-scroll
   const distanceToBottom = scrollHeight - scrollTop - clientHeight
   isAutoScrollPaused.value = distanceToBottom > 20
 }
@@ -62,39 +59,33 @@ watch(() => filteredMessages.value.length, async () => {
   scrollToBottom()
 })
 
-// NEW: Track which frame just got copied
 const copiedIndex = ref(null)
 
-// NEW: Smart Formatter (Handles pure JSON and Socket.IO payloads)
 const formatPayload = (content) => {
   if (!content || typeof content !== 'string') return content
   const trimmed = content.trim()
 
-  // 1. Try Pure JSON
   if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
     try { return JSON.stringify(JSON.parse(trimmed), null, 2) } catch (e) {}
   }
 
-  // 2. Try Socket.IO format (e.g., '42["message", {"key":"value"}]')
+  // Socket.IO format, e.g. '42["message", {"key":"value"}]' — numeric prefix + JSON payload
   const match = trimmed.match(/^(\d+)(.*)/)
   if (match && match[2]) {
     const prefix = match[1]
     const possibleJson = match[2].trim()
-    
+
     if ((possibleJson.startsWith('{') && possibleJson.endsWith('}')) || (possibleJson.startsWith('[') && possibleJson.endsWith(']'))) {
       try {
         const parsed = JSON.parse(possibleJson)
-        // Put the prefix on its own line, then the beautiful JSON below it
         return prefix + "\n" + JSON.stringify(parsed, null, 2)
       } catch (e) {}
     }
   }
 
-  // Fallback: Return as-is
   return content
 }
 
-// NEW: Copy to Clipboard
 const copyPayload = async (content, idx) => {
   try {
     const formatted = formatPayload(content)
@@ -106,46 +97,40 @@ const copyPayload = async (content, idx) => {
   }
 }
 
-// ... [keep your existing formatPayload and copyPayload functions] ...
-
-// NEW: Lightweight JSON Syntax Highlighter (OneDark Theme)
+// Lightweight JSON syntax highlighter (OneDark theme)
 const syntaxHighlight = (jsonStr) => {
-  // Escape HTML to prevent injection
+  // Escape HTML first to prevent injection via WS frame content rendered with v-html
   let safeJson = jsonStr.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  
-  // Regex to identify JSON tokens and wrap them in styled spans
+
   return safeJson.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
-    let cls = 'cm-number'; // default to number color
+    let cls = 'cm-number';
     if (/^"/.test(match)) {
       if (/:$/.test(match)) {
-        cls = 'cm-key';    // it's a key
+        cls = 'cm-key';
       } else {
-        cls = 'cm-string'; // it's a string value
+        cls = 'cm-string';
       }
     } else if (/true|false/.test(match)) {
-      cls = 'cm-boolean';  // it's a boolean
+      cls = 'cm-boolean';
     } else if (/null/.test(match)) {
-      cls = 'cm-null';     // it's null
+      cls = 'cm-null';
     }
     return `<span class="${cls}">${match}</span>`;
   });
 }
 
-// UPDATE: Modify your formatPayload to pipe its output through the highlighter
 const getHighlightedPayload = (content) => {
   const formattedText = formatPayload(content);
-  
-  // If the formatter successfully parsed it into multiple lines (JSON or Socket.IO JSON)
+
   if (formattedText.includes('\n') || formattedText.startsWith('{') || formattedText.startsWith('[')) {
-    // If it's Socket.IO, split the prefix from the JSON so we only highlight the JSON
+    // Socket.IO frames: split the numeric prefix from the JSON so only the JSON gets highlighted
     const match = formattedText.match(/^(\d+)\n([\s\S]*)/);
     if (match) {
       return `<span class="cm-prefix">${match[1]}</span>\n${syntaxHighlight(match[2])}`;
     }
     return syntaxHighlight(formattedText);
   }
-  
-  // Fallback for plain text frames
+
   return formattedText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 </script>
@@ -215,8 +200,7 @@ const getHighlightedPayload = (content) => {
   position: relative; /* For the absolute jump button */
 }
 
-/* Updated Header Layout for the Search Bar */
-.ws-header { 
+.ws-header {
   padding: 8px 12px; 
   border-bottom: 1px solid var(--border); 
   background: var(--bg-sidebar); 
@@ -285,10 +269,9 @@ const getHighlightedPayload = (content) => {
   -webkit-user-select: text;
   font-size: 11px;
   line-height: 1.4;
-  text-align: left; /* <-- FORCE LEFT ALIGNMENT */
-  margin: 0;        /* <-- RESET MARGINS TO PREVENT DRIFT */
+  text-align: left;
+  margin: 0;
 }
-/* The Jump Button */
 .jump-bottom-btn {
   position: absolute;
   bottom: 16px;
@@ -319,20 +302,18 @@ const getHighlightedPayload = (content) => {
   border-top: 1px solid var(--border-subtle);
 }
 
-/* The actual text container */
-.frame-payload { 
-  padding: 12px; 
-  color: var(--fg-secondary); 
-  font-family: 'Consolas', monospace; 
-  white-space: pre-wrap; 
-  word-break: break-all; 
-  user-select: text; /* CRITICAL: Enables highlighting/copying */
+.frame-payload {
+  padding: 12px;
+  color: var(--fg-secondary);
+  font-family: 'Consolas', monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
   -webkit-user-select: text;
   font-size: 11px;
   line-height: 1.4;
 }
 
-/* Sleek Copy Button (Reveals on Hover) */
 .copy-payload-btn {
   position: absolute;
   top: 6px;
@@ -345,12 +326,11 @@ const getHighlightedPayload = (content) => {
   font-size: 10px;
   font-weight: bold;
   cursor: pointer;
-  opacity: 0; /* Hidden by default */
+  opacity: 0;
   transition: all 0.2s ease;
   z-index: 5;
 }
 
-/* Show the button when the user hovers over the specific frame */
 .ws-frame:hover .copy-payload-btn {
   opacity: 1;
 }
@@ -361,21 +341,20 @@ const getHighlightedPayload = (content) => {
   border-color: var(--accent-hover);
 }
 
-/* Lightweight OneDark Theme Colors */
-:deep(.cm-key) { 
-  color: var(--syntax-red); /* Red/Pink for keys */
+:deep(.cm-key) {
+  color: var(--syntax-red);
 }
-:deep(.cm-string) { 
-  color: var(--syntax-green); /* Green for strings */
+:deep(.cm-string) {
+  color: var(--syntax-green);
 }
-:deep(.cm-number) { 
-  color: var(--syntax-orange); /* Orange for numbers */
+:deep(.cm-number) {
+  color: var(--syntax-orange);
 }
-:deep(.cm-boolean) { 
-  color: var(--syntax-cyan); /* Cyan for booleans */
+:deep(.cm-boolean) {
+  color: var(--syntax-cyan);
 }
-:deep(.cm-null) { 
-  color: var(--syntax-purple); /* Purple for nulls */
+:deep(.cm-null) {
+  color: var(--syntax-purple);
 }
 :deep(.cm-prefix) {
   color: var(--syntax-blue); /* Blue for the Socket.IO routing prefix */
