@@ -36,12 +36,24 @@ $pythonExe = if (Test-Path "venv\Scripts\python.exe") { "venv\Scripts\python.exe
 if (Test-Path "backend-dist") { Remove-Item -Recurse -Force "backend-dist" }
 if (Test-Path "build-pyinstaller") { Remove-Item -Recurse -Force "build-pyinstaller" }
 
+# --paths/--hidden-import/--collect-submodules bundle the MCP server (see
+# mcp-server/) so `OpenProxy-server --mcp` works from the packaged app. Only the
+# subpackages we use: `mcp.cli` needs typer, which isn't installed.
+# Fail here, not at the user's first tool call: the MCP server is bundled from
+# this interpreter's site-packages, so `mcp` must be importable by it.
+& $pythonExe -c "import mcp, sys; sys.path.insert(0, 'mcp-server'); import openproxy_mcp.server"
+if ($LASTEXITCODE -ne 0) { Write-Error "'mcp' is not installed for $pythonExe - run: pip install -r requirements.txt"; exit 1 }
+
 & $pythonExe -m PyInstaller `
   --name "OpenProxy-server" `
   --distpath backend-dist `
   --workpath build-pyinstaller `
   --clean `
   --noconfirm `
+  --paths mcp-server `
+  --hidden-import openproxy_mcp.server `
+  --collect-submodules mcp.server `
+  --collect-submodules mcp.shared `
   main.py
 
 if (Test-Path "build-pyinstaller") { Remove-Item -Recurse -Force "build-pyinstaller" }

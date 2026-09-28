@@ -14,14 +14,80 @@ import {
   syncMapLocalRules,
   enableMapLocal,
   importRules,
-  exportRules
+  exportRules,
+  agentMocks,
+  agentLabel,
+  agentScenario,
+  stopAgentScenario,
+  showMcpSetupModal,
+  agentRuleProxy,
+  clearAgentRuleOverride,
+  adoptAgentScenario,
+  selectedAgentMockKey,
+  describeMockExtras
 } from '../store.js'
 
 // --- 1. CORE REFS & COMPUTEDS ---
 const modalRef = ref(null)
 const { modalStyle, startResize } = useEdgeResize(modalRef, { minW: 600, minH: 420 })
 const extensions = computed(() => [json(), ...cmTheme.value, EditorView.lineWrapping])
-const activeRule = computed(() => mapLocalRules.value.find(r => r.id === selectedRuleId.value))
+
+// --- agent-owned mocks ---
+// Selection is mutually exclusive with the user's own rules: one editor, one
+// subject. The key lives in the store so the traffic table can preselect the
+// rule that mocked a row.
+const selectedAgentKey = selectedAgentMockKey
+const selectedAgentMock = computed(() =>
+  agentMocks.value.find(m => m.key === selectedAgentKey.value) || null
+)
+
+// The editor below doesn't care which list a rule came from. An agent's mock
+// arrives wrapped so that writing to it records an override instead of mutating
+// a list the agent owns — see `agentRuleProxy`. Everything downstream (the
+// omnibar, the status autocomplete, the header grids) is untouched.
+const activeRule = computed(() => {
+  if (selectedAgentKey.value) {
+    return selectedAgentMock.value ? agentRuleProxy(selectedAgentKey.value, 'local') : null
+  }
+  return mapLocalRules.value.find(r => r.id === selectedRuleId.value)
+})
+
+const isAgentRule = computed(() => !!selectedAgentKey.value && !!selectedAgentMock.value)
+const isOverridden = (field) => !!selectedAgentMock.value?.overridden?.includes(field)
+const anyOverridden = computed(() => agentMocks.value.some(m => m.overridden?.length))
+
+// Latency and response sequences have no controls in this editor (they're
+// agent-only fields), so they're described in a sentence instead of hidden.
+const ruleExtras = computed(() => describeMockExtras(activeRule.value))
+
+const selectAgentMock = (key) => {
+  selectedAgentKey.value = key
+  selectedRuleId.value = null
+}
+
+// Keep the two selections exclusive when the user picks one of their own rules.
+watch(selectedRuleId, (id) => { if (id != null) selectedAgentKey.value = null })
+
+// Drop the selection if the agent's next scenario doesn't include this rule, so
+// the editor can't end up showing something that isn't live.
+watch(agentMocks, (mocks) => {
+  if (selectedAgentKey.value && !mocks.some(m => m.key === selectedAgentKey.value)) {
+    selectedAgentKey.value = null
+  }
+})
+
+/** Fork just this rule into the user's own list, agent copy left alone. */
+const copyAgentRuleToMine = () => {
+  const m = selectedAgentMock.value
+  if (!m) return
+  adoptAgentScenario(
+    { name: agentScenario.value?.name, mocks: [m], rewrites: [] },
+    { active: false }
+  )
+  selectedAgentKey.value = null
+  const mine = mapLocalRules.value[mapLocalRules.value.length - 1]
+  if (mine) selectedRuleId.value = mine.id
+}
 const activeTab = ref('Body')
 const queryParams = ref([{ key: '', value: '' }])
 const responseHeaders = ref([{ key: '', value: '' }])
@@ -193,7 +259,9 @@ const removeReqHeaderRow = (index) => {
 // --- 3. WATCHERS ---
 
 watch(mapLocalRules, (newRules) => {
-  if (newRules.length > 0 && !selectedRuleId.value) {
+  // Don't yank the editor away from an agent rule the user is reading just
+  // because their own list changed.
+  if (newRules.length > 0 && !selectedRuleId.value && !selectedAgentKey.value) {
     selectedRuleId.value = newRules[0].id
   }
 }, { immediate: true, deep: true })
@@ -376,6 +444,56 @@ const browseFile = async () => {
           </div>
 
           <div class="pm-rule-list">
+            <!--
+              Agent-owned mocks, shown above the user's own so it's obvious at a
+              glance that something else is intercepting. Same row, same editor
+              as the user's own rules — only the tint and the MCP tag differ, so
+              ownership is visible without the rule becoming a second-class one.
+            -->
+            <template v-if="agentMocks.length">
+              <div class="pm-agent-header">
+                <span class="pm-agent-tag">MCP</span>
+                <span class="pm-agent-owner" :title="`Installed by ${agentLabel}`">{{ agentLabel }}</span>
+                <button v-if="anyOverridden" class="pm-agent-ghost"
+                        title="Discard all your edits to these rules and use the agent's versions"
+                        @click="clearAgentRuleOverride(null, 'local')">Revert all</button>
+                <button class="pm-agent-ghost" title="Copy these rules into your own list, switched off"
+                        @click="adoptAgentScenario(agentScenario, { active: false })">Copy all</button>
+                <button class="pm-agent-stop" title="Remove the agent's rules and restore your own"
+                        @click="stopAgentScenario">Stop</button>
+              </div>
+
+              <div v-for="m in agentMocks" :key="m.key"
+                   class="pm-rule-item pm-rule-item--agent"
+                   :class="{ active: selectedAgentKey === m.key }"
+                   @click="selectAgentMock(m.key)">
+
+                <label class="pm-checkbox-container" @click.stop>
+                  <input type="checkbox" :checked="m.active !== false"
+                         :title="m.active !== false ? 'Switch this mock off' : 'Switch this mock back on'"
+                         @change="e => agentRuleProxy(m.key, 'local').active = e.target.checked" />
+                  <span class="pm-checkmark"></span>
+                </label>
+
+                <div class="pm-rule-text-stack">
+                  <span class="pm-rule-pattern" :title="m.label || m.pattern">
+                    {{ m.label || m.pattern }}
+                  </span>
+                  <span class="pm-rule-subtext">
+                    <span class="pm-method-badge" :class="`method-${(m.method||'ANY').toLowerCase()}`">{{ m.method || 'ANY' }}</span>
+                    <span class="pm-agent-status">&rarr; {{ m.status }}</span>
+                    <span v-if="m.responses?.length" class="pm-extra" :title="describeMockExtras(m)">sequence</span>
+                    <span v-if="m.delay_ms" class="pm-extra" :title="describeMockExtras(m)">+{{ m.delay_ms }} ms</span>
+                    <span v-if="m.overridden?.length" class="pm-owned" title="You've taken over this rule">edited</span>
+                  </span>
+                </div>
+
+                <span class="pm-agent-dot" aria-hidden="true" :title="`Owned by ${agentLabel}`"></span>
+              </div>
+
+              <div class="pm-agent-divider"></div>
+            </template>
+
             <div v-for="rule in mapLocalRules" :key="rule.id" class="pm-rule-item"
               :class="{ active: selectedRuleId === rule.id }" @click="selectedRuleId = rule.id">
 
@@ -406,7 +524,13 @@ const browseFile = async () => {
             </div>
 
             <div v-if="mapLocalRules.length === 0" class="empty-state">
-              No rules yet. Click + to create your first Map Local rule.
+              <template v-if="agentMocks.length">
+                No rules of your own — the rules above belong to {{ agentLabel }}.
+              </template>
+              <template v-else>
+                No rules yet. Click + to create your first Map Local rule,
+                or <a class="pm-agent-link" @click="showMcpSetupModal = true">let an AI agent drive them</a>.
+              </template>
             </div>
           </div>
 
@@ -432,7 +556,10 @@ const browseFile = async () => {
         <div class="pm-main-area">
           <div v-if="activeRule" style="display: flex; flex-direction: column; height: 100%;">
             <div class="pm-header">
-              <strong class="pm-title">Mock Response Editor</strong>
+              <strong class="pm-title">
+                <span v-if="isAgentRule" class="pm-agent-tag">MCP</span>
+                Mock Response Editor
+              </strong>
               <button class="pm-close-btn" @click="saveAndApplyRules">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -440,9 +567,26 @@ const browseFile = async () => {
               </button>
             </div>
 
+            <!-- Ownership is a property of the rule, not a different editor. -->
+            <div v-if="isAgentRule" class="pm-agent-notice">
+              Installed by <strong>{{ agentLabel }}</strong>. Anything you change here is yours
+              from now on — it's re-applied on top of the agent's rule every time it reinstalls
+              this scenario, so its next run won't quietly undo your edit.
+            </div>
+            <!-- Behaviour this editor can't express: say it rather than hide it,
+                 or the traffic table shows statuses the status box doesn't. -->
+            <div v-if="ruleExtras" class="pm-extras-notice">
+              <strong>{{ ruleExtras }}.</strong>
+              The status and body below are the base response; these extras were set by an agent
+              and can't be edited here.
+            </div>
+
             <div style="padding: 16px 20px 0 20px;">
               <div class="pm-label-container">
-                <span class="pm-routing-label">Rule Name (Optional)</span>
+                <span class="pm-routing-label">
+                  Rule Name (Optional)
+                  <span v-if="isOverridden('label')" class="pm-owned">yours</span>
+                </span>
                 <input type="text" v-model="activeRule.label" class="pm-routing-input"
                   placeholder="e.g., Get User Profile Mock" />
               </div>
@@ -468,10 +612,13 @@ const browseFile = async () => {
                 </div>
                 <div class="pm-divider"></div>
                 <input type="text" v-model="activeRule.pattern" class="pm-url-input"
+                  :class="{ 'pm-owned-input': isOverridden('pattern') }"
                   placeholder="e.g., api.example.com/*" @input="syncPatternToParams" />
                 <div class="pm-divider"></div>
                 <div class="pm-status-wrapper" style="position: relative;">
-                  <span class="pm-status-label">Status</span>
+                  <span class="pm-status-label">
+                    Status<span v-if="isOverridden('status')" class="pm-owned">yours</span>
+                  </span>
                   <input
                     type="text"
                     class="pm-status-input"
@@ -501,13 +648,19 @@ const browseFile = async () => {
 
             <div class="pm-tabs">
 
-              <span class="pm-tab" :class="{ active: activeTab === 'Body' }" @click="activeTab = 'Body'">Body</span>
+              <span class="pm-tab" :class="{ active: activeTab === 'Body' }" @click="activeTab = 'Body'">
+                Body<span v-if="isOverridden('body') || isOverridden('file_path')" class="pm-owned-dot" title="You've edited this"></span>
+              </span>
               <span class="pm-tab" :class="{ active: activeTab === 'Params' }"
                 @click="activeTab = 'Params'">Params</span>
               <span class="pm-tab" :class="{ active: activeTab === 'Req Headers' }"
-                @click="activeTab = 'Req Headers'">Request Headers</span>
+                @click="activeTab = 'Req Headers'">
+                Request Headers<span v-if="isOverridden('req_headers_mod')" class="pm-owned-dot" title="You've edited this"></span>
+              </span>
               <span class="pm-tab" :class="{ active: activeTab === 'Res Headers' }"
-                @click="activeTab = 'Res Headers'">Response Headers</span>
+                @click="activeTab = 'Res Headers'">
+                Response Headers<span v-if="isOverridden('headers')" class="pm-owned-dot" title="You've edited this"></span>
+              </span>
             </div>
 
             <div class="pm-editor-area">
@@ -617,11 +770,26 @@ const browseFile = async () => {
               </div>
             </div>
 
-            <div class="pm-footer">
+            <!--
+              An agent's rule is already live, so there's nothing to save — the
+              footer offers the two things that are actually useful instead.
+            -->
+            <div v-if="isAgentRule" class="pm-footer">
+              <button v-if="selectedAgentMock.overridden?.length"
+                      class="pm-btn-cancel"
+                      title="Discard your edits and use the agent's version again"
+                      @click="clearAgentRuleOverride(selectedAgentMock.key, 'local')">
+                Revert to agent's version
+              </button>
+              <button class="pm-btn-cancel" @click="copyAgentRuleToMine">Copy to my rules</button>
+              <button class="pm-btn-execute" @click="showMapModal = false">Done</button>
+            </div>
+            <div v-else class="pm-footer">
               <button class="pm-btn-cancel" @click="showMapModal = false">Cancel</button>
               <button class="pm-btn-execute" @click="saveAndApplyRules">Save & Apply</button>
             </div>
           </div>
+
           <div v-else class="pm-main-empty">
             Select or create a rule to edit.
           </div>
@@ -687,6 +855,83 @@ const browseFile = async () => {
 .pm-rule-item:hover { background: var(--bg-active); }
 .pm-rule-item.active { background: var(--accent-muted); border-left: 3px solid var(--accent); padding-left: 11px; }
 
+/* Agent-owned rules: same row metrics as the user's so the list still scans as
+   one column, but tinted and non-interactive so ownership is never ambiguous. */
+.pm-agent-header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px; background: var(--warning-muted);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.pm-agent-tag {
+  font-size: 8px; font-weight: 700; letter-spacing: 0.4px;
+  padding: 1px 4px; border-radius: 3px;
+  background: var(--warning); color: #1a1b1c; flex-shrink: 0;
+}
+.pm-agent-owner {
+  flex: 1; min-width: 0; font-size: 10px; color: var(--fg-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pm-agent-stop {
+  font-size: 10px; font-family: inherit; padding: 1px 7px; border-radius: 4px;
+  background: var(--warning); color: #1a1b1c; font-weight: 600;
+  border: none; cursor: pointer; flex-shrink: 0;
+}
+.pm-agent-stop:hover { filter: brightness(1.1); }
+.pm-agent-stop:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.pm-rule-item--agent { background: var(--warning-muted); }
+.pm-rule-item--agent:hover { filter: brightness(1.08); }
+.pm-rule-item--agent.active { border-left: 3px solid var(--warning); padding-left: 11px; background: var(--warning-muted); filter: brightness(1.12); }
+
+.pm-agent-ghost {
+  font-size: 10px; font-family: inherit; padding: 1px 7px; border-radius: 4px;
+  background: transparent; border: 1px solid var(--warning); color: var(--fg-secondary);
+  cursor: pointer; flex-shrink: 0;
+}
+.pm-agent-ghost:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* "This field is yours now, not the agent's." Used as a badge next to a label
+   and as a bare dot on tab titles, where there's no room for a word. */
+.pm-owned {
+  font-size: 8px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase;
+  padding: 1px 4px; border-radius: 3px; margin-left: 4px;
+  background: var(--accent); color: #fff; flex-shrink: 0;
+}
+.pm-owned-dot {
+  display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent); margin-left: 5px; vertical-align: middle;
+}
+.pm-owned-input { box-shadow: inset 2px 0 0 var(--accent); }
+
+/* Ownership banner above the shared editor. */
+.pm-agent-notice {
+  font-size: 11px; line-height: 1.6; color: var(--fg-secondary);
+  background: var(--warning-muted); border-bottom: 1px solid var(--warning);
+  padding: 8px 20px; flex-shrink: 0;
+}
+
+/* Sits where the user's rows put their delete button, so both kinds of row
+   keep the same three-column rhythm. */
+.pm-agent-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--warning); flex-shrink: 0; margin: 0 7px;
+}
+.pm-agent-status { color: var(--warning); font-weight: 600; margin-left: 4px; }
+.pm-extra {
+  font-size: 8px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase;
+  padding: 1px 4px; border-radius: 3px; margin-left: 4px;
+  border: 1px solid var(--warning); color: var(--fg-secondary); flex-shrink: 0;
+}
+.pm-extras-notice {
+  font-size: 11px; line-height: 1.6; color: var(--fg-secondary);
+  background: var(--bg-card); border-bottom: 1px solid var(--border);
+  padding: 6px 20px; flex-shrink: 0;
+}
+.pm-agent-divider { height: 1px; background: var(--border); margin: 0; }
+
+.pm-agent-link { color: var(--accent); cursor: pointer; text-decoration: underline; }
+.pm-agent-link:hover { filter: brightness(1.15); }
+
 .empty-state {
   padding: 40px 20px; text-align: center;
   color: var(--fg-placeholder); font-size: 12px; line-height: 1.6;
@@ -725,7 +970,7 @@ const browseFile = async () => {
 
 .pm-main-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-main); min-width: 0; }
 .pm-header { display: flex; justify-content: space-between; align-items: center; padding: 0 16px; height: 44px; background: var(--bg-sidebar); border-bottom: 1px solid var(--border); flex-shrink: 0; }
-.pm-title { font-size: 13px; font-weight: 600; color: var(--fg-primary); }
+.pm-title { font-size: 13px; font-weight: 600; color: var(--fg-primary); display: flex; align-items: center; gap: 6px; }
 .pm-close-btn { background: none; border: none; cursor: pointer; color: var(--fg-muted); padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: background 0.12s, color 0.12s; }
 .pm-close-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
 

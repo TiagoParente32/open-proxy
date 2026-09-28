@@ -4,3 +4,5 @@ psutil
 Pillow
 pyinstaller
 certifi
+# The MCP server (mcp-server/) is bundled into the backend binary; see build.sh.
+mcp>=2.0.0

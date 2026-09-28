@@ -31,7 +31,9 @@ if (-not $NoBuild) {
 }
 
 # ── 2. Find the win zip ───────────────────────────────────────────────────
-$zip = Get-ChildItem dist-electron -Filter "*win*.zip" -ErrorAction SilentlyContinue | Select-Object -First 1
+# Newest first: dist-electron\ accumulates zips from earlier versions.
+$zip = Get-ChildItem dist-electron -Filter "*win*.zip" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $zip) {
     Write-Host "x No win zip found in dist-electron\. Run .\build.ps1 first."
     exit 1
@@ -86,7 +88,64 @@ $env:OPENPROXY_UPDATE_TEST_URL = $updateUrl
 $app = Start-Process $exePath -PassThru
 $env:OPENPROXY_UPDATE_TEST_URL = $null
 
+# Stand in for a connected agent: an MCP server running from this install with
+# its stdin held open, like a client keeps it. Before the fix this made the
+# update script wait its full 30s and then force-kill it.
+$psi = New-Object Diagnostics.ProcessStartInfo
+$psi.FileName = Join-Path $appDir.FullName "resources\backend\OpenProxy-server\OpenProxy-server.exe"
+$psi.Arguments = "--mcp"
+$psi.UseShellExecute = $false
+$psi.RedirectStandardInput = $true
+$psi.CreateNoWindow = $true
+$mcp = [Diagnostics.Process]::Start($psi)
+Write-Host "OK Fake agent MCP server running (PID $($mcp.Id))"
+
 # Wait for the app to exit, then clean up the server
 try { Wait-Process -Id $app.Id -ErrorAction SilentlyContinue } catch {}
 Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
 Write-Host "OK Done. Server stopped."
+
+Start-Sleep -Seconds 1
+if (-not $mcp.HasExited) {
+    Write-Host "x The update left the agent's MCP server running (PID $($mcp.Id))"
+    $mcp.Kill(); exit 1
+}
+Write-Host "OK The update stopped the agent's MCP server"
+
+# -- 6. MCP launcher check against the relaunched app ----------------------
+# The update swapped the install folder; the launcher the backend writes on
+# startup must now point into it and still serve MCP ("register once, keep
+# updating" for agents).
+$shim = Join-Path $env:USERPROFILE ".openproxy\bin\openproxy-mcp.cmd"
+Write-Host ""
+Write-Host "-> Waiting for the relaunched app (up to 90s)..."
+$up = $false
+for ($i = 0; $i -lt 90; $i++) {
+    try {
+        $c = New-Object Net.Sockets.TcpClient
+        $c.Connect("127.0.0.1", 8765); $c.Close(); $up = $true; break
+    } catch { Start-Sleep -Seconds 1 }
+}
+if (-not $up) { Write-Host "x Relaunched app never opened port 8765"; exit 1 }
+# The swap is done by now, so the log is complete. Nothing should have kept
+# the script waiting anywhere near its 30s limit.
+$log = Get-ChildItem $env:TEMP -Directory -Filter "openproxy_update_*" |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($log -and (Select-String -Path (Join-Path $log.FullName "update.log") -Pattern "\(2\d/30\)" -Quiet)) {
+    Write-Host "x The update script waited out its exit loop - see $($log.FullName)\update.log"; exit 1
+}
+Write-Host "OK The update script didn't have to wait out its exit loop"
+Start-Sleep -Seconds 2
+if (-not (Test-Path $shim)) { Write-Host "x MCP launcher missing: $shim"; exit 1 }
+$installDir = Split-Path -Parent $exePath
+if (-not (Select-String -Path $shim -SimpleMatch $installDir -Quiet)) {
+    Write-Host "x MCP launcher does not point at the relaunched app:"; Get-Content $shim | Select-Object -Last 1; exit 1
+}
+Write-Host "OK Launcher points at the relaunched install: $(Get-Content $shim | Select-Object -Last 1)"
+$init = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-update","version":"0"}}}'
+$reply = $init | & cmd /c $shim 2>$null | Select-Object -First 1
+if ("$reply" -match '"serverInfo"') {
+    Write-Host "OK MCP launcher answers initialize from the updated app"
+} else {
+    Write-Host "x MCP launcher did not answer initialize: $reply"; exit 1
+}

@@ -8,19 +8,73 @@ import {
   syncMapRemoteRules,
   enableMapRemote,
   importRules,
-  exportRules
+  exportRules,
+  agentRewrites,
+  agentLabel,
+  agentScenario,
+  stopAgentScenario,
+  showMcpSetupModal,
+  agentRuleProxy,
+  clearAgentRuleOverride,
+  adoptAgentScenario
 } from '../store.js'
 
 const modalRef = ref(null)
 const { modalStyle, startResize } = useEdgeResize(modalRef, { minW: 600, minH: 420 })
 
+// --- agent-owned rewrites ---
+// Same editor, same rules — an agent's rewrite just writes through to a
+// per-field override instead of to the user's list. See `agentRuleProxy`.
+// Declared above the watcher below, which reads it on its immediate run.
+const selectedAgentKey = ref(null)
+const selectedAgentRewrite = computed(() =>
+  agentRewrites.value.find(r => r.key === selectedAgentKey.value) || null
+)
+
 watch(mapRemoteRules, (newRules) => {
-  if (newRules.length > 0 && !selectedMapRemoteId.value) {
+  // Don't yank the editor away from an agent rule the user is reading just
+  // because their own list changed.
+  if (newRules.length > 0 && !selectedMapRemoteId.value && !selectedAgentKey.value) {
     selectedMapRemoteId.value = newRules[0].id
   }
 }, { immediate: true, deep: true })
 
-const activeRule = computed(() => mapRemoteRules.value.find(r => r.id === selectedMapRemoteId.value))
+const activeRule = computed(() => {
+  if (selectedAgentKey.value) {
+    return selectedAgentRewrite.value ? agentRuleProxy(selectedAgentKey.value, 'remote') : null
+  }
+  return mapRemoteRules.value.find(r => r.id === selectedMapRemoteId.value)
+})
+
+const isAgentRule = computed(() => !!selectedAgentKey.value && !!selectedAgentRewrite.value)
+const isOverridden = (field) => !!selectedAgentRewrite.value?.overridden?.includes(field)
+const anyOverridden = computed(() => agentRewrites.value.some(r => r.overridden?.length))
+
+const selectAgentRewrite = (key) => {
+  selectedAgentKey.value = key
+  selectedMapRemoteId.value = null
+}
+
+watch(selectedMapRemoteId, (id) => { if (id != null) selectedAgentKey.value = null })
+
+watch(agentRewrites, (rules) => {
+  if (selectedAgentKey.value && !rules.some(r => r.key === selectedAgentKey.value)) {
+    selectedAgentKey.value = null
+  }
+})
+
+/** Fork just this rule into the user's own list, agent copy left alone. */
+const copyAgentRuleToMine = () => {
+  const r = selectedAgentRewrite.value
+  if (!r) return
+  adoptAgentScenario(
+    { name: agentScenario.value?.name, mocks: [], rewrites: [r] },
+    { active: false }
+  )
+  selectedAgentKey.value = null
+  const mine = mapRemoteRules.value[mapRemoteRules.value.length - 1]
+  if (mine) selectedMapRemoteId.value = mine.id
+}
 
 const addNewRule = () => {
   const newRule = { 
@@ -68,7 +122,48 @@ const saveAndApplyRules = () => {
           </div>
           
           <div class="pm-rule-list">
-            <div v-for="rule in mapRemoteRules" :key="rule.id" 
+            <!-- Agent-owned rewrites. Same row and same editor as the user's;
+                 see MapLocalModal for the reasoning. -->
+            <template v-if="agentRewrites.length">
+              <div class="pm-agent-header">
+                <span class="pm-agent-tag">MCP</span>
+                <span class="pm-agent-owner" :title="`Installed by ${agentLabel}`">{{ agentLabel }}</span>
+                <button v-if="anyOverridden" class="pm-agent-ghost"
+                        title="Discard all your edits to these rules and use the agent's versions"
+                        @click="clearAgentRuleOverride(null, 'remote')">Revert all</button>
+                <button class="pm-agent-ghost" title="Copy these rules into your own list, switched off"
+                        @click="adoptAgentScenario(agentScenario, { active: false })">Copy all</button>
+                <button class="pm-agent-stop" title="Remove the agent's rules and restore your own"
+                        @click="stopAgentScenario">Stop</button>
+              </div>
+
+              <div v-for="r in agentRewrites" :key="r.key"
+                   class="pm-rule-item pm-rule-item--agent"
+                   :class="{ active: selectedAgentKey === r.key }"
+                   @click="selectAgentRewrite(r.key)">
+
+                <label class="pm-checkbox-container" @click.stop>
+                  <input type="checkbox" :checked="r.active !== false"
+                         :title="r.active !== false ? 'Switch this rewrite off' : 'Switch this rewrite back on'"
+                         @change="e => agentRuleProxy(r.key, 'remote').active = e.target.checked" />
+                  <span class="pm-checkmark"></span>
+                </label>
+
+                <div class="pm-rule-text-stack">
+                  <span class="pm-rule-pattern" :title="r.pattern">
+                    {{ r.pattern }}
+                    <span v-if="r.overridden?.length" class="pm-owned" title="You've taken over this rule">edited</span>
+                  </span>
+                  <span class="pm-rule-target" :title="r.target">&rarr; {{ r.target }}</span>
+                </div>
+
+                <span class="pm-agent-dot" aria-hidden="true" :title="`Owned by ${agentLabel}`"></span>
+              </div>
+
+              <div class="pm-agent-divider"></div>
+            </template>
+
+            <div v-for="rule in mapRemoteRules" :key="rule.id"
                  class="pm-rule-item" 
                  :class="{ active: selectedMapRemoteId === rule.id }" 
                  @click="selectedMapRemoteId = rule.id">
@@ -95,7 +190,13 @@ const saveAndApplyRules = () => {
             </div>
             
             <div v-if="mapRemoteRules.length === 0" class="pm-empty-sidebar">
-              No rules yet. Click + Add to start routing traffic.
+              <template v-if="agentRewrites.length">
+                No rules of your own — the rules above belong to {{ agentLabel }}.
+              </template>
+              <template v-else>
+                No rules yet. Click + Add to start routing traffic,
+                or <a class="pm-agent-link" @click="showMcpSetupModal = true">let an AI agent drive them</a>.
+              </template>
             </div>
           </div>
 
@@ -122,7 +223,10 @@ const saveAndApplyRules = () => {
           <div v-if="activeRule" style="display: flex; flex-direction: column; height: 100%;">
             
             <div class="pm-header">
-              <strong class="pm-title">Traffic Routing Editor</strong>
+              <strong class="pm-title">
+                <span v-if="isAgentRule" class="pm-agent-tag">MCP</span>
+                Traffic Routing Editor
+              </strong>
               <button class="pm-close-btn" @click="saveAndApplyRules">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -130,10 +234,20 @@ const saveAndApplyRules = () => {
               </button>
             </div>
 
+            <!-- Ownership is a property of the rule, not a different editor. -->
+            <div v-if="isAgentRule" class="pm-agent-notice">
+              Installed by <strong>{{ agentLabel }}</strong>. Anything you change here is yours
+              from now on — it's re-applied on top of the agent's rule every time it reinstalls
+              this scenario, so its next run won't quietly undo your edit.
+            </div>
+
             <div class="pm-editor-area" style="padding: 24px; gap: 24px; overflow-y: auto;">
-              
+
               <div class="pm-routing-box">
-                <div class="pm-routing-header">Map From (Original Request)</div>
+                <div class="pm-routing-header">
+                  Map From (Original Request)
+                  <span v-if="isOverridden('pattern')" class="pm-owned">yours</span>
+                </div>
                 <div class="pm-routing-body">
                   <span class="pm-routing-label">MATCH URL OR REGEX</span>
                   <input type="text" v-model="activeRule.pattern" class="pm-routing-input" placeholder="e.g., api\.production\.com/v1" />
@@ -149,7 +263,10 @@ const saveAndApplyRules = () => {
               </div>
 
               <div class="pm-routing-box target">
-                <div class="pm-routing-header target-header">Map To (New Destination)</div>
+                <div class="pm-routing-header target-header">
+                  Map To (New Destination)
+                  <span v-if="isOverridden('target')" class="pm-owned">yours</span>
+                </div>
                 <div class="pm-routing-body">
                   <span class="pm-routing-label">FORWARD TO</span>
                   <input type="text" v-model="activeRule.target" class="pm-routing-input target-input" placeholder="e.g., localhost:8080/v2" />
@@ -159,7 +276,21 @@ const saveAndApplyRules = () => {
 
             </div>
 
-            <div class="pm-footer">
+            <!--
+              An agent's rule is already live, so there's nothing to save — the
+              footer offers the two things that are actually useful instead.
+            -->
+            <div v-if="isAgentRule" class="pm-footer">
+              <button v-if="selectedAgentRewrite.overridden?.length"
+                      class="pm-btn-cancel"
+                      title="Discard your edits and use the agent's version again"
+                      @click="clearAgentRuleOverride(selectedAgentRewrite.key, 'remote')">
+                Revert to agent's version
+              </button>
+              <button class="pm-btn-cancel" @click="copyAgentRuleToMine">Copy to my rules</button>
+              <button class="pm-btn-execute" @click="showMapRemoteModal = false">Done</button>
+            </div>
+            <div v-else class="pm-footer">
               <button class="pm-btn-cancel" @click="showMapRemoteModal = false">Cancel</button>
               <button class="pm-btn-execute" @click="saveAndApplyRules">Save & Apply</button>
             </div>
@@ -218,6 +349,40 @@ const saveAndApplyRules = () => {
 
 .pm-empty-sidebar { padding: 40px 20px; text-align: center; color: var(--fg-placeholder); font-size: 12px; line-height: 1.6; }
 
+/* Agent-owned rules: same row metrics as the user's so the list still scans as
+   one column, but tinted and non-interactive so ownership is never ambiguous. */
+.pm-agent-header { display: flex; align-items: center; gap: 6px; padding: 6px 14px; background: var(--warning-muted); border-bottom: 1px solid var(--border-subtle); }
+.pm-agent-tag { font-size: 8px; font-weight: 700; letter-spacing: 0.4px; padding: 1px 4px; border-radius: 3px; background: var(--warning); color: #1a1b1c; flex-shrink: 0; }
+.pm-agent-owner { flex: 1; min-width: 0; font-size: 10px; color: var(--fg-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-agent-stop { font-size: 10px; font-family: inherit; padding: 1px 7px; border-radius: 4px; background: var(--warning); color: #1a1b1c; font-weight: 600; border: none; cursor: pointer; flex-shrink: 0; }
+.pm-agent-stop:hover { filter: brightness(1.1); }
+.pm-agent-stop:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.pm-rule-item--agent { background: var(--warning-muted); }
+.pm-rule-item--agent:hover { filter: brightness(1.08); }
+.pm-rule-item--agent.active { border-left: 3px solid var(--warning); padding-left: 11px; background: var(--warning-muted); filter: brightness(1.12); }
+.pm-agent-ghost { font-size: 10px; font-family: inherit; padding: 1px 7px; border-radius: 4px; background: transparent; border: 1px solid var(--warning); color: var(--fg-secondary); cursor: pointer; flex-shrink: 0; }
+.pm-agent-ghost:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
+/* Sits where the user's rows put their delete button, so both kinds of row
+   keep the same three-column rhythm. */
+.pm-agent-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); flex-shrink: 0; margin: 0 7px; }
+
+/* "This field is yours now, not the agent's." */
+.pm-owned {
+  font-size: 8px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase;
+  padding: 1px 4px; border-radius: 3px; margin-left: 4px;
+  background: var(--accent); color: #fff; flex-shrink: 0;
+}
+
+/* Ownership banner above the shared editor. */
+.pm-agent-notice {
+  font-size: 11px; line-height: 1.6; color: var(--fg-secondary);
+  background: var(--warning-muted); border-bottom: 1px solid var(--warning);
+  padding: 8px 24px; flex-shrink: 0;
+}
+.pm-agent-divider { height: 1px; background: var(--border); }
+.pm-agent-link { color: var(--accent); cursor: pointer; text-decoration: underline; }
+.pm-agent-link:hover { filter: brightness(1.15); }
+
 .pm-sidebar-footer { padding: 14px 16px; background: var(--bg-modal); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
 .toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--fg-muted); font-weight: 600; font-size: 12px; }
 .toggle.active { color: var(--accent); }
@@ -233,7 +398,7 @@ const saveAndApplyRules = () => {
 .pm-main-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-main); min-width: 0; }
 .pm-main-empty { flex: 1; display: flex; justify-content: center; align-items: center; color: var(--fg-placeholder); font-size: 13px; }
 .pm-header { display: flex; justify-content: space-between; align-items: center; padding: 0 16px; height: 44px; background: var(--bg-sidebar); border-bottom: 1px solid var(--border); flex-shrink: 0; }
-.pm-title { font-size: 13px; font-weight: 600; color: var(--fg-primary); }
+.pm-title { font-size: 13px; font-weight: 600; color: var(--fg-primary); display: flex; align-items: center; gap: 6px; }
 .pm-close-btn { background: none; border: none; cursor: pointer; color: var(--fg-muted); padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: background 0.12s, color 0.12s; }
 .pm-close-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
 

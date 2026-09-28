@@ -1,9 +1,7 @@
 import sys
 import json
-import ssl
 import asyncio
 import threading
-import urllib.request
 
 from server import system_helpers
 from server.scripting import DEFAULT_SCRIPT
@@ -26,6 +24,9 @@ class WsHandlerMixin:
                     "port": self.proxy_port,
                     "platform": sys.platform,
                     "mac_proxy_active": self.is_mac_proxy_set,
+                    # Stable launcher for the bundled MCP server; the setup
+                    # window shows it verbatim. None if it couldn't be written.
+                    "mcp_command": self.mcp_shim_path,
                 }
             }))
 
@@ -35,11 +36,53 @@ class WsHandlerMixin:
 
             await websocket.send(json.dumps({"type": "SCRIPTS_LIST", "data": {"scripts": self.scripts_manager.state_list()}}))
 
+            # A UI opened mid-session must immediately see that an agent is
+            # attached and what it has mocked — otherwise the user debugs
+            # traffic an agent is quietly rewriting.
+            await websocket.send(json.dumps({"type": "AGENT_STATE", "data": self.agent_state()}))
+
             async for message in websocket:
                 payload = json.loads(message)
 
+                # Automation clients (MCP/CLI) speak a request/response
+                # protocol with its own envelope — see AgentApiMixin.
+                if await self.handle_agent_message(websocket, payload):
+                    continue
+
                 if payload.get("type") == "UPDATE_MAP_LOCAL_RULES":
                     self.map_local_rules = payload.get("rules", [])
+                    # Restart any sequenced user rules; keep the agent's counters.
+                    agent_keys = set(self.agent_rule_order)
+                    self.agent_rule_hits = {
+                        k: v for k, v in self.agent_rule_hits.items() if k in agent_keys
+                    }
+
+                elif payload.get("type") == "SET_AGENT_RULE_OVERRIDE":
+                    # The user edited a rule an agent installed; their values win
+                    # from here on, including across the agent's next scenario.
+                    await self.set_agent_rule_override(
+                        payload.get("key"),
+                        payload.get("fields") or {},
+                        kind=payload.get("kind", "local"),
+                    )
+
+                elif payload.get("type") == "CLEAR_AGENT_RULE_OVERRIDE":
+                    # key omitted = hand every rule of that kind back to the agent
+                    await self.clear_agent_rule_override(
+                        payload.get("key"), kind=payload.get("kind", "local")
+                    )
+
+                elif payload.get("type") == "RESTORE_AGENT_OVERRIDES":
+                    # Sent by the UI on connect: overrides live in the browser's
+                    # storage so they survive an app restart, the same way the
+                    # user's own map rules do.
+                    self.agent_rule_overrides = payload.get("overrides") or {}
+                    self.agent_remote_overrides = payload.get("remote_overrides") or {}
+
+                elif payload.get("type") == "DISMISS_AGENT_LAST_SCENARIO":
+                    self.agent_last_scenario = None
+                    self.agent_end_reason = None
+                    await self.broadcast_agent_state()
 
                 elif payload.get("type") == "UPDATE_THROTTLE":
                     self.throttle_profile = payload.get("profile", "None")
@@ -128,52 +171,9 @@ class WsHandlerMixin:
                         asyncio.create_task(self.revert_ios_simulator(websocket, udid))
 
                 elif payload.get("type") == "REPEAT_REQUEST":
-                    req_data = payload.get("request", {})
-
-                    def _replay():
-                        try:
-                            url = req_data.get("url")
-                            if not url or url == "https://":
-                                print("[WARNING] Invalid URL in composer.")
-                                return
-
-                            method = req_data.get("method", "GET").upper()
-                            req = urllib.request.Request(url, method=method)
-
-                            raw_headers = req_data.get("req_headers", {})
-                            if isinstance(raw_headers, str):
-                                try:
-                                    raw_headers = json.loads(raw_headers)
-                                except Exception:
-                                    raw_headers = {}
-
-                            for k, v in raw_headers.items():
-                                if k.lower() not in ["host", "content-length", "accept-encoding"]:
-                                    req.add_header(k, str(v))
-
-                            body = req_data.get("req_body")
-                            if body and method in ["POST", "PUT", "PATCH"]:
-                                if not req_data.get("req_is_image") and not str(body).startswith("//"):
-                                    req.data = body.encode('utf-8')
-                                    req.add_header('Content-Length', str(len(req.data)))
-
-                            proxy_handler = urllib.request.ProxyHandler({
-                                'http': f'http://127.0.0.1:{self.proxy_port}',
-                                'https': f'http://127.0.0.1:{self.proxy_port}'
-                            })
-
-                            ctx = ssl.create_default_context()
-                            ctx.check_hostname = False
-                            ctx.verify_mode = ssl.CERT_NONE
-
-                            opener = urllib.request.build_opener(proxy_handler, urllib.request.HTTPSHandler(context=ctx))
-                            opener.open(req, timeout=300)
-                            print(f"[INFO] Successfully injected {method} to {url}")
-
-                        except Exception as e:
-                            print(f"[ERROR] Replay failed: {e}")
-
-                    threading.Thread(target=_replay, daemon=True).start()
+                    # Shared with the agent's replay tool so both paths produce
+                    # identical traffic — see AgentApiMixin.replay_request.
+                    self.replay_request(payload.get("request", {}))
 
                 elif payload.get("type") == "TOGGLE_BREAKPOINTS":
                     self.breakpoints_enabled = payload.get("enabled", True)
@@ -376,4 +376,19 @@ class WsHandlerMixin:
                         threading.Thread(target=_run_update, daemon=True).start()
 
         finally:
-            self.connected_clients.remove(websocket)
+            self.connected_clients.discard(websocket)
+            if websocket in self.agent_clients:
+                self.agent_clients.discard(websocket)
+                self.agent_client_names.pop(websocket, None)
+                # Don't leave mocks installed by an agent that has gone away:
+                # the user would be left with silently rewritten traffic and
+                # nothing in the UI explaining why.
+                owns_scenario = self.agent_scenario_owner is websocket
+                if self.agent_scenario and (owns_scenario or not self.agent_clients):
+                    name = self.agent_scenario.get("name")
+                    print(f"[Agent] Disconnected — clearing scenario '{name}'", flush=True)
+                    # "disconnect" tells the UI to keep the rules as adoptable
+                    # copies rather than dropping them on the floor.
+                    await self._agent_clear_scenario(reason="disconnect")
+                else:
+                    await self.broadcast_agent_state()

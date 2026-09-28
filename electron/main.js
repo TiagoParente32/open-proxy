@@ -8,6 +8,29 @@ const { spawn } = require('child_process')
 
 let win, tray, pythonProcess, isQuitting = false
 
+// ── MCP passthrough ───────────────────────────────────────────────────────────
+// `OpenProxy --mcp` runs the bundled MCP server instead of the app: stdio is
+// handed straight to `OpenProxy-server --mcp` and we exit with its status. A
+// convenience for running MCP from the app's own executable; the launcher in
+// ~/.openproxy/bin doesn't use it, since on AppImage it would need a FUSE
+// mount (see server/mcp_shim.py).
+if (process.argv.includes('--mcp')) {
+  const { spawnSync } = require('child_process')
+  let exe, args
+  if (app.isPackaged) {
+    const bin = process.platform === 'win32' ? 'OpenProxy-server.exe' : 'OpenProxy-server'
+    exe  = path.join(process.resourcesPath, 'backend', 'OpenProxy-server', bin)
+    args = ['--mcp']
+  } else {
+    const pyBin   = process.platform === 'win32' ? 'python.exe' : 'python3'
+    const venvDir = process.platform === 'win32' ? 'Scripts' : 'bin'
+    exe  = path.join(__dirname, '..', 'venv', venvDir, pyBin)
+    args = [path.join(__dirname, '..', 'main.py'), '--mcp']
+  }
+  const result = spawnSync(exe, args, { stdio: 'inherit', env: process.env })
+  app.exit(result.status ?? 1)
+}
+
 // ── Quarantine helper ─────────────────────────────────────────────────────────
 // Ad hoc signed / zip-distributed builds are quarantined by macOS Gatekeeper.
 // Call this on the app bundle itself at startup and on any freshly-extracted
@@ -410,6 +433,7 @@ function setupMenu () {
             { label: 'Browser / Desktop', click: () => js("openCertSetup('browser')") },
           ],
         },
+        { label: 'Connect an AI Agent (MCP)…', click: () => js('openMcpSetup()') },
         { type: 'separator' },
         {
           label: 'Throttle',

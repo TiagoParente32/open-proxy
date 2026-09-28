@@ -4,6 +4,7 @@ from server.bridge.android_setup import AndroidSetupMixin
 from server.bridge.ios_setup import IosSetupMixin
 from server.bridge.macos_proxy_control import MacProxyControlMixin
 from server.bridge.ws_handler import WsHandlerMixin
+from server.bridge.agent_api import AgentApiMixin
 
 
 # ProxyUIBridge is both the mitmproxy addon (added to DumpMaster in
@@ -19,5 +20,6 @@ class ProxyUIBridge(
     IosSetupMixin,
     MacProxyControlMixin,
     WsHandlerMixin,
+    AgentApiMixin,
 ):
     pass
