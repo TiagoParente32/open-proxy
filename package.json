@@ -1,7 +1,7 @@
 {
   "name": "open-proxy",
   "productName": "OpenProxy",
-  "version": "1.0.30",
+  "version": "1.0.31",
   "description": "OpenProxy — HTTP intercept proxy with a native desktop UI",
   "license": "GPL-3.0-only",
   "homepage": "https://github.com/TiagoParente32/open-proxy#readme",
