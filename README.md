@@ -217,6 +217,8 @@ The agent installs the mock, you (or it, via `adb`) trigger the app, and it repo
 
 Mocks set by an agent are kept separate from the ones you build by hand in the UI, are matched ahead of them, and are cleared automatically if the agent disconnects — so a crashed agent never strands you with silently mocked traffic.
 
+An agent can also work on the rules you built yourself: list them, edit a mock's status or body, add one, delete one, or reorder the list. Those edits are to your own setup, show up in the Map Local / Map Remote window straight away, and stay — they're the agent doing what you asked at the keyboard, not a scenario.
+
 See [`mcp-server/README.md`](mcp-server/README.md) for the full tool list and client configuration.
 
 ---
