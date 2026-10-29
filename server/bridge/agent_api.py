@@ -603,18 +603,16 @@ class AgentApiMixin:
             )
 
         changed = []
-        restores = self.agent_tool_restores.setdefault(websocket, set())
         for name, value in changes.items():
             attr = TOOL_SWITCHES[name][0]
             if getattr(self, attr) != value:
                 setattr(self, attr, value)
                 changed.append(name)
-                if value:
-                    restores.discard(name)
-                else:
-                    restores.add(name)
-        if not restores:
-            self.agent_tool_restores.pop(websocket, None)
+                # Whoever changes a switch last owns it: any earlier agent's
+                # pending restore is void, whichever socket it belongs to.
+                self._forget_tool_restore(name)
+                if not value:
+                    self.agent_tool_restores.setdefault(websocket, set()).add(name)
         if throttle is not None and throttle != self.throttle_profile:
             self.throttle_profile = throttle
             changed.append("throttle")
@@ -624,11 +622,30 @@ class AgentApiMixin:
             await self.broadcast_to_ui("TOOL_STATE", state)
         return {"tools": state, "changed": changed}
 
+    def _forget_tool_restore(self, name):
+        """Drop `name` from every agent's pending restores."""
+        for ws in list(self.agent_tool_restores):
+            self.agent_tool_restores[ws].discard(name)
+            if not self.agent_tool_restores[ws]:
+                del self.agent_tool_restores[ws]
+
+    def ui_set_switch(self, name, value):
+        """Apply a toolbar switch sent by the UI.
+
+        Only a real change counts as the user's choice and voids agent
+        restores: the UI also echoes back values it just mirrored from
+        TOOL_STATE, and those must not cancel anything.
+        """
+        attr = TOOL_SWITCHES[name][0]
+        if getattr(self, attr) != value:
+            setattr(self, attr, value)
+            self._forget_tool_restore(name)
+
     async def _agent_restore_tools(self, websocket):
         """Turn back on the switches a departing agent turned off.
 
-        Skips any the user has since switched back on themselves — there is
-        nothing to restore, and a later off from the user is theirs to keep.
+        Any switch the user or another agent has changed since is no longer
+        in its restores (see _forget_tool_restore): their later choice stands.
         """
         names = self.agent_tool_restores.pop(websocket, set())
         restored = []

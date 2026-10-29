@@ -888,6 +888,76 @@ async def test_disconnect_restores_tools(ws_port):
         await ui.close()
 
 
+async def test_restore_edge_cases(ws_port):
+    """A restore must never override a later choice: the user's own toggle,
+    or another agent's. And a UI that connects late must learn the real
+    recording state rather than assume it is on."""
+    print("\n== restore edge cases ==")
+    url = f"ws://127.0.0.1:{ws_port}"
+
+    async def status():
+        async with websockets.connect(url) as probe:
+            await agent_call(probe, "AGENT_HELLO", {"client": "edge-probe"}, req_id="ep0")
+            return (await agent_call(probe, "AGENT_STATUS", req_id="ep1"))["tools"]
+
+    # User turns the switch on and then off again on purpose.
+    ui = await websockets.connect(url)
+    agent = await websockets.connect(url)
+    try:
+        await agent_call(agent, "AGENT_HELLO", {"client": "edge-a"}, req_id="ea0")
+        await agent_call(agent, "AGENT_SET_TOOLS", {"recording": False}, req_id="ea1")
+        await ui.send(json.dumps({"type": "TOGGLE_PROXY", "is_recording": True}))
+        await ui.send(json.dumps({"type": "TOGGLE_PROXY", "is_recording": False}))
+        await asyncio.sleep(0.3)
+        await agent.close()
+        await asyncio.sleep(0.5)
+        check("user's own later off survives the agent leaving",
+              (await status())["recording"] is False)
+
+        # A UI connecting now must be told recording is off.
+        async with websockets.connect(url) as late_ui:
+            info = json.loads(await asyncio.wait_for(late_ui.recv(), timeout=10))
+            check("SYSTEM_INFO carries the real recording state",
+                  info.get("type") == "SYSTEM_INFO" and info["data"].get("recording") is False,
+                  str(info.get("data", {}).get("recording")))
+
+        # An echo of the current value is not a user choice.
+        await ui.send(json.dumps({"type": "TOGGLE_PROXY", "is_recording": True}))
+        await asyncio.sleep(0.3)
+        agent = await websockets.connect(url)
+        await agent_call(agent, "AGENT_HELLO", {"client": "edge-a2"}, req_id="ea2")
+        await agent_call(agent, "AGENT_SET_TOOLS", {"recording": False}, req_id="ea3")
+        await ui.send(json.dumps({"type": "TOGGLE_PROXY", "is_recording": False}))   # same value
+        await asyncio.sleep(0.3)
+        await agent.close()
+        await asyncio.sleep(0.5)
+        check("an unchanged echo from the UI doesn't cancel the restore",
+              (await status())["recording"] is True)
+    finally:
+        await ui.close()
+
+    # Two agents: B's later off must not be undone by A leaving.
+    a = await websockets.connect(url)
+    b = await websockets.connect(url)
+    try:
+        await agent_call(a, "AGENT_HELLO", {"client": "edge-A"}, req_id="eb0")
+        await agent_call(b, "AGENT_HELLO", {"client": "edge-B"}, req_id="eb1")
+        await agent_call(a, "AGENT_SET_TOOLS", {"recording": False}, req_id="eb2")
+        await agent_call(b, "AGENT_SET_TOOLS", {"recording": True}, req_id="eb3")
+        await agent_call(b, "AGENT_SET_TOOLS", {"recording": False}, req_id="eb4")
+        await a.close()
+        await asyncio.sleep(0.5)
+        check("agent A leaving doesn't undo agent B's later off",
+              (await status())["recording"] is False)
+        await b.close()
+        await asyncio.sleep(0.5)
+        check("agent B leaving restores what B turned off",
+              (await status())["recording"] is True)
+    finally:
+        await a.close()
+        await b.close()
+
+
 async def test_rule_validation(ws_port):
     """Malformed rules fail at install time, not as a 500 at match time."""
     print("\n== rule validation ==")
@@ -1363,6 +1433,7 @@ async def main():
         await test_throttle(ws_port)
         await test_set_tools(ws_port)
         await test_disconnect_restores_tools(ws_port)
+        await test_restore_edge_cases(ws_port)
         await test_rule_validation(ws_port)
         await test_list_since_seq(ws_port)
         await test_scenario_ownership(ws_port)

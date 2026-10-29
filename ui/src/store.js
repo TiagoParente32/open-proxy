@@ -1595,6 +1595,7 @@ export const initWebSocket = () => {
                 macosProxyActive.value = payload.data.mac_proxy_active
             }
             if ('mcp_command' in payload.data) mcpCommand.value = payload.data.mcp_command || null
+            if (typeof payload.data.recording === 'boolean') isRecording.value = payload.data.recording
         }
         else if (payload.type === "ALERT") {
             alert(payload.message)
