@@ -57,6 +57,12 @@ const setVal = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', {b
 const pill = t => $$('button.secondary-pill').find(b => b.textContent.trim() === t);
 const pillState = t => { const b = pill(t); return !b ? 'missing' : b.classList.contains('agent-active') ? 'YELLOW' : b.classList.contains('script-active') ? 'BLUE' : 'plain'; };
 const modalOpen = () => $$('.pm-header, .pm-sidebar-header, .modal-header').some(vis);
+// A hidden or occluded window renders no frames, so CSS transitions never
+// finish and getComputedStyle keeps returning their start value. Cancelling
+// the transition jumps the element to its final colours.
+const settled = el => { const t = el.style.transition; el.style.transition = 'none';
+  const cs = getComputedStyle(el), out = {color: cs.color, bg: cs.backgroundColor};
+  el.style.transition = t; return out; };
 """
 
 
@@ -77,7 +83,9 @@ class Page:
                 "Start the dev app with `npm run start:debug` first."
             )
         url = next(t for t in targets if t.get("type") == "page")["webSocketDebuggerUrl"]
-        self.ws = await websockets.connect(url, max_size=None)
+        # No keepalive: the socket is only read during a call, so a quiet
+        # stretch (a long request, a sleep) would fail the ping and drop it.
+        self.ws = await websockets.connect(url, max_size=None, ping_interval=None)
         await self._send("Runtime.enable")
         self.errors.clear()   # only what happens during the run counts
 
@@ -146,6 +154,17 @@ async def tools(c):
     return (await c.call("AGENT_STATUS"))["tools"]
 
 
+async def isolate(page):
+    """Load empty rule lists with their switches off, so none of the user's own
+    mocks, rewrites or breakpoints is live while the tests flip switches. A
+    live breakpoint would pause real traffic with no timeout, and a reload
+    drops the paused flow from the UI, so the request would hang."""
+    await page.set_storage({"openproxy_mapLocalRules": "[]", "openproxy_mapRemoteRules": "[]",
+                            "openproxy_breakpointRules": "[]", "openproxy_enableMapLocal": "false",
+                            "openproxy_enableMapRemote": "false", "openproxy_breakpointsEnabled": "false"})
+    await page.reload()
+
+
 async def restore(page, c, snapshot, tools_before):
     """Put the user's settings back and close `c`: clear any scenario, restore
     the exact localStorage snapshot, reload so the UI re-pushes it, then check
@@ -153,12 +172,17 @@ async def restore(page, c, snapshot, tools_before):
     print("\n== restore ==")
     await c.call("AGENT_CLEAR_SCENARIO")
     check("scenario cleared", (await c.call("AGENT_STATUS"))["scenario"] is None)
-    # Anything this agent switched off is queued to come back on when it
-    # disconnects, which would land after the checks below. Turning every
-    # switch on voids those restores; the reload then re-applies the
-    # user's real values from the snapshot.
-    await c.call("AGENT_SET_TOOLS", {"map_local": True, "map_remote": True, "breakpoints": True,
-                                     "recording": True, "no_cache": True})
+    # Anything a test agent switched off is queued to come back on when it
+    # disconnects, which would land after the checks below. Turning those
+    # switches on voids the restores; the reload then re-applies the user's
+    # real values from the snapshot. Only the switches the tests turn off,
+    # and only with the rule lists still empty: breakpoints and recording are
+    # never forced on.
+    await isolate(page)
+    now = await tools(c)
+    off = {name: True for name in ("map_local", "map_remote", "no_cache") if not now[name]}
+    if off:
+        await c.call("AGENT_SET_TOOLS", off)
     # Let the UI apply the AGENT_STATE / TOOL_STATE that just went out: its
     # watchers persist to localStorage and would overwrite the restore.
     await asyncio.sleep(1.5)

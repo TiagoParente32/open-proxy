@@ -19,7 +19,7 @@ import json
 import time
 import asyncio
 
-from cdp import REPO_ROOT, OpenProxyClient, Page, check, report, restore, send, tools
+from cdp import REPO_ROOT, OpenProxyClient, Page, check, isolate, report, restore, send, tools
 
 MOCK_AGENT = [{"active": True, "pattern": "*mock.openproxy.test/api/ui-sweep*", "method": "ANY",
                "status": 418, "body": "ui-sweep"}]
@@ -65,11 +65,7 @@ async def main():
     tools_before = await tools(c)
     t0 = int(time.time())
     try:
-        # Start from a known state: no rules of the user's, everything off.
-        await page.set_storage({"openproxy_mapLocalRules": "[]", "openproxy_mapRemoteRules": "[]",
-                                "openproxy_breakpointRules": "[]", "openproxy_enableMapLocal": "false",
-                                "openproxy_enableMapRemote": "false", "openproxy_breakpointsEnabled": "false"})
-        await page.reload()
+        await isolate(page)
 
         print("\n== toolbar modals open and close ==")
         labels = await page.h("return $$('button.secondary-pill').filter(vis).map(b => b.textContent.trim());")
@@ -250,11 +246,14 @@ async def main():
               const probe = document.createElement('span'); probe.style.color = 'var(--warning)'; document.body.appendChild(probe);
               const warn = getComputedStyle(probe).color; probe.remove();
               const p = pill('Map Local'), plain = pill('Highlight') || pill('Breakpoints');
-              return {state: pillState('Map Local'), color: getComputedStyle(p).color, warn,
-                      bg: getComputedStyle(p).backgroundColor, plainBg: getComputedStyle(plain).backgroundColor};""")
+              return {state: pillState('Map Local'), color: settled(p).color, warn,
+                      bg: settled(p).bg, plainBg: settled(plain).bg,
+                      mocks: $$('.agent-bar').some(e => e.innerText.includes('mocking'))};""")
+            st = await c.call("AGENT_STATUS")
             check(f"{theme}: pill yellow in the theme's --warning",
                   res["state"] == "YELLOW" and res["color"] == res["warn"] and res["bg"] != res["plainBg"],
-                  f"color {res['color']} warn {res['warn']} bg {res['bg']}")
+                  f"{res['state']} color {res['color']} warn {res['warn']} · backend map_local "
+                  f"{st['tools']['map_local']}, scenario {'on' if st['scenario'] else 'off'}, banner mocking {res['mocks']}")
         await c.call("AGENT_CLEAR_SCENARIO")
 
         print("\n== toolbar toggles driven from the UI reach the backend ==")

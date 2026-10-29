@@ -10,7 +10,7 @@ See cdp.py for what the harness needs and how settings are restored.
 import json
 import asyncio
 
-from cdp import OpenProxyClient, Page, check, report, restore, send, tools
+from cdp import OpenProxyClient, Page, check, isolate, report, restore, send, tools
 
 MOCK = "http://mock.openproxy.test/api/ui-test"
 MOCKS = [{"active": True, "pattern": "*mock.openproxy.test/api/ui-test*", "method": "ANY",
@@ -38,6 +38,8 @@ async def main():
     c = OpenProxyClient()
     tools_before = await tools(c)
     try:
+        await isolate(page)
+
         print("\n== no user rules: a scenario turns Map Local on ==")
         await set_user_rules(page, [], False)
         await c.call("AGENT_SET_TOOLS", {"map_local": False, "map_remote": False})
