@@ -1,6 +1,7 @@
 <script setup>
 import { computed, watch, ref } from 'vue'
 import { useEdgeResize } from '../composables/useEdgeResize'
+import { useRuleSidebar } from '../composables/useRuleSidebar'
 import { 
   showMapRemoteModal, 
   mapRemoteRules, 
@@ -21,6 +22,14 @@ import {
 
 const modalRef = ref(null)
 const { modalStyle, startResize } = useEdgeResize(modalRef, { minW: 600, minH: 420 })
+
+// --- sidebar search & width ---
+const { ruleSearch, matchesSearch, sidebarWidth, startSidebarResize } = useRuleSidebar(modalRef, {
+  storageKey: 'mapRemoteSidebarWidth',
+  fields: r => [r.pattern, r.target],
+})
+const filteredRules = computed(() => mapRemoteRules.value.filter(matchesSearch))
+const filteredAgentRewrites = computed(() => agentRewrites.value.filter(matchesSearch))
 
 // --- agent-owned rewrites ---
 // Same editor, same rules — an agent's rewrite just writes through to a
@@ -114,11 +123,20 @@ const saveAndApplyRules = () => {
         <span class="resize-edge resize-w"  @mousedown.prevent.stop="startResize('w',  $event)"></span>
         <span class="resize-edge resize-nw" @mousedown.prevent.stop="startResize('nw', $event)"></span>
         
-        <div class="pm-sidebar">
-          
+        <div class="pm-sidebar" :style="{ width: sidebarWidth + 'px' }">
+          <span class="pm-sidebar-resizer" title="Drag to resize"
+                @mousedown.prevent.stop="startSidebarResize"></span>
+
           <div class="pm-sidebar-header">
             <strong style="color: var(--fg-secondary); font-size: 13px;">Map Remote Rules</strong>
             <button class="pm-add-btn" @click="addNewRule">+ Add</button>
+          </div>
+
+          <div class="pm-search">
+            <input v-model="ruleSearch" type="text" class="pm-search-input"
+                   placeholder="Search rules..." @keydown.esc.stop="ruleSearch = ''" />
+            <button v-if="ruleSearch" class="pm-search-clear" title="Clear search"
+                    @click="ruleSearch = ''">&times;</button>
           </div>
           
           <div class="pm-rule-list">
@@ -137,7 +155,7 @@ const saveAndApplyRules = () => {
                         @click="stopAgentScenario">Stop</button>
               </div>
 
-              <div v-for="r in agentRewrites" :key="r.key"
+              <div v-for="r in filteredAgentRewrites" :key="r.key"
                    class="pm-rule-item pm-rule-item--agent"
                    :class="{ active: selectedAgentKey === r.key }"
                    @click="selectAgentRewrite(r.key)">
@@ -163,7 +181,7 @@ const saveAndApplyRules = () => {
               <div class="pm-agent-divider"></div>
             </template>
 
-            <div v-for="rule in mapRemoteRules" :key="rule.id"
+            <div v-for="rule in filteredRules" :key="rule.id"
                  class="pm-rule-item" 
                  :class="{ active: selectedMapRemoteId === rule.id }" 
                  @click="selectedMapRemoteId = rule.id">
@@ -189,6 +207,11 @@ const saveAndApplyRules = () => {
 
             </div>
             
+            <div v-if="ruleSearch && (mapRemoteRules.length || agentRewrites.length) && !filteredRules.length && !filteredAgentRewrites.length"
+                 class="pm-empty-sidebar">
+              No rules match "{{ ruleSearch }}".
+            </div>
+
             <div v-if="mapRemoteRules.length === 0" class="pm-empty-sidebar">
               <template v-if="agentRewrites.length">
                 No rules of your own — the rules above belong to {{ agentLabel }}.
@@ -319,7 +342,14 @@ const saveAndApplyRules = () => {
 .resize-ne { top: 0; right: 0; cursor: nesw-resize; } .resize-nw { top: 0; left: 0; cursor: nwse-resize; }
 .resize-se { bottom: 0; right: 0; cursor: nwse-resize; } .resize-sw { bottom: 0; left: 0; cursor: nesw-resize; }
 
-.pm-sidebar { width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+.pm-sidebar { width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; position: relative; }
+.pm-sidebar-resizer { position: absolute; top: 0; bottom: 0; right: -3px; width: 6px; cursor: col-resize; z-index: 11; transition: background 0.15s; }
+.pm-sidebar-resizer:hover { background: var(--accent-muted); }
+.pm-search { position: relative; padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); }
+.pm-search-input { width: 100%; box-sizing: border-box; background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-secondary); padding: 5px 24px 5px 8px; border-radius: 5px; font-size: 12px; outline: none; }
+.pm-search-input:focus { border-color: var(--accent); }
+.pm-search-clear { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--fg-muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+.pm-search-clear:hover { color: var(--fg-secondary); }
 .pm-sidebar-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-sidebar); }
 .pm-add-btn { background: var(--accent-muted); color: var(--accent); border: 1px solid var(--accent-border); padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
 .pm-add-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
