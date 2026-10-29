@@ -272,6 +272,13 @@ async def run_mock_scenario(
     `throttle` pins the network profile for the scenario's duration ("Slow 3G",
     "Fast 3G", or "None" to force it off). Omit it to leave the user's setting
     alone.
+
+    Mocks only fire while Map Local is switched on (rewrites need Map Remote).
+    If the switch is off and the user has no active rules of their own there,
+    it is turned on for you and named in `enabled_tools`. If they do have
+    active rules, it stays off and the result carries a `warning`: turning it
+    on would revive their rules too, so only call set_proxy_tools if that's
+    acceptable.
     """
     rules = []
     for i, m in enumerate(mocks or []):
@@ -304,6 +311,48 @@ async def run_mock_scenario(
         "map_remote": remote,
         "throttle": throttle,
     })
+
+
+@mcp.tool(annotations=MUTATES_PROXY)
+async def set_proxy_tools(
+    map_local: bool | None = None,
+    map_remote: bool | None = None,
+    breakpoints: bool | None = None,
+    recording: bool | None = None,
+    no_cache: bool | None = None,
+    throttle: ThrottleProfile | None = None,
+) -> dict:
+    """Switch OpenProxy's tools on or off, the same toggles as the app's toolbar.
+
+    Pass only what you want to change; omitted ones are left alone. Returns
+    the resulting state of every switch under `tools`, and which ones actually
+    changed under `changed`. get_proxy_status reports the same `tools` block.
+
+    - map_local: serve mocks. Needed for run_mock_scenario's `mocks` to fire.
+    - map_remote: apply rewrites. Needed for a scenario's `rewrites`.
+    - breakpoints: pause matching requests for a human to edit in the UI.
+      Paused traffic waits on the user, so leave this off unless asked.
+    - recording: capture traffic. Off means nothing is intercepted or mocked.
+    - no_cache: strip caching headers so the app always refetches.
+    - throttle: the user's network profile. A scenario's own `throttle`
+      overrides it while that scenario runs.
+
+    These change the user's settings, not the scenario, so clear_mocks does
+    not undo them: put back anything you turned off when you are done. As a
+    safety net, switches you turned off are turned back on if this MCP server
+    disconnects.
+    """
+    payload = {
+        "map_local": map_local,
+        "map_remote": map_remote,
+        "breakpoints": breakpoints,
+        "recording": recording,
+        "no_cache": no_cache,
+        "throttle": throttle,
+    }
+    if all(v is None for v in payload.values()):
+        return {"error": "Pass at least one switch to change"}
+    return await _call("AGENT_SET_TOOLS", payload)
 
 
 @mcp.tool(annotations=MUTATES_PROXY)

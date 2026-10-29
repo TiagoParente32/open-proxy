@@ -20,6 +20,8 @@ import {
   anyScriptEnabled,
   anyMapLocalActive,
   anyMapRemoteActive,
+  agentMapLocalActive,
+  agentMapRemoteActive,
   anyBreakpointActive,
   anyHighlightActive,
   showBreakpointsBtn,
@@ -151,15 +153,17 @@ onUnmounted(() => document.removeEventListener('click', closeDropdown))
       <button
         v-if="showMapLocalBtn"
         class="secondary-pill"
-        :class="{ 'script-active': anyMapLocalActive }"
-        @click="closeAllModals(); showMapModal = true" title="Map Local Rules">
+        :class="agentMapLocalActive ? 'agent-active' : { 'script-active': anyMapLocalActive }"
+        @click="closeAllModals(); showMapModal = true"
+        :title="agentMapLocalActive ? 'Map Local Rules — an agent is mocking traffic' : 'Map Local Rules'">
         Map Local
       </button>
       <button
         v-if="showMapRemoteBtn"
         class="secondary-pill"
-        :class="{ 'script-active': anyMapRemoteActive }"
-        @click="closeAllModals(); showMapRemoteModal = true" title="Map Remote Rules">
+        :class="agentMapRemoteActive ? 'agent-active' : { 'script-active': anyMapRemoteActive }"
+        @click="closeAllModals(); showMapRemoteModal = true"
+        :title="agentMapRemoteActive ? 'Map Remote Rules — an agent is rewriting traffic' : 'Map Remote Rules'">
         Map Remote
       </button>
       <button
@@ -419,6 +423,17 @@ button,
 .secondary-pill.script-active:hover {
   background: var(--accent-muted);
   border-color: var(--accent);
+}
+/* Same tokens as the agent banner (AgentActivityBanner.vue) */
+.secondary-pill.agent-active {
+  color: var(--warning);
+  background: var(--warning-muted);
+  border-color: var(--warning);
+}
+.secondary-pill.agent-active:hover {
+  background: var(--warning-muted);
+  border-color: var(--warning);
+  filter: brightness(1.15);
 }
 
 .cert-wrapper,

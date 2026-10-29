@@ -380,6 +380,9 @@ class WsHandlerMixin:
             if websocket in self.agent_clients:
                 self.agent_clients.discard(websocket)
                 self.agent_client_names.pop(websocket, None)
+                # Nor recording (or any other switch) left off by an agent
+                # that can no longer turn it back on.
+                await self._agent_restore_tools(websocket)
                 # Don't leave mocks installed by an agent that has gone away:
                 # the user would be left with silently rewritten traffic and
                 # nothing in the UI explaining why.

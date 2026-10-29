@@ -322,10 +322,14 @@ export const selectedScriptId    = ref(null)
 export const anyScriptEnabled    = computed(() => scripts.value.some(s => s.enabled))
 
 // Toolbar active-state computeds for rule-based features
-export const anyMapLocalActive    = computed(() => enableMapLocal.value    && mapLocalRules.value.length > 0)
-export const anyMapRemoteActive   = computed(() => enableMapRemote.value   && mapRemoteRules.value.length > 0)
+export const anyMapLocalActive    = computed(() => enableMapLocal.value    && mapLocalRules.value.some(r => r.active !== false))
+export const anyMapRemoteActive   = computed(() => enableMapRemote.value   && mapRemoteRules.value.some(r => r.active !== false))
 export const anyBreakpointActive  = computed(() => breakpointsEnabled.value && breakpointRules.value.length > 0)
 export const anyHighlightActive   = computed(() => highlightsEnabled.value && highlightRules.value.length > 0)
+// An agent's rules sit behind the same switches; the toolbar marks them in the
+// agent banner's colour so agent-rewritten traffic is never unattributed.
+export const agentMapLocalActive  = computed(() => enableMapLocal.value  && agentMocks.value.some(r => r.active !== false))
+export const agentMapRemoteActive = computed(() => enableMapRemote.value && agentRewrites.value.some(r => r.active !== false))
 
 // ── Toolbar visibility preferences ───────────────────────────────────────────
 export const toolbarVisibility = ref((() => {
@@ -1252,6 +1256,8 @@ watch(toolbarVisibility, (val) => {
 let reconnectTimeout = null;
 let reconnectDelay = 1000;
 let stableConnectionTimeout = null;
+// Cleared on every (re)connect; see the AGENT_STATE handler.
+let agentSwitchesSynced = false;
 
 /**
  * Force-clear whatever mock scenario an agent installed.
@@ -1558,6 +1564,7 @@ export const initWebSocket = () => {
         // failure (e.g. an oversized broadcast) retry every second forever
         // instead of backing off like the exponential delay below intends.
         stableConnectionTimeout = setTimeout(() => { reconnectDelay = 1000 }, 3000)
+        agentSwitchesSynced = false
 
         syncMapLocalRules()
         syncBreakpointRules()
@@ -1598,6 +1605,22 @@ export const initWebSocket = () => {
             agentScenario.value = mergeAgentOverrides(payload.data?.scenario || null)
             if (Array.isArray(payload.data?.activity)) agentActivity.value = payload.data.activity
 
+            // On connect we push our switches before learning about the agent,
+            // and with no user rules Map Local / Map Remote always load as off
+            // — which would silently switch off a running scenario's rules.
+            // Re-apply the backend's auto-enable rule once per connection:
+            // later on, an off is the user's own choice and must stick.
+            if (!agentSwitchesSynced) {
+                agentSwitchesSynced = true
+                const hasActive = (rules) => rules.some(r => r.active !== false)
+                if (hasActive(agentMocks.value) && !enableMapLocal.value && !hasActive(mapLocalRules.value)) {
+                    enableMapLocal.value = true
+                }
+                if (hasActive(agentRewrites.value) && !enableMapRemote.value && !hasActive(mapRemoteRules.value)) {
+                    enableMapRemote.value = true
+                }
+            }
+
             // An agent that vanished mid-scenario leaves its rules behind for
             // the user to take over. They arrive switched off: the point is not
             // to lose the work, not to keep mocking traffic on behalf of
@@ -1610,6 +1633,18 @@ export const initWebSocket = () => {
         }
         else if (payload.type === "AGENT_ACTIVITY") {
             agentActivity.value = [...agentActivity.value, payload.data].slice(-20)
+        }
+        else if (payload.type === "TOOL_STATE") {
+            // An agent flipped a toolbar switch. Mirror it so the toolbar is
+            // truthful and the next reconnect doesn't push the old value back.
+            // The watchers echo each change to the backend; it's the same value.
+            const t = payload.data || {}
+            if (typeof t.map_local === 'boolean') enableMapLocal.value = t.map_local
+            if (typeof t.map_remote === 'boolean') enableMapRemote.value = t.map_remote
+            if (typeof t.breakpoints === 'boolean') breakpointsEnabled.value = t.breakpoints
+            if (typeof t.recording === 'boolean') isRecording.value = t.recording
+            if (typeof t.no_cache === 'boolean') disableCache.value = t.no_cache
+            if (typeof t.throttle === 'string') throttleProfile.value = t.throttle
         }
         else if (payload.type === "NEW_REQUEST") {
             _pendingNew.push(payload.data)

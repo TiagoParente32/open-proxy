@@ -14,6 +14,7 @@ const clientLabel = computed(() => {
   if (names.length === 1) return names[0]
   return `${names.length} agents`
 })
+const clientVerb = computed(() => (agentClients.value.length > 1 ? 'are' : 'is'))
 
 const mocks = computed(() => agentScenario.value?.mocks || [])
 const rewrites = computed(() => agentScenario.value?.rewrites || [])
@@ -41,7 +42,7 @@ const summary = computed(() => {
     parts.push(`mocking ${mocks.value.length} endpoint${mocks.value.length === 1 ? '' : 's'}`)
   }
   if (rewrites.value.length) {
-    parts.push(`${rewrites.value.length} rewrite${rewrites.value.length === 1 ? '' : 's'}`)
+    parts.push(`redirecting ${rewrites.value.length} endpoint${rewrites.value.length === 1 ? '' : 's'}`)
   }
   if (throttle.value) parts.push(`throttled to ${throttle.value}`)
   return parts.join(' · ')
@@ -92,7 +93,7 @@ const relTime = (at) => {
 
         <span class="agent-text">
           <template v-if="hasScenario">
-            <strong>{{ clientLabel }}</strong> is {{ summary }} —
+            <strong>{{ clientLabel }}</strong> {{ clientVerb }} {{ summary }} —
             <span class="agent-summary">check <strong>{{ target?.label }}</strong></span>
           </template>
           <template v-else>
