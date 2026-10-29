@@ -57,6 +57,20 @@ pip install -r requirements.txt
 
 Electron builds the Vue UI, spawns the Python backend from your local `venv`, and opens the window. Restart the app after changing `main.py` or anything in `electron/`. For UI-only changes, `npm run build` inside `ui/` and reload the window.
 
+### Run the tests
+
+```bash
+# Agent API + MCP client: starts its own backend, needs nothing running
+venv/bin/python mcp-server/tests/test_agent_api.py
+
+# UI: drive the running dev app over its debugging port
+npm run start:debug                               # terminal 1
+venv/bin/python ui/tests/test_agent_switches.py   # terminal 2
+venv/bin/python ui/tests/test_ui_sweep.py
+```
+
+The UI tests change rules and switches through the window, then restore every `openproxy*` setting exactly as it was. Run them against the dev app, not mid-session on one you're using. The sweep sends real requests to example.com.
+
 ### Build an installer
 
 See [Building for Distribution](README.md#-building-for-distribution) in the README. Each platform must be built on its own OS.
@@ -67,6 +81,7 @@ See [Building for Distribution](README.md#-building-for-distribution) in the REA
 open-proxy/
 ├── electron/           # Electron main process + preload (window, tray, IPC, Python lifecycle)
 ├── ui/                 # Vue 3 + Vite frontend (all UI lives here)
+│   └── tests/          # UI tests, driven over CDP against the dev app
 ├── main.py             # Python backend: mitmproxy addon, WebSocket API, device helpers, updater
 ├── requirements.txt    # Python dependencies
 ├── OpenProxy.spec      # PyInstaller spec for the backend binary
