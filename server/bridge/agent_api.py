@@ -68,6 +68,17 @@ MAX_MOCK_DELAY_MS = 60_000
 
 SEQUENCE_MODES = {"hold", "cycle"}
 
+# The UI's on/off switches an agent may flip, mapped to the backend attribute
+# each one drives and the label the activity feed uses. Booleans only;
+# throttle is a profile name and is handled on its own.
+TOOL_SWITCHES = {
+    "map_local": ("map_local_enabled", "Map Local"),
+    "map_remote": ("map_remote_enabled", "Map Remote"),
+    "breakpoints": ("breakpoints_enabled", "Breakpoints"),
+    "recording": ("is_recording", "Recording"),
+    "no_cache": ("disable_cache", "No Cache"),
+}
+
 AGENT_MESSAGE_TYPES = {
     "AGENT_HELLO",
     "AGENT_STATUS",
@@ -83,6 +94,7 @@ AGENT_MESSAGE_TYPES = {
     "AGENT_CLEAR_SCENARIO",
     "AGENT_REPLAY_REQUEST",
     "AGENT_SEND_REQUEST",
+    "AGENT_SET_TOOLS",
 }
 
 # Messages that may block for as long as the caller asked. They run detached
@@ -253,6 +265,9 @@ class AgentApiMixin:
         if msg_type == "AGENT_SEND_REQUEST":
             return await self._agent_inject(self._agent_build_send(payload), payload)
 
+        if msg_type == "AGENT_SET_TOOLS":
+            return await self._agent_set_tools(payload, websocket)
+
         raise ValueError(f"Unhandled agent message {msg_type}")
 
     async def _agent_inject(self, request, payload):
@@ -399,6 +414,7 @@ class AgentApiMixin:
             "throttle": self._effective_throttle(),
             "map_local_enabled": self.map_local_enabled,
             "map_remote_enabled": self.map_remote_enabled,
+            "tools": self.tool_state(),
             "user_rule_counts": {
                 "map_local": len(self.map_local_rules),
                 "map_remote": len(self.map_remote_rules),
@@ -512,7 +528,138 @@ class AgentApiMixin:
 
         await self.broadcast_agent_state()
 
-        return {"scenario": self.agent_scenario, "watermark": self.agent_scenario["started_seq"]}
+        result = {"scenario": self.agent_scenario, "watermark": self.agent_scenario["started_seq"]}
+        # Agent rules sit behind the same master switches as the user's, and
+        # the UI turns Map Local off whenever the user has no rules of their
+        # own — so a scenario would install fine and then never fire. With no
+        # active user rules behind the switch, turning it on affects nothing
+        # but the agent's rules, so do it. With active user rules, the switch
+        # may be off on purpose and turning it on would revive them too: warn.
+        enabled, off = [], []
+        for name, rules, user_rules in (
+            ("map_local", normalised_local, self.map_local_rules),
+            ("map_remote", normalised_remote, self.map_remote_rules),
+        ):
+            attr = TOOL_SWITCHES[name][0]
+            if not rules or getattr(self, attr):
+                continue
+            if any(r.get("active", True) for r in user_rules):
+                off.append(name)
+            else:
+                setattr(self, attr, True)
+                enabled.append(name)
+        if enabled:
+            result["enabled_tools"] = enabled
+            await self.broadcast_to_ui("TOOL_STATE", self.tool_state())
+        if off:
+            result["warning"] = (
+                f"{' and '.join(off)} {'is' if len(off) == 1 else 'are'} switched off, so "
+                "these rules won't match any traffic. The user has rules of their own "
+                "there, and turning the switch on re-enables those too — call "
+                "set_proxy_tools if that's acceptable."
+            )
+        return result
+
+    # ---- tool switches ---------------------------------------------------
+
+    def tool_state(self):
+        """The UI's on/off switches as the backend currently applies them.
+
+        `throttle` is the user's profile, not the effective one: a scenario's
+        throttle sits on top of it and is reported with the scenario.
+        """
+        state = {name: bool(getattr(self, attr)) for name, (attr, _) in TOOL_SWITCHES.items()}
+        state["throttle"] = self.throttle_profile
+        return state
+
+    async def _agent_set_tools(self, payload, websocket=None):
+        """Flip the UI's master switches on the agent's behalf.
+
+        These are the user's own settings, not scenario state, so clear_mocks
+        leaves them alone. A switch the agent turns *off* is put back when that
+        agent disconnects (see _agent_restore_tools) — a crashed agent must not
+        leave the user with recording quietly paused. The UI is told so its
+        toolbar shows what the proxy is really doing, and so it doesn't push
+        its stale values back on the next reconnect.
+        """
+        changes = {}
+        for name, (attr, _) in TOOL_SWITCHES.items():
+            value = payload.get(name)
+            if value is None:
+                continue
+            if not isinstance(value, bool):
+                raise TypeError(f"{name} must be true or false, got {value!r}")
+            changes[name] = value
+
+        throttle = payload.get("throttle")
+        if throttle is not None and throttle not in THROTTLE_PROFILES:
+            raise ValueError(
+                f"Unknown throttle profile {throttle!r}; "
+                f"expected one of {sorted(THROTTLE_PROFILES)}"
+            )
+        if not changes and throttle is None:
+            raise ValueError(
+                f"Nothing to change; pass any of {sorted([*TOOL_SWITCHES, 'throttle'])}"
+            )
+
+        changed = []
+        for name, value in changes.items():
+            attr = TOOL_SWITCHES[name][0]
+            if getattr(self, attr) != value:
+                setattr(self, attr, value)
+                changed.append(name)
+                # Whoever changes a switch last owns it: any earlier agent's
+                # pending restore is void, whichever socket it belongs to.
+                self._forget_tool_restore(name)
+                if not value:
+                    self.agent_tool_restores.setdefault(websocket, set()).add(name)
+        if throttle is not None and throttle != self.throttle_profile:
+            self.throttle_profile = throttle
+            changed.append("throttle")
+
+        state = self.tool_state()
+        if changed:
+            await self.broadcast_to_ui("TOOL_STATE", state)
+        return {"tools": state, "changed": changed}
+
+    def _forget_tool_restore(self, name):
+        """Drop `name` from every agent's pending restores."""
+        for ws in list(self.agent_tool_restores):
+            self.agent_tool_restores[ws].discard(name)
+            if not self.agent_tool_restores[ws]:
+                del self.agent_tool_restores[ws]
+
+    def ui_set_switch(self, name, value):
+        """Apply a toolbar switch sent by the UI.
+
+        Only a real change counts as the user's choice and voids agent
+        restores: the UI also echoes back values it just mirrored from
+        TOOL_STATE, and those must not cancel anything.
+        """
+        attr = TOOL_SWITCHES[name][0]
+        if getattr(self, attr) != value:
+            setattr(self, attr, value)
+            self._forget_tool_restore(name)
+
+    async def _agent_restore_tools(self, websocket):
+        """Turn back on the switches a departing agent turned off.
+
+        Any switch the user or another agent has changed since is no longer
+        in its restores (see _forget_tool_restore): their later choice stands.
+        """
+        names = self.agent_tool_restores.pop(websocket, set())
+        restored = []
+        for name in sorted(names):
+            attr = TOOL_SWITCHES[name][0]
+            if not getattr(self, attr):
+                setattr(self, attr, True)
+                restored.append(TOOL_SWITCHES[name][1])
+        if restored:
+            print(f"[Agent] Disconnected — restored {', '.join(restored)}", flush=True)
+            await self.broadcast_to_ui("TOOL_STATE", self.tool_state())
+            await self.log_agent_activity(
+                "tools", f"Agent left — turned {', '.join(restored)} back on"
+            )
 
     # ---- user overrides over agent rules ---------------------------------
 
@@ -765,6 +912,9 @@ class AgentApiMixin:
             if n_rw:
                 bits.append(f"{n_rw} rewrite{'' if n_rw == 1 else 's'}")
             detail = " and ".join(bits) if bits else "no rules"
+            labels = [TOOL_SWITCHES[n][1] for n in (result or {}).get("enabled_tools") or []]
+            if labels:
+                detail += f" (turned {' and '.join(labels)} on)"
             surface = "map_local" if n_mock else ("map_remote" if n_rw else None)
             return "scenario", f"Started “{sc.get('name')}” — {detail}", surface
 
@@ -783,6 +933,22 @@ class AgentApiMixin:
             return "history", "Cleared captured history", "traffic"
         if msg_type == "AGENT_GET_FLOW":
             return "read", "Inspected a request", "traffic"
+        if msg_type == "AGENT_SET_TOOLS":
+            result = result or {}
+            tools = result.get("tools") or {}
+            bits = []
+            for name in result.get("changed") or []:
+                if name == "throttle":
+                    bits.append(f"set throttle to {tools.get('throttle')}")
+                else:
+                    label = TOOL_SWITCHES[name][1]
+                    bits.append(f"turned {label} {'on' if tools.get(name) else 'off'}")
+            if not bits:
+                return None
+            message = ", ".join(bits)
+            surface = next((s for s in ("map_local", "map_remote")
+                            if s in (result.get("changed") or [])), None)
+            return "tools", message[0].upper() + message[1:], surface
         return None
 
     # ---- UI visibility ---------------------------------------------------

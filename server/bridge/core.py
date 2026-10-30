@@ -53,6 +53,9 @@ class BridgeCore:
         self.agent_map_local_rules = []
         self.agent_map_remote_rules = []
         self.agent_throttle_profile = None   # None = inherit the UI's setting
+        # Switches each agent socket turned off via AGENT_SET_TOOLS, turned
+        # back on when that socket disconnects.
+        self.agent_tool_restores = {}
 
         # Fields the user has taken over on an agent's rules, keyed by
         # method|pattern (mocks) or pattern (rewrites). Re-applied on every

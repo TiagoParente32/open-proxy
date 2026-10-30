@@ -27,6 +27,7 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
+    "start:debug": "electron . --remote-debugging-port=9223",
     "build:ui": "cd ui && npm run build",
     "pack": "npm run build:ui && electron-builder --dir",
     "dist:mac": "npm run build:ui && electron-builder --mac",

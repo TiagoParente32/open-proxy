@@ -24,6 +24,9 @@ class WsHandlerMixin:
                     "port": self.proxy_port,
                     "platform": sys.platform,
                     "mac_proxy_active": self.is_mac_proxy_set,
+                    # The UI doesn't persist this, so it learns it here
+                    # rather than assuming on — an agent may have paused it.
+                    "recording": self.is_recording,
                     # Stable launcher for the bundled MCP server; the setup
                     # window shows it verbatim. None if it couldn't be written.
                     "mcp_command": self.mcp_shim_path,
@@ -88,10 +91,10 @@ class WsHandlerMixin:
                     self.throttle_profile = payload.get("profile", "None")
 
                 elif payload.get("type") == "TOGGLE_PROXY":
-                    self.is_recording = payload.get("is_recording")
+                    self.ui_set_switch("recording", payload.get("is_recording"))
 
                 elif payload.get("type") == "TOGGLE_CACHE":
-                    self.disable_cache = payload.get("disable_cache")
+                    self.ui_set_switch("no_cache", payload.get("disable_cache"))
 
                 elif payload.get("type") == "UPDATE_PROXY_OPTIONS":
                     if self._master:
@@ -176,16 +179,16 @@ class WsHandlerMixin:
                     self.replay_request(payload.get("request", {}))
 
                 elif payload.get("type") == "TOGGLE_BREAKPOINTS":
-                    self.breakpoints_enabled = payload.get("enabled", True)
+                    self.ui_set_switch("breakpoints", payload.get("enabled", True))
 
                 elif payload.get("type") == "UPDATE_BREAKPOINT_RULES":
                     self.breakpoint_rules = payload.get("rules", [])
 
                 elif payload.get("type") == "TOGGLE_MAP_LOCAL":
-                    self.map_local_enabled = payload.get("enabled", True)
+                    self.ui_set_switch("map_local", payload.get("enabled", True))
 
                 elif payload.get("type") == "TOGGLE_MAP_REMOTE":
-                    self.map_remote_enabled = payload.get("enabled", True)
+                    self.ui_set_switch("map_remote", payload.get("enabled", True))
 
                 elif payload.get("type") == "RESOLVE_BREAKPOINT":
                     flow_id = payload.get("id")
@@ -380,6 +383,9 @@ class WsHandlerMixin:
             if websocket in self.agent_clients:
                 self.agent_clients.discard(websocket)
                 self.agent_client_names.pop(websocket, None)
+                # Nor recording (or any other switch) left off by an agent
+                # that can no longer turn it back on.
+                await self._agent_restore_tools(websocket)
                 # Don't leave mocks installed by an agent that has gone away:
                 # the user would be left with silently rewritten traffic and
                 # nothing in the UI explaining why.

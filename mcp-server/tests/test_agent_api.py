@@ -751,6 +751,213 @@ async def test_throttle(ws_port):
               st["throttle"])
 
 
+async def test_set_tools(ws_port):
+    """An agent can flip the toolbar switches its own rules sit behind.
+
+    The UI turns Map Local off whenever the user has no rules of their own, so
+    without this a scenario installs fine and then never fires.
+    """
+    print("\n== set tools ==")
+    ui = await websockets.connect(f"ws://127.0.0.1:{ws_port}")
+    agent = await websockets.connect(f"ws://127.0.0.1:{ws_port}")
+    scenario = {
+        "name": "gated",
+        "map_local": [{"active": True, "pattern": "*/api/gated*", "status": 418, "body": "g"}],
+    }
+    try:
+        # The user has an active rule of their own and switched Map Local off:
+        # that may be deliberate, so the scenario must not switch it back on.
+        await ui.send(json.dumps({"type": "UPDATE_MAP_LOCAL_RULES", "rules": [
+            {"active": True, "pattern": "*/user-only*", "method": "ANY", "status": 200}]}))
+        await ui.send(json.dumps({"type": "TOGGLE_MAP_LOCAL", "enabled": False}))
+        await asyncio.sleep(0.3)
+        await agent_call(agent, "AGENT_HELLO", {"client": "tools-test"}, req_id="st0")
+        st = await agent_call(agent, "AGENT_STATUS", req_id="st1")
+        proxy_port = st["proxy_port"]
+        check("status reports every switch",
+              set(st.get("tools") or {}) == {"map_local", "map_remote", "breakpoints",
+                                             "recording", "no_cache", "throttle"},
+              str(st.get("tools")))
+        check("status sees the UI's Map Local switch off", st["tools"]["map_local"] is False)
+
+        r = await agent_call(agent, "AGENT_RUN_SCENARIO", scenario, req_id="st2")
+        check("scenario warns when the user switched Map Local off",
+              "map_local" in (r.get("warning") or ""), str(r.get("warning")))
+        check("scenario leaves the user's switch alone", not r.get("enabled_tools"))
+        code, _ = await asyncio.to_thread(http_get, "http://mock.test/api/gated", proxy_port)
+        check("mock does not fire while Map Local is off", code != 418, f"got {code}")
+
+        r = await agent_call(agent, "AGENT_SET_TOOLS", {"map_local": True, "no_cache": True},
+                             req_id="st3")
+        check("set_tools reports what changed",
+              sorted(r.get("changed") or []) == ["map_local", "no_cache"], str(r.get("changed")))
+        check("set_tools returns the new state",
+              r["tools"]["map_local"] is True and r["tools"]["no_cache"] is True)
+        msg = await _await_payload(ui, lambda m: m.get("type") == "TOOL_STATE")
+        check("UI is told the switches changed",
+              msg is not None and msg["data"]["map_local"] is True, str(msg and msg["data"]))
+        act = await _await_payload(ui, lambda m: m.get("type") == "AGENT_ACTIVITY"
+                                   and m["data"].get("kind") == "tools")
+        check("activity feed narrates the switch",
+              act is not None and "Map Local on" in act["data"]["message"],
+              str(act and act["data"]["message"]))
+
+        code, _ = await asyncio.to_thread(http_get, "http://mock.test/api/gated", proxy_port)
+        check("mock fires once the agent turns Map Local on", code == 418, f"got {code}")
+
+        r = await agent_call(agent, "AGENT_SET_TOOLS", {"map_local": True}, req_id="st4")
+        check("setting a switch to its current value changes nothing", r.get("changed") == [])
+
+        # Only an inactive user rule: switching Map Local on revives nothing of
+        # theirs, so the scenario turns it on by itself.
+        await ui.send(json.dumps({"type": "UPDATE_MAP_LOCAL_RULES", "rules": [
+            {"active": False, "pattern": "*/user-only*", "method": "ANY", "status": 200}]}))
+        await ui.send(json.dumps({"type": "TOGGLE_MAP_LOCAL", "enabled": False}))
+        await asyncio.sleep(0.3)
+        r = await agent_call(agent, "AGENT_RUN_SCENARIO", scenario, req_id="st4b")
+        check("scenario turns Map Local on when user rules are all inactive",
+              r.get("enabled_tools") == ["map_local"] and "warning" not in r,
+              f"{r.get('enabled_tools')} / {r.get('warning')}")
+
+        # No user rules: the switch is off only because the UI defaults it
+        # off, so the scenario turns it on by itself.
+        await ui.send(json.dumps({"type": "UPDATE_MAP_LOCAL_RULES", "rules": []}))
+        await ui.send(json.dumps({"type": "TOGGLE_MAP_LOCAL", "enabled": False}))
+        await asyncio.sleep(0.3)
+        r = await agent_call(agent, "AGENT_RUN_SCENARIO", scenario, req_id="st5")
+        check("scenario turns Map Local on when the user has no rules",
+              r.get("enabled_tools") == ["map_local"], str(r.get("enabled_tools")))
+        check("no warning once the switch was turned on", "warning" not in r, str(r.get("warning")))
+        msg = await _await_payload(ui, lambda m: m.get("type") == "TOOL_STATE"
+                                   and m["data"]["map_local"])
+        check("UI is told the scenario turned Map Local on", msg is not None)
+        code, _ = await asyncio.to_thread(http_get, "http://mock.test/api/gated", proxy_port)
+        check("mock fires without an explicit set_tools", code == 418, f"got {code}")
+
+        for label, payload, needle in [
+            ("non-boolean switch", {"map_local": "yes"}, "true or false"),
+            ("unknown throttle", {"throttle": "slow 3g"}, "throttle"),
+            ("empty call", {}, "nothing to change"),
+        ]:
+            try:
+                await agent_call(agent, "AGENT_SET_TOOLS", payload, req_id="st6")
+                check(f"set_tools rejects {label}", False, "no error")
+            except RuntimeError as e:
+                check(f"set_tools rejects {label}", needle in str(e).lower(), str(e)[:80])
+
+        await agent_call(agent, "AGENT_CLEAR_SCENARIO", req_id="st7")
+        await agent_call(agent, "AGENT_SET_TOOLS", {"no_cache": False}, req_id="st8")
+    finally:
+        await agent.close()
+        await ui.close()
+
+
+async def test_disconnect_restores_tools(ws_port):
+    """Switches an agent turned off come back on when it goes away, unless the
+    user already turned them back on themselves."""
+    print("\n== disconnect restores tools ==")
+    ui = await websockets.connect(f"ws://127.0.0.1:{ws_port}")
+    try:
+        agent = await websockets.connect(f"ws://127.0.0.1:{ws_port}")
+        await agent_call(agent, "AGENT_HELLO", {"client": "restore-test"}, req_id="dr0")
+        r = await agent_call(agent, "AGENT_SET_TOOLS",
+                             {"recording": False, "map_remote": False}, req_id="dr1")
+        check("agent turned recording and Map Remote off",
+              r["tools"]["recording"] is False and r["tools"]["map_remote"] is False)
+        # The user takes Map Remote back before the agent leaves.
+        await ui.send(json.dumps({"type": "TOGGLE_MAP_REMOTE", "enabled": True}))
+        await asyncio.sleep(0.3)
+        await agent.close()
+
+        msg = await _await_payload(ui, lambda m: m.get("type") == "TOOL_STATE"
+                                   and m["data"]["recording"])
+        check("UI is told recording came back on", msg is not None)
+        act = await _await_payload(ui, lambda m: m.get("type") == "AGENT_ACTIVITY"
+                                   and "back on" in m["data"].get("message", ""))
+        check("activity feed names only what was restored",
+              act is not None and "Recording" in act["data"]["message"]
+              and "Map Remote" not in act["data"]["message"],
+              str(act and act["data"]["message"]))
+
+        async with websockets.connect(f"ws://127.0.0.1:{ws_port}") as probe:
+            await agent_call(probe, "AGENT_HELLO", {"client": "restore-probe"}, req_id="dr2")
+            st = await agent_call(probe, "AGENT_STATUS", req_id="dr3")
+            check("recording is on after the agent left", st["tools"]["recording"] is True)
+            check("Map Remote stays as the user left it", st["tools"]["map_remote"] is True)
+    finally:
+        await ui.close()
+
+
+async def test_restore_edge_cases(ws_port):
+    """A restore must never override a later choice: the user's own toggle,
+    or another agent's. And a UI that connects late must learn the real
+    recording state rather than assume it is on."""
+    print("\n== restore edge cases ==")
+    url = f"ws://127.0.0.1:{ws_port}"
+
+    async def status():
+        async with websockets.connect(url) as probe:
+            await agent_call(probe, "AGENT_HELLO", {"client": "edge-probe"}, req_id="ep0")
+            return (await agent_call(probe, "AGENT_STATUS", req_id="ep1"))["tools"]
+
+    # User turns the switch on and then off again on purpose.
+    ui = await websockets.connect(url)
+    agent = await websockets.connect(url)
+    try:
+        await agent_call(agent, "AGENT_HELLO", {"client": "edge-a"}, req_id="ea0")
+        await agent_call(agent, "AGENT_SET_TOOLS", {"recording": False}, req_id="ea1")
+        await ui.send(json.dumps({"type": "TOGGLE_PROXY", "is_recording": True}))
+        await ui.send(json.dumps({"type": "TOGGLE_PROXY", "is_recording": False}))
+        await asyncio.sleep(0.3)
+        await agent.close()
+        await asyncio.sleep(0.5)
+        check("user's own later off survives the agent leaving",
+              (await status())["recording"] is False)
+
+        # A UI connecting now must be told recording is off.
+        async with websockets.connect(url) as late_ui:
+            info = json.loads(await asyncio.wait_for(late_ui.recv(), timeout=10))
+            check("SYSTEM_INFO carries the real recording state",
+                  info.get("type") == "SYSTEM_INFO" and info["data"].get("recording") is False,
+                  str(info.get("data", {}).get("recording")))
+
+        # An echo of the current value is not a user choice.
+        await ui.send(json.dumps({"type": "TOGGLE_PROXY", "is_recording": True}))
+        await asyncio.sleep(0.3)
+        agent = await websockets.connect(url)
+        await agent_call(agent, "AGENT_HELLO", {"client": "edge-a2"}, req_id="ea2")
+        await agent_call(agent, "AGENT_SET_TOOLS", {"recording": False}, req_id="ea3")
+        await ui.send(json.dumps({"type": "TOGGLE_PROXY", "is_recording": False}))   # same value
+        await asyncio.sleep(0.3)
+        await agent.close()
+        await asyncio.sleep(0.5)
+        check("an unchanged echo from the UI doesn't cancel the restore",
+              (await status())["recording"] is True)
+    finally:
+        await ui.close()
+
+    # Two agents: B's later off must not be undone by A leaving.
+    a = await websockets.connect(url)
+    b = await websockets.connect(url)
+    try:
+        await agent_call(a, "AGENT_HELLO", {"client": "edge-A"}, req_id="eb0")
+        await agent_call(b, "AGENT_HELLO", {"client": "edge-B"}, req_id="eb1")
+        await agent_call(a, "AGENT_SET_TOOLS", {"recording": False}, req_id="eb2")
+        await agent_call(b, "AGENT_SET_TOOLS", {"recording": True}, req_id="eb3")
+        await agent_call(b, "AGENT_SET_TOOLS", {"recording": False}, req_id="eb4")
+        await a.close()
+        await asyncio.sleep(0.5)
+        check("agent A leaving doesn't undo agent B's later off",
+              (await status())["recording"] is False)
+        await b.close()
+        await asyncio.sleep(0.5)
+        check("agent B leaving restores what B turned off",
+              (await status())["recording"] is True)
+    finally:
+        await a.close()
+        await b.close()
+
+
 async def test_rule_validation(ws_port):
     """Malformed rules fail at install time, not as a 500 at match time."""
     print("\n== rule validation ==")
@@ -1224,6 +1431,9 @@ async def main():
         await test_replay_by_flow_id(ws_port)
         await test_rewrite_redirects_traffic(ws_port)
         await test_throttle(ws_port)
+        await test_set_tools(ws_port)
+        await test_disconnect_restores_tools(ws_port)
+        await test_restore_edge_cases(ws_port)
         await test_rule_validation(ws_port)
         await test_list_since_seq(ws_port)
         await test_scenario_ownership(ws_port)
