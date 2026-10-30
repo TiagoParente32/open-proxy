@@ -79,6 +79,12 @@ TOOL_SWITCHES = {
     "no_cache": ("disable_cache", "No Cache"),
 }
 
+# Fields an agent may set on the *user's own* rules. The local set is every
+# editor field plus the agent-only extras the backend honours on user rules.
+USER_LOCAL_FIELDS = OVERRIDABLE_FIELDS | {"delay_ms", "responses", "sequence_mode"}
+USER_REMOTE_FIELDS = OVERRIDABLE_REMOTE_FIELDS
+RULE_OPS = {"add", "update", "delete", "move"}
+
 AGENT_MESSAGE_TYPES = {
     "AGENT_HELLO",
     "AGENT_STATUS",
@@ -92,6 +98,8 @@ AGENT_MESSAGE_TYPES = {
     "AGENT_WAIT_FOR_FLOWS",
     "AGENT_RUN_SCENARIO",
     "AGENT_CLEAR_SCENARIO",
+    "AGENT_LIST_RULES",
+    "AGENT_EDIT_RULES",
     "AGENT_REPLAY_REQUEST",
     "AGENT_SEND_REQUEST",
     "AGENT_SET_TOOLS",
@@ -159,7 +167,10 @@ class AgentApiMixin:
         """Dispatch one message, reply, and narrate it to the UI."""
         try:
             data = await self._dispatch_agent(msg_type, payload, websocket)
+            internal = data.pop("_summary", None) if isinstance(data, dict) else None
             await self._agent_reply(websocket, req_id, data=data)
+            if internal is not None and isinstance(data, dict):
+                data = {**data, "_summary": internal}
 
             # The UI can send AGENT_* too (its "stop the agent" button), and
             # the feed must not credit the agent for what the user did.
@@ -258,6 +269,12 @@ class AgentApiMixin:
 
         if msg_type == "AGENT_CLEAR_SCENARIO":
             return await self._agent_clear_scenario()
+
+        if msg_type == "AGENT_LIST_RULES":
+            return self._agent_list_rules()
+
+        if msg_type == "AGENT_EDIT_RULES":
+            return await self._agent_edit_rules(payload.get("kind"), payload.get("operations"))
 
         if msg_type == "AGENT_REPLAY_REQUEST":
             return await self._agent_inject(self._agent_build_replay(payload), payload)
@@ -449,37 +466,9 @@ class AgentApiMixin:
                 f"expected one of {sorted(THROTTLE_PROFILES)}"
             )
         for i, rule in enumerate(map_local):
-            if not isinstance(rule, dict) or not rule.get("pattern"):
-                raise ValueError(f"map_local[{i}] needs a non-empty pattern")
-            try:
-                status = int(rule.get("status", 200))
-            except (TypeError, ValueError):
-                raise ValueError(f"map_local[{i}] status {rule.get('status')!r} is not an integer")
-            if not 100 <= status <= 599:
-                raise ValueError(f"map_local[{i}] status {status} is outside 100-599")
-            delay = rule.get("delay_ms") or 0
-            if not isinstance(delay, (int, float)) or not 0 <= delay <= MAX_MOCK_DELAY_MS:
-                raise ValueError(f"map_local[{i}] delay_ms must be 0-{MAX_MOCK_DELAY_MS}")
-            responses = rule.get("responses")
-            if responses is not None:
-                if not isinstance(responses, list) or not responses:
-                    raise ValueError(f"map_local[{i}] responses must be a non-empty list")
-                for j, step in enumerate(responses):
-                    if not isinstance(step, dict):
-                        raise ValueError(f"map_local[{i}].responses[{j}] must be an object")
-                    if "status" in step:
-                        try:
-                            st = int(step["status"])
-                        except (TypeError, ValueError):
-                            raise ValueError(f"map_local[{i}].responses[{j}] status is not an integer")
-                        if not 100 <= st <= 599:
-                            raise ValueError(f"map_local[{i}].responses[{j}] status {st} is outside 100-599")
-            mode = rule.get("sequence_mode")
-            if mode is not None and mode not in SEQUENCE_MODES:
-                raise ValueError(f"map_local[{i}] sequence_mode must be one of {sorted(SEQUENCE_MODES)}")
+            self._validate_local_rule(rule, f"map_local[{i}]")
         for i, rule in enumerate(map_remote):
-            if not isinstance(rule, dict) or not rule.get("pattern"):
-                raise ValueError(f"map_remote[{i}] needs a non-empty pattern")
+            self._validate_remote_rule(rule, f"map_remote[{i}]")
 
         # Rules arrive from an agent, so default the fields the matcher relies
         # on rather than trusting every key to be present.
@@ -660,6 +649,186 @@ class AgentApiMixin:
             await self.log_agent_activity(
                 "tools", f"Agent left — turned {', '.join(restored)} back on"
             )
+
+    @staticmethod
+    def _validate_local_rule(rule, where):
+        if not isinstance(rule, dict) or not rule.get("pattern"):
+            raise ValueError(f"{where} needs a non-empty pattern")
+        try:
+            status = int(rule.get("status", 200))
+        except (TypeError, ValueError):
+            raise ValueError(f"{where} status {rule.get('status')!r} is not an integer")
+        if not 100 <= status <= 599:
+            raise ValueError(f"{where} status {status} is outside 100-599")
+        delay = rule.get("delay_ms") or 0
+        if not isinstance(delay, (int, float)) or not 0 <= delay <= MAX_MOCK_DELAY_MS:
+            raise ValueError(f"{where} delay_ms must be 0-{MAX_MOCK_DELAY_MS}")
+        responses = rule.get("responses")
+        if responses is not None:
+            if not isinstance(responses, list) or not responses:
+                raise ValueError(f"{where} responses must be a non-empty list")
+            for j, step in enumerate(responses):
+                if not isinstance(step, dict):
+                    raise ValueError(f"{where}.responses[{j}] must be an object")
+                if "status" in step:
+                    try:
+                        st = int(step["status"])
+                    except (TypeError, ValueError):
+                        raise ValueError(f"{where}.responses[{j}] status is not an integer")
+                    if not 100 <= st <= 599:
+                        raise ValueError(f"{where}.responses[{j}] status {st} is outside 100-599")
+        mode = rule.get("sequence_mode")
+        if mode is not None and mode not in SEQUENCE_MODES:
+            raise ValueError(f"{where} sequence_mode must be one of {sorted(SEQUENCE_MODES)}")
+        headers = rule.get("headers")
+        if isinstance(headers, str) and headers.strip():
+            try:
+                json.loads(headers)
+            except json.JSONDecodeError:
+                raise ValueError(f"{where} headers must be a JSON object (string or dict)")
+
+    @staticmethod
+    def _validate_remote_rule(rule, where):
+        if not isinstance(rule, dict) or not rule.get("pattern"):
+            raise ValueError(f"{where} needs a non-empty pattern")
+
+    # ---- the user's own rules ---------------------------------------------
+    #
+    # Unlike a scenario, these edit the list the user built by hand in the
+    # Map Local / Map Remote windows — the same list they persist and carry
+    # across restarts. Nothing here is undone on clear or disconnect: an
+    # agent asked to "fix the profile mock" is editing the user's setup on
+    # their behalf, exactly as a colleague at the keyboard would. The UI owns
+    # that list, so every change is pushed to it to persist.
+
+    def _agent_list_rules(self):
+        return {
+            "map_local": [self._user_rule_view(r, "local") for r in self.map_local_rules],
+            "map_remote": [self._user_rule_view(r, "remote") for r in self.map_remote_rules],
+            "map_local_enabled": self.map_local_enabled,
+            "map_remote_enabled": self.map_remote_enabled,
+            "scenario": self.agent_scenario,
+        }
+
+    @staticmethod
+    def _user_rule_view(rule, kind):
+        """A user rule as the agent sees it: the editor fields, with `id` as
+        the handle for edits. Internal counters and unknown keys stay out."""
+        allowed = USER_LOCAL_FIELDS if kind == "local" else USER_REMOTE_FIELDS
+        view = {"id": rule.get("id")}
+        for f in sorted(allowed):
+            if f in rule:
+                view[f] = rule[f]
+        return view
+
+    async def _agent_edit_rules(self, kind, operations):
+        if kind not in ("map_local", "map_remote"):
+            raise ValueError("kind must be 'map_local' or 'map_remote'")
+        if not isinstance(operations, list) or not operations:
+            raise ValueError("operations must be a non-empty list")
+
+        local = kind == "map_local"
+        allowed = USER_LOCAL_FIELDS if local else USER_REMOTE_FIELDS
+        validate = self._validate_local_rule if local else self._validate_remote_rule
+        # Work on a copy and commit only if every operation is valid: an
+        # agent reorganising a list should not leave it half-edited.
+        rules = [dict(r) for r in (self.map_local_rules if local else self.map_remote_rules)]
+
+        def find(rule_id, where):
+            if rule_id is None:
+                raise ValueError(f"{where} needs an id (see list_mock_rules)")
+            for idx, r in enumerate(rules):
+                if str(r.get("id")) == str(rule_id):
+                    return idx
+            raise KeyError(f"{where}: no {kind} rule with id {rule_id!r}")
+
+        def clamp(position, where):
+            if position is None:
+                return 0
+            if not isinstance(position, int) or isinstance(position, bool):
+                raise ValueError(f"{where} position must be an integer")
+            return max(0, min(position, len(rules)))
+
+        summary = []
+        for i, op in enumerate(operations):
+            where = f"operations[{i}]"
+            if not isinstance(op, dict) or op.get("op") not in RULE_OPS:
+                raise ValueError(f"{where} op must be one of {sorted(RULE_OPS)}")
+            name = op["op"]
+
+            if name == "add":
+                raw = op.get("rule")
+                if not isinstance(raw, dict):
+                    raise ValueError(f"{where} needs a rule object")
+                unknown = set(raw) - allowed
+                if unknown:
+                    raise ValueError(f"{where} rule has unknown fields {sorted(unknown)}")
+                validate(raw, f"{where}.rule")
+                if local:
+                    rule = self._normalise_local_rule(raw)
+                    rule.setdefault("label", "")
+                    if not rule.get("label"):
+                        rule["label"] = "Added by MCP"
+                else:
+                    rule = {"active": raw.get("active", True), "pattern": raw["pattern"],
+                            "target": raw.get("target", "")}
+                rule["id"] = self._new_rule_id()
+                rules.insert(clamp(op.get("position"), where), rule)
+                summary.append(("add", rule))
+
+            elif name == "update":
+                idx = find(op.get("id"), where)
+                fields = op.get("fields")
+                if not isinstance(fields, dict) or not fields:
+                    raise ValueError(f"{where} needs a non-empty fields object")
+                unknown = set(fields) - allowed
+                if unknown:
+                    raise ValueError(f"{where} has unknown fields {sorted(unknown)}; "
+                                     f"allowed: {sorted(allowed)}")
+                merged = {**rules[idx], **fields}
+                validate(merged, where)
+                if local:
+                    merged = {**merged, **self._normalise_local_rule(merged), "id": rules[idx]["id"]}
+                rules[idx] = merged
+                summary.append(("update", merged, sorted(fields)))
+
+            elif name == "delete":
+                idx = find(op.get("id"), where)
+                summary.append(("delete", rules.pop(idx)))
+
+            elif name == "move":
+                idx = find(op.get("id"), where)
+                rule = rules.pop(idx)
+                rules.insert(clamp(op.get("position"), where), rule)
+                summary.append(("move", rule))
+
+        if local:
+            self.map_local_rules = rules
+            # Edited sequences start over, like the UI's own save does.
+            agent_keys = set(self.agent_rule_order)
+            self.agent_rule_hits = {k: v for k, v in self.agent_rule_hits.items() if k in agent_keys}
+            await self.broadcast_to_ui("MAP_LOCAL_RULES", {"rules": rules})
+        else:
+            self.map_remote_rules = rules
+            await self.broadcast_to_ui("MAP_REMOTE_RULES", {"rules": rules})
+
+        print(f"[Agent] Edited the user's {kind} rules: "
+              + ", ".join(s[0] for s in summary), flush=True)
+        return {
+            "kind": kind,
+            "applied": len(summary),
+            "rules": [self._user_rule_view(r, "local" if local else "remote") for r in rules],
+            "enabled": self.map_local_enabled if local else self.map_remote_enabled,
+            "_summary": summary,
+        }
+
+    _rule_id_counter = 0
+
+    def _new_rule_id(self):
+        # Same shape as the UI's Date.now() ids, bumped so two adds in one
+        # batch can't collide.
+        AgentApiMixin._rule_id_counter += 1
+        return int(time.time() * 1000) + AgentApiMixin._rule_id_counter
 
     # ---- user overrides over agent rules ---------------------------------
 
@@ -920,6 +1089,23 @@ class AgentApiMixin:
 
         if msg_type == "AGENT_CLEAR_SCENARIO":
             return "scenario", "Cleared its mocks", None
+        if msg_type == "AGENT_EDIT_RULES":
+            kind = (result or {}).get("kind")
+            surface = "map_local" if kind == "map_local" else "map_remote"
+            noun = "mock" if kind == "map_local" else "rewrite"
+            ops = (result or {}).get("_summary") or []
+            verbs = {"add": "Added", "update": "Edited", "delete": "Deleted", "move": "Moved"}
+            if len(ops) == 1:
+                op = ops[0]
+                rule = op[1]
+                name = rule.get("label") or f"{rule.get('method', '')} {rule.get('pattern', '')}".strip()
+                extra = f" ({', '.join(op[2])})" if op[0] == "update" and len(op) > 2 else ""
+                return "rules", f"{verbs[op[0]]} your {noun} “{name}”{extra}", surface
+            counts = {}
+            for op in ops:
+                counts[op[0]] = counts.get(op[0], 0) + 1
+            bits = [f"{verbs[k].lower()} {v}" for k, v in counts.items()]
+            return "rules", f"Changed your {noun}s: " + ", ".join(bits), surface
         if msg_type == "AGENT_REPLAY_REQUEST":
             url = ((result or {}).get("request") or {}).get("url", "")
             return "replay", f"Replayed {url}", "traffic"

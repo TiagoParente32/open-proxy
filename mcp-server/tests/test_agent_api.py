@@ -958,6 +958,131 @@ async def test_restore_edge_cases(ws_port):
         await b.close()
 
 
+async def _ui_wait_for(ui, msg_type, timeout=5):
+    """Drain UI broadcasts until one of `msg_type` arrives (or time out)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            raw = await asyncio.wait_for(ui.recv(), timeout=max(0.1, deadline - time.monotonic()))
+        except asyncio.TimeoutError:
+            return None
+        data = json.loads(raw)
+        if data.get("type") == msg_type:
+            return data.get("data")
+    return None
+
+
+async def test_edit_user_rules(ws_port):
+    """Agents can read and change the user's own rule lists, atomically, and
+    the UI is handed the result to persist."""
+    print("\n== edit user rules ==")
+    async with websockets.connect(f"ws://127.0.0.1:{ws_port}") as agent, \
+               websockets.connect(f"ws://127.0.0.1:{ws_port}") as ui:
+        await agent_call(agent, "AGENT_HELLO", {"client": "rules-test"}, req_id="u0")
+        proxy_port = (await agent_call(agent, "AGENT_STATUS", req_id="u1"))["proxy_port"]
+
+        # The user's hand-built list, as the UI sends it.
+        user_rules = [
+            {"id": 1001, "active": True, "label": "profile", "method": "GET",
+             "pattern": "*/api/users/profile*", "status": 200,
+             "headers": '{"Content-Type": "application/json"}', "body": '{"ok": true}',
+             "body_source": "inline", "file_path": ""},
+            {"id": 1002, "active": False, "label": "login", "method": "POST",
+             "pattern": "*/api/login*", "status": 200, "headers": "", "body": "tok",
+             "body_source": "inline", "file_path": ""},
+        ]
+        await ui.send(json.dumps({"type": "UPDATE_MAP_LOCAL_RULES", "rules": user_rules}))
+        await ui.send(json.dumps({"type": "TOGGLE_MAP_LOCAL", "enabled": True}))
+        await ui.send(json.dumps({"type": "UPDATE_MAP_REMOTE_RULES", "rules": [
+            {"id": 2001, "active": True, "pattern": "old.test", "target": "127.0.0.1:1"}]}))
+        await asyncio.sleep(0.2)
+
+        listed = await agent_call(agent, "AGENT_LIST_RULES", req_id="u2")
+        check("lists the user's mocks with ids, in order",
+              [r["id"] for r in listed["map_local"]] == [1001, 1002], str(listed["map_local"]))
+        check("lists the user's rewrites", [r["id"] for r in listed["map_remote"]] == [2001])
+        check("list carries no scenario", listed["scenario"] is None)
+
+        # A batch: edit one, enable another, add at the top, reorder.
+        res = await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "map_local", "operations": [
+            {"op": "update", "id": 1001, "fields": {"status": 404, "body": '{"error": "gone"}'}},
+            {"op": "update", "id": "1002", "fields": {"active": True}},
+            {"op": "add", "rule": {"pattern": "*/api/new*", "status": 201, "body": "fresh",
+                                   "headers": {"X-From": "mcp"}}},
+            {"op": "move", "id": 1002, "position": 0},
+        ]}, req_id="u3")
+        ids = [r["id"] for r in res["rules"]]
+        check("batch applied in order", res["applied"] == 4 and ids[0] == 1002 and ids[2] == 1001,
+              str(ids))
+        added = res["rules"][1]
+        check("added rule got an id and a provenance label",
+              isinstance(added["id"], int) and added["label"] == "Added by MCP", str(added))
+        check("dict headers are stored as the JSON string the UI expects",
+              added["headers"] == '{"X-From": "mcp"}', str(added["headers"]))
+        code, body = await asyncio.to_thread(http_get, "http://mock.test/api/users/profile", proxy_port)
+        check("edited mock serves the new status and body",
+              code == 404 and body == '{"error": "gone"}', f"{code} {body}")
+        code, body = await asyncio.to_thread(http_request, "POST", "http://mock.test/api/login",
+                                             proxy_port, body="x")
+        check("rule the agent enabled now fires", code == 200 and body == "tok", f"{code} {body}")
+        code, body = await asyncio.to_thread(http_get, "http://mock.test/api/new", proxy_port)
+        check("added mock fires", code == 201 and body == "fresh", f"{code} {body}")
+
+        pushed = await _ui_wait_for(ui, "MAP_LOCAL_RULES")
+        check("UI is handed the edited list to persist",
+              pushed is not None and [r["id"] for r in pushed["rules"]] == ids, str(pushed)[:120])
+
+        # Atomic: a bad op anywhere applies nothing.
+        try:
+            await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "map_local", "operations": [
+                {"op": "delete", "id": 1002},
+                {"op": "update", "id": 1001, "fields": {"status": 999}},
+            ]}, req_id="u4")
+            check("invalid batch is rejected", False, "no error")
+        except RuntimeError as e:
+            check("invalid batch is rejected", "999" in str(e), str(e)[:80])
+        listed = await agent_call(agent, "AGENT_LIST_RULES", req_id="u5")
+        check("rejected batch changed nothing", [r["id"] for r in listed["map_local"]] == ids)
+        for bad, label in [
+            ([{"op": "update", "id": 4242, "fields": {"status": 500}}], "unknown id"),
+            ([{"op": "update", "id": 1001, "fields": {"colour": "red"}}], "unknown field"),
+            ([{"op": "teleport", "id": 1001}], "unknown op"),
+            ([{"op": "add", "rule": {"status": 200}}], "add without pattern"),
+        ]:
+            try:
+                await agent_call(agent, "AGENT_EDIT_RULES",
+                                 {"kind": "map_local", "operations": bad}, req_id="u6")
+                check(f"{label} is rejected", False, "no error")
+            except RuntimeError as e:
+                check(f"{label} is rejected", True, str(e)[:70])
+        try:
+            await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "scripts", "operations": [
+                {"op": "delete", "id": 1}]}, req_id="u7")
+            check("unknown kind is rejected", False, "no error")
+        except RuntimeError as e:
+            check("unknown kind is rejected", "kind" in str(e), str(e)[:70])
+
+        # Delete, and rewrites.
+        res = await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "map_local", "operations": [
+            {"op": "delete", "id": added["id"]}]}, req_id="u8")
+        check("delete removes the rule", added["id"] not in [r["id"] for r in res["rules"]])
+        res = await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "map_remote", "operations": [
+            {"op": "update", "id": 2001, "fields": {"target": "127.0.0.1:2"}},
+            {"op": "add", "rule": {"pattern": "other.test", "target": "127.0.0.1:3"},
+             "position": 99},
+        ]}, req_id="u9")
+        check("rewrites can be edited and appended",
+              res["rules"][0]["target"] == "127.0.0.1:2" and res["rules"][-1]["pattern"] == "other.test",
+              str(res["rules"]))
+        pushed = await _ui_wait_for(ui, "MAP_REMOTE_RULES")
+        check("UI is handed the edited rewrites", pushed is not None and len(pushed["rules"]) == 2)
+
+        # Leave nothing behind for the other tests.
+        await ui.send(json.dumps({"type": "UPDATE_MAP_LOCAL_RULES", "rules": []}))
+        await ui.send(json.dumps({"type": "UPDATE_MAP_REMOTE_RULES", "rules": []}))
+        await asyncio.sleep(0.2)
+
+
 async def test_rule_validation(ws_port):
     """Malformed rules fail at install time, not as a 500 at match time."""
     print("\n== rule validation ==")
@@ -1434,6 +1559,7 @@ async def main():
         await test_set_tools(ws_port)
         await test_disconnect_restores_tools(ws_port)
         await test_restore_edge_cases(ws_port)
+        await test_edit_user_rules(ws_port)
         await test_rule_validation(ws_port)
         await test_list_since_seq(ws_port)
         await test_scenario_ownership(ws_port)

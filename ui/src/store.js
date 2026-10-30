@@ -1600,6 +1600,15 @@ export const initWebSocket = () => {
         else if (payload.type === "ALERT") {
             alert(payload.message)
         }
+        else if (payload.type === "MAP_LOCAL_RULES") {
+            // An agent edited the user's own rules. This list is ours to
+            // persist, so adopt it; the deep watch saves it and echoes it
+            // back to the backend, which already holds the same thing.
+            if (Array.isArray(payload.data?.rules)) mapLocalRules.value = payload.data.rules
+        }
+        else if (payload.type === "MAP_REMOTE_RULES") {
+            if (Array.isArray(payload.data?.rules)) mapRemoteRules.value = payload.data.rules
+        }
         else if (payload.type === "AGENT_STATE") {
             agentConnected.value = !!payload.data?.connected
             agentClients.value = payload.data?.clients || []

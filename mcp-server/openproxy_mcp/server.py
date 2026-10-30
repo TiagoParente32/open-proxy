@@ -99,6 +99,31 @@ class RewriteRule(TypedDict):
         description='Replacement for the matched part, e.g. "staging.example.com".')]
 
 
+class RuleOperation(TypedDict):
+    """One change to the user's own rule list. Applied in order, all or nothing."""
+
+    op: Annotated[Literal["add", "update", "delete", "move"], Field(description=(
+        "add: insert `rule` at `position` (default 0, the top — first match "
+        "wins). update: merge `fields` into the rule with `id`. delete: remove "
+        "the rule with `id`. move: put the rule with `id` at `position`."))]
+    id: NotRequired[Annotated[int | float | str, Field(
+        description="Rule id from list_mock_rules (update / delete / move).")]]
+    rule: NotRequired[Annotated[dict[str, Any], Field(description=(
+        "For add. Map Local: pattern (anchored glob), method, status, headers "
+        "(dict or JSON string), body, label, active, delay_ms, responses, "
+        "sequence_mode, body_source ('inline' | 'file'), file_path. "
+        "Map Remote: pattern (regex), target, active."))]]
+    fields: NotRequired[Annotated[dict[str, Any], Field(
+        description="For update: the fields to change, same names as `rule`.")]]
+    position: NotRequired[Annotated[int, Field(
+        description="For add / move: index in the list, 0 = first. Clamped.", ge=0)]]
+
+
+# Edits the list the user built by hand and persists across restarts.
+EDITS_USER_SETUP = ToolAnnotations(read_only_hint=False, destructive_hint=True,
+                                   idempotent_hint=False, open_world_hint=False)
+
+
 def _describe_error(e: Exception) -> dict:
     if isinstance(e, OpenProxyUnavailable):
         return {"error": str(e), "hint": "Is the OpenProxy desktop app running?"}
@@ -364,6 +389,44 @@ async def clear_mocks() -> dict:
     traffic, but don't rely on that during a session.
     """
     return await _call("AGENT_CLEAR_SCENARIO")
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def list_mock_rules() -> dict:
+    """The user's own Map Local mocks and Map Remote rewrites, in match order.
+
+    These are the rules the user built by hand in the UI — separate from any
+    scenario you installed with run_mock_scenario (reported under `scenario`).
+    Each rule carries an `id`; pass it to edit_mock_rules. Map Local is
+    first-match-wins, so order matters; Map Remote rules chain in order.
+    `map_local_enabled` / `map_remote_enabled` are the global switches
+    (flip them with set_proxy_tools).
+    """
+    return await _call("AGENT_LIST_RULES")
+
+
+@mcp.tool(annotations=EDITS_USER_SETUP)
+async def edit_mock_rules(
+    kind: Annotated[Literal["map_local", "map_remote"], Field(
+        description="Which of the user's lists to change.")],
+    operations: Annotated[list[RuleOperation], Field(
+        description="Changes to apply in order. Validated as a whole: if any "
+                    "fails, nothing is applied.")],
+) -> dict:
+    """Edit, add, delete or reorder the user's own Map Local / Map Remote rules.
+
+    This changes the user's persistent setup, not a temporary scenario: the
+    edits show up in their Map Local / Map Remote window immediately, are
+    saved like their own edits, and are NOT undone by clear_mocks or when you
+    disconnect. Use it when the user asks you to fix, tidy or reorganise
+    *their* mocks ("make the profile mock return 404", "move the login rule
+    to the top", "delete the stale staging rewrites"). For a throwaway mock
+    of your own, use run_mock_scenario instead.
+
+    Call list_mock_rules first for ids and the current order. Returns the
+    resulting list.
+    """
+    return await _call("AGENT_EDIT_RULES", {"kind": kind, "operations": operations})
 
 
 @mcp.tool(annotations=READ_ONLY)
