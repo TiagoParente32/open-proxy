@@ -6,6 +6,7 @@ import { cmTheme } from '../composables/useTheme'
 import { EditorView } from '@codemirror/view'
 import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import { useEdgeResize } from '../composables/useEdgeResize'
+import { useRuleSidebar } from '../composables/useRuleSidebar'
 
 import {
   showMapModal,
@@ -31,6 +32,14 @@ import {
 const modalRef = ref(null)
 const { modalStyle, startResize } = useEdgeResize(modalRef, { minW: 600, minH: 420 })
 const extensions = computed(() => [json(), ...cmTheme.value, EditorView.lineWrapping])
+
+// --- sidebar search & width ---
+const { ruleSearch, matchesSearch, sidebarWidth, startSidebarResize } = useRuleSidebar(modalRef, {
+  storageKey: 'mapLocalSidebarWidth',
+  fields: r => [r.label, r.pattern, r.method || 'ANY', r.status],
+})
+const filteredRules = computed(() => mapLocalRules.value.filter(matchesSearch))
+const filteredAgentMocks = computed(() => agentMocks.value.filter(matchesSearch))
 
 // --- agent-owned mocks ---
 // Selection is mutually exclusive with the user's own rules: one editor, one
@@ -437,10 +446,19 @@ const browseFile = async () => {
         <span class="resize-edge resize-w"  @mousedown.prevent.stop="startResize('w',  $event)"></span>
         <span class="resize-edge resize-nw" @mousedown.prevent.stop="startResize('nw', $event)"></span>
 
-        <div class="pm-sidebar">
+        <div class="pm-sidebar" :style="{ width: sidebarWidth + 'px' }">
+          <span class="pm-sidebar-resizer" title="Drag to resize"
+                @mousedown.prevent.stop="startSidebarResize"></span>
           <div class="pm-sidebar-header">
             <strong style="color: var(--fg-secondary); font-size: 13px;">Map Local Rules</strong>
             <button class="pm-add-btn" @click="addNewRule">+ Add</button>
+          </div>
+
+          <div class="pm-search">
+            <input v-model="ruleSearch" type="text" class="pm-search-input"
+                   placeholder="Search rules..." @keydown.esc.stop="ruleSearch = ''" />
+            <button v-if="ruleSearch" class="pm-search-clear" title="Clear search"
+                    @click="ruleSearch = ''">&times;</button>
           </div>
 
           <div class="pm-rule-list">
@@ -463,7 +481,7 @@ const browseFile = async () => {
                         @click="stopAgentScenario">Stop</button>
               </div>
 
-              <div v-for="m in agentMocks" :key="m.key"
+              <div v-for="m in filteredAgentMocks" :key="m.key"
                    class="pm-rule-item pm-rule-item--agent"
                    :class="{ active: selectedAgentKey === m.key }"
                    @click="selectAgentMock(m.key)">
@@ -494,7 +512,7 @@ const browseFile = async () => {
               <div class="pm-agent-divider"></div>
             </template>
 
-            <div v-for="rule in mapLocalRules" :key="rule.id" class="pm-rule-item"
+            <div v-for="rule in filteredRules" :key="rule.id" class="pm-rule-item"
               :class="{ active: selectedRuleId === rule.id }" @click="selectedRuleId = rule.id">
 
               <label class="pm-checkbox-container" @click.stop>
@@ -521,6 +539,11 @@ const browseFile = async () => {
                   <line x1="14" y1="11" x2="14" y2="17"></line>
                 </svg>
               </button>
+            </div>
+
+            <div v-if="ruleSearch && (mapLocalRules.length || agentMocks.length) && !filteredRules.length && !filteredAgentMocks.length"
+                 class="empty-state">
+              No rules match "{{ ruleSearch }}".
             </div>
 
             <div v-if="mapLocalRules.length === 0" class="empty-state">
@@ -829,8 +852,27 @@ const browseFile = async () => {
 
 .pm-sidebar {
   width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border);
-  display: flex; flex-direction: column; flex-shrink: 0;
+  display: flex; flex-direction: column; flex-shrink: 0; position: relative;
 }
+.pm-sidebar-resizer {
+  position: absolute; top: 0; bottom: 0; right: -3px; width: 6px;
+  cursor: col-resize; z-index: 11; transition: background 0.15s;
+}
+.pm-sidebar-resizer:hover { background: var(--accent-muted); }
+
+.pm-search { position: relative; padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); }
+.pm-search-input {
+  width: 100%; box-sizing: border-box; background: var(--bg-deepest);
+  border: 1px solid var(--border); color: var(--fg-secondary);
+  padding: 5px 24px 5px 8px; border-radius: 5px; font-size: 12px; outline: none;
+}
+.pm-search-input:focus { border-color: var(--accent); }
+.pm-search-clear {
+  position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: var(--fg-muted); cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 0 2px;
+}
+.pm-search-clear:hover { color: var(--fg-secondary); }
 
 .pm-sidebar-header {
   padding: 12px 16px; border-bottom: 1px solid var(--border);
