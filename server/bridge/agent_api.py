@@ -81,9 +81,17 @@ TOOL_SWITCHES = {
 
 # Fields an agent may set on the *user's own* rules. The local set is every
 # editor field plus the agent-only extras the backend honours on user rules.
-USER_LOCAL_FIELDS = OVERRIDABLE_FIELDS | {"delay_ms", "responses", "sequence_mode"}
-USER_REMOTE_FIELDS = OVERRIDABLE_REMOTE_FIELDS
-RULE_OPS = {"add", "update", "delete", "move"}
+# `group_id` files a rule under one of the user's groups (see GROUP_OPS).
+USER_LOCAL_FIELDS = OVERRIDABLE_FIELDS | {"delay_ms", "responses", "sequence_mode", "group_id"}
+USER_REMOTE_FIELDS = OVERRIDABLE_REMOTE_FIELDS | {"group_id"}
+GROUP_OPS = {"add_group", "update_group", "delete_group"}
+RULE_OPS = {"add", "update", "delete", "move"} | GROUP_OPS
+
+# The UI's group palette (ui/src/composables/useRuleGroups.js). A group is
+# {id, name, color}; the UI adds a `collapsed` flag it keeps to itself.
+GROUP_COLORS = {"grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange"}
+GROUP_FIELDS = {"name", "color"}
+MAX_GROUP_NAME = 60
 
 AGENT_MESSAGE_TYPES = {
     "AGENT_HELLO",
@@ -705,10 +713,51 @@ class AgentApiMixin:
         return {
             "map_local": [self._user_rule_view(r, "local") for r in self.map_local_rules],
             "map_remote": [self._user_rule_view(r, "remote") for r in self.map_remote_rules],
+            "map_local_groups": [self._group_view(g) for g in self.map_local_groups],
+            "map_remote_groups": [self._group_view(g) for g in self.map_remote_groups],
             "map_local_enabled": self.map_local_enabled,
             "map_remote_enabled": self.map_remote_enabled,
             "scenario": self.agent_scenario,
         }
+
+    @staticmethod
+    def _group_view(group):
+        return {"id": group.get("id"), "name": group.get("name") or "",
+                "color": group.get("color") or "grey"}
+
+    @staticmethod
+    def _normalise_group(raw, where):
+        name = raw.get("name", "")
+        if name is None:
+            name = ""
+        if not isinstance(name, str) or len(name) > MAX_GROUP_NAME:
+            raise ValueError(f"{where} group name must be a string of at most {MAX_GROUP_NAME} characters")
+        color = raw.get("color") or "grey"
+        if color not in GROUP_COLORS:
+            raise ValueError(f"{where} group color must be one of {sorted(GROUP_COLORS)}")
+        return {"name": name, "color": color}
+
+    @staticmethod
+    def _group_contiguous(rules, groups):
+        """The list with every group's rules next to each other, each group
+        sitting where its first rule does — the UI's own invariant, so what
+        the agent reads back is the order the sidebar shows and the proxy
+        matches in. Rules pointing at a group that no longer exists are
+        ungrouped rather than hidden."""
+        known = {str(g.get("id")) for g in groups}
+        blocks, by_group = [], {}
+        for r in rules:
+            gid = r.get("group_id")
+            if gid is None or str(gid) not in known:
+                r.pop("group_id", None)
+                blocks.append([r])
+                continue
+            block = by_group.get(str(gid))
+            if block is None:
+                block = by_group[str(gid)] = []
+                blocks.append(block)
+            block.append(r)
+        return [r for block in blocks for r in block]
 
     @staticmethod
     def _user_rule_view(rule, kind):
@@ -733,6 +782,7 @@ class AgentApiMixin:
         # Work on a copy and commit only if every operation is valid: an
         # agent reorganising a list should not leave it half-edited.
         rules = [dict(r) for r in (self.map_local_rules if local else self.map_remote_rules)]
+        groups = [dict(g) for g in (self.map_local_groups if local else self.map_remote_groups)]
 
         def find(rule_id, where):
             if rule_id is None:
@@ -741,6 +791,22 @@ class AgentApiMixin:
                 if str(r.get("id")) == str(rule_id):
                     return idx
             raise KeyError(f"{where}: no {kind} rule with id {rule_id!r}")
+
+        def find_group(group_id, where):
+            if group_id is None:
+                raise ValueError(f"{where} needs a group id (see list_mock_rules)")
+            for g in groups:
+                if str(g.get("id")) == str(group_id):
+                    return g
+            have = ", ".join(f"{g.get('name') or 'untitled'} (id {g.get('id')})" for g in groups) or "none"
+            raise KeyError(f"{where}: no {kind} group with id {group_id!r}; groups: {have}")
+
+        def set_group(rule, group_id, where):
+            # null takes the rule out of its group.
+            if group_id is None:
+                rule.pop("group_id", None)
+            else:
+                rule["group_id"] = find_group(group_id, where)["id"]
 
         def clamp(position, where):
             if position is None:
@@ -773,6 +839,8 @@ class AgentApiMixin:
                     rule = {"active": raw.get("active", True), "pattern": raw["pattern"],
                             "target": raw.get("target", "")}
                 rule["id"] = self._new_rule_id()
+                if "group_id" in raw:
+                    set_group(rule, raw["group_id"], where)
                 rules.insert(clamp(op.get("position"), where), rule)
                 summary.append(("add", rule))
 
@@ -789,6 +857,8 @@ class AgentApiMixin:
                 validate(merged, where)
                 if local:
                     merged = {**merged, **self._normalise_local_rule(merged), "id": rules[idx]["id"]}
+                if "group_id" in fields:
+                    set_group(merged, fields["group_id"], where)
                 rules[idx] = merged
                 summary.append(("update", merged, sorted(fields)))
 
@@ -802,15 +872,60 @@ class AgentApiMixin:
                 rules.insert(clamp(op.get("position"), where), rule)
                 summary.append(("move", rule))
 
+            elif name == "add_group":
+                raw = op.get("group")
+                if not isinstance(raw, dict):
+                    raise ValueError(f"{where} needs a group object with name and color")
+                unknown = set(raw) - GROUP_FIELDS
+                if unknown:
+                    raise ValueError(f"{where} group has unknown fields {sorted(unknown)}")
+                group = self._normalise_group(raw, where)
+                group["id"] = self._new_rule_id()
+                groups.append(group)
+                # The id isn't known until the batch runs, so the rules that
+                # should start out in the group come along in the same op.
+                ids = op.get("rule_ids") or []
+                if not isinstance(ids, list):
+                    raise ValueError(f"{where} rule_ids must be a list of rule ids")
+                for rid in ids:
+                    rules[find(rid, f"{where}.rule_ids")]["group_id"] = group["id"]
+                summary.append(("add_group", group))
+
+            elif name == "update_group":
+                group = find_group(op.get("id"), where)
+                fields = op.get("fields")
+                if not isinstance(fields, dict) or not fields:
+                    raise ValueError(f"{where} needs a non-empty fields object")
+                unknown = set(fields) - GROUP_FIELDS
+                if unknown:
+                    raise ValueError(f"{where} has unknown fields {sorted(unknown)}; "
+                                     f"allowed: {sorted(GROUP_FIELDS)}")
+                group.update(self._normalise_group({**group, **fields}, where))
+                summary.append(("update_group", group, sorted(fields)))
+
+            elif name == "delete_group":
+                # Dissolves the group; its rules stay, just ungrouped. Deleting
+                # the rules too is a separate, explicit `delete` per rule.
+                group = find_group(op.get("id"), where)
+                groups.remove(group)
+                for r in rules:
+                    if str(r.get("group_id")) == str(group["id"]):
+                        r.pop("group_id", None)
+                summary.append(("delete_group", group))
+
+        rules = self._group_contiguous(rules, groups)
+
         if local:
             self.map_local_rules = rules
+            self.map_local_groups = groups
             # Edited sequences start over, like the UI's own save does.
             agent_keys = set(self.agent_rule_order)
             self.agent_rule_hits = {k: v for k, v in self.agent_rule_hits.items() if k in agent_keys}
-            await self.broadcast_to_ui("MAP_LOCAL_RULES", {"rules": rules})
+            await self.broadcast_to_ui("MAP_LOCAL_RULES", {"rules": rules, "groups": groups})
         else:
             self.map_remote_rules = rules
-            await self.broadcast_to_ui("MAP_REMOTE_RULES", {"rules": rules})
+            self.map_remote_groups = groups
+            await self.broadcast_to_ui("MAP_REMOTE_RULES", {"rules": rules, "groups": groups})
 
         print(f"[Agent] Edited the user's {kind} rules: "
               + ", ".join(s[0] for s in summary), flush=True)
@@ -818,6 +933,7 @@ class AgentApiMixin:
             "kind": kind,
             "applied": len(summary),
             "rules": [self._user_rule_view(r, "local" if local else "remote") for r in rules],
+            "groups": [self._group_view(g) for g in groups],
             "enabled": self.map_local_enabled if local else self.map_remote_enabled,
             "_summary": summary,
         }
@@ -1094,12 +1210,17 @@ class AgentApiMixin:
             surface = "map_local" if kind == "map_local" else "map_remote"
             noun = "mock" if kind == "map_local" else "rewrite"
             ops = (result or {}).get("_summary") or []
-            verbs = {"add": "Added", "update": "Edited", "delete": "Deleted", "move": "Moved"}
+            verbs = {"add": "Added", "update": "Edited", "delete": "Deleted", "move": "Moved",
+                     "add_group": "Created group", "update_group": "Edited group",
+                     "delete_group": "Dissolved group"}
             if len(ops) == 1:
                 op = ops[0]
                 rule = op[1]
+                extra = f" ({', '.join(op[2])})" if op[0].startswith("update") and len(op) > 2 else ""
+                if op[0] in GROUP_OPS:
+                    name = rule.get("name") or "untitled"
+                    return "rules", f"{verbs[op[0]]} “{name}” in your {noun}s{extra}", surface
                 name = rule.get("label") or f"{rule.get('method', '')} {rule.get('pattern', '')}".strip()
-                extra = f" ({', '.join(op[2])})" if op[0] == "update" and len(op) > 2 else ""
                 return "rules", f"{verbs[op[0]]} your {noun} “{name}”{extra}", surface
             counts = {}
             for op in ops:
