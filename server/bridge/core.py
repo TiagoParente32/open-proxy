@@ -26,6 +26,11 @@ class BridgeCore:
         self.map_local_rules = []
         self.map_remote_enabled = True
         self.map_remote_rules = []
+        # The UI's Chrome-style groups over those lists ({id, name, color}).
+        # Matching ignores them; they're kept so an agent sees the same
+        # structure the user does and can file rules under them.
+        self.map_local_groups = []
+        self.map_remote_groups = []
         self.breakpoints_enabled = True
         self.breakpoint_rules = []
         self.paused_flows = {}

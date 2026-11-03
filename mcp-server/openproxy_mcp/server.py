@@ -102,21 +102,33 @@ class RewriteRule(TypedDict):
 class RuleOperation(TypedDict):
     """One change to the user's own rule list. Applied in order, all or nothing."""
 
-    op: Annotated[Literal["add", "update", "delete", "move"], Field(description=(
+    op: Annotated[Literal["add", "update", "delete", "move",
+                          "add_group", "update_group", "delete_group"], Field(description=(
         "add: insert `rule` at `position` (default 0, the top — first match "
         "wins). update: merge `fields` into the rule with `id`. delete: remove "
-        "the rule with `id`. move: put the rule with `id` at `position`."))]
+        "the rule with `id`. move: put the rule with `id` at `position`. "
+        "add_group: create `group` and file `rule_ids` under it. update_group: "
+        "merge `fields` (name, color) into the group with `id`. delete_group: "
+        "dissolve the group with `id`; its rules stay, ungrouped."))]
     id: NotRequired[Annotated[int | float | str, Field(
-        description="Rule id from list_mock_rules (update / delete / move).")]]
+        description="Rule id (update / delete / move) or group id "
+                    "(update_group / delete_group) from list_mock_rules.")]]
     rule: NotRequired[Annotated[dict[str, Any], Field(description=(
         "For add. Map Local: pattern (anchored glob), method, status, headers "
         "(dict or JSON string), body, label, active, delay_ms, responses, "
-        "sequence_mode, body_source ('inline' | 'file'), file_path. "
-        "Map Remote: pattern (regex), target, active."))]]
+        "sequence_mode, body_source ('inline' | 'file'), file_path, group_id. "
+        "Map Remote: pattern (regex), target, active, group_id."))]]
     fields: NotRequired[Annotated[dict[str, Any], Field(
-        description="For update: the fields to change, same names as `rule`.")]]
+        description="For update: the fields to change, same names as `rule` "
+                    "(group_id null takes a rule out of its group). For "
+                    "update_group: name and/or color.")]]
     position: NotRequired[Annotated[int, Field(
         description="For add / move: index in the list, 0 = first. Clamped.", ge=0)]]
+    group: NotRequired[Annotated[dict[str, Any], Field(description=(
+        "For add_group: name (up to 60 chars) and color, one of grey, blue, "
+        "red, yellow, green, pink, purple, cyan, orange."))]]
+    rule_ids: NotRequired[Annotated[list[int | float | str], Field(
+        description="For add_group: rules to put in the new group straight away.")]]
 
 
 # Edits the list the user built by hand and persists across restarts.
@@ -401,6 +413,11 @@ async def list_mock_rules() -> dict:
     first-match-wins, so order matters; Map Remote rules chain in order.
     `map_local_enabled` / `map_remote_enabled` are the global switches
     (flip them with set_proxy_tools).
+
+    The user may have sorted rules into colour-coded groups, like browser tab
+    groups: `map_local_groups` / `map_remote_groups` list them and a grouped
+    rule carries the group's id as `group_id`. A group's rules sit together
+    in the list.
     """
     return await _call("AGENT_LIST_RULES")
 
@@ -424,7 +441,9 @@ async def edit_mock_rules(
     of your own, use run_mock_scenario instead.
 
     Call list_mock_rules first for ids and the current order. Returns the
-    resulting list.
+    resulting list and groups. Groups: create one with add_group (naming the
+    rules to put in it), file a rule under an existing one by setting its
+    group_id, rename or recolour with update_group, dissolve with delete_group.
     """
     return await _call("AGENT_EDIT_RULES", {"kind": kind, "operations": operations})
 

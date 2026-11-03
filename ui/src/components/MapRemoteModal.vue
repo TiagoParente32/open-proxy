@@ -2,9 +2,13 @@
 import { computed, watch, ref } from 'vue'
 import { useEdgeResize } from '../composables/useEdgeResize'
 import { useRuleSidebar } from '../composables/useRuleSidebar'
+import { useRuleGroups } from '../composables/useRuleGroups'
+import RuleGroupList from './RuleGroupList.vue'
+import RuleGroupPicker from './RuleGroupPicker.vue'
 import { 
   showMapRemoteModal, 
   mapRemoteRules, 
+  mapRemoteGroups,
   selectedMapRemoteId, 
   syncMapRemoteRules,
   enableMapRemote,
@@ -107,6 +111,14 @@ const saveAndApplyRules = () => {
   syncMapRemoteRules()
   showMapRemoteModal.value = false
 }
+
+// --- groups (see RuleGroupList) ---
+const groupsCtl = useRuleGroups(mapRemoteRules, mapRemoteGroups)
+const onGroupDeleted = (ids) => {
+  if (ids.some(id => String(id) === String(selectedMapRemoteId.value))) {
+    selectedMapRemoteId.value = mapRemoteRules.value.length ? mapRemoteRules.value[0].id : null
+  }
+}
 </script>
 
 <template>
@@ -181,38 +193,42 @@ const saveAndApplyRules = () => {
               <div class="pm-agent-divider"></div>
             </template>
 
-            <div v-for="rule in filteredRules" :key="rule.id"
-                 class="pm-rule-item" 
-                 :class="{ active: selectedMapRemoteId === rule.id }" 
-                 @click="selectedMapRemoteId = rule.id">
-              
-              <label class="pm-checkbox-container" @click.stop>
-                <input type="checkbox" v-model="rule.active" />
-                <span class="pm-checkmark"></span>
-              </label>
+            <RuleGroupList :ctl="groupsCtl" :selected-id="selectedMapRemoteId"
+                           :filter="matchesSearch" :searching="!!ruleSearch.trim()"
+                           empty-group-hint="Drag rewrites here" @deleted="onGroupDeleted" @delete-rule="deleteRule" @select="selectedMapRemoteId = $event">
+              <template #row="{ rule }">
+                <div class="pm-rule-item"
+                     :class="{ active: selectedMapRemoteId === rule.id }"
+                     @click="selectedMapRemoteId = rule.id">
 
-              <div class="pm-rule-text-stack">
-                <span class="pm-rule-pattern" :title="rule.pattern">{{ rule.pattern || 'New Rule' }}</span>
-                <span class="pm-rule-target" :title="rule.target">→ {{ rule.target }}</span>
-              </div>
+                  <label class="pm-checkbox-container" @click.stop>
+                    <input type="checkbox" v-model="rule.active" />
+                    <span class="pm-checkmark"></span>
+                  </label>
 
-              <button class="pm-rule-del" @click.stop="deleteRule(rule.id)" title="Delete Rule">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  <line x1="10" y1="11" x2="10" y2="17"></line>
-                  <line x1="14" y1="11" x2="14" y2="17"></line>
-                </svg>
-              </button>
+                  <div class="pm-rule-text-stack">
+                    <span class="pm-rule-pattern" :title="rule.pattern">{{ rule.pattern || 'New Rule' }}</span>
+                    <span class="pm-rule-target" :title="rule.target">→ {{ rule.target }}</span>
+                  </div>
 
-            </div>
+                  <button class="pm-rule-del" @click.stop="deleteRule(rule.id)" title="Delete Rule">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      <line x1="10" y1="11" x2="10" y2="17"></line>
+                      <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                  </button>
+                </div>
+              </template>
+            </RuleGroupList>
             
             <div v-if="ruleSearch && (mapRemoteRules.length || agentRewrites.length) && !filteredRules.length && !filteredAgentRewrites.length"
                  class="pm-empty-sidebar">
               No rules match "{{ ruleSearch }}".
             </div>
 
-            <div v-if="mapRemoteRules.length === 0" class="pm-empty-sidebar">
+            <div v-if="mapRemoteRules.length === 0 && !mapRemoteGroups.length" class="pm-empty-sidebar">
               <template v-if="agentRewrites.length">
                 No rules of your own — the rules above belong to {{ agentLabel }}.
               </template>
@@ -232,10 +248,10 @@ const saveAndApplyRules = () => {
             <div class="pm-divider-horizontal"></div>
             
             <div style="display: flex; gap: 8px;">
-              <button class="ghost-btn" style="flex: 1; justify-content: center;" @click="exportRules(mapRemoteRules, 'OpenProxy_MapRemote')">Export</button>
+              <button class="ghost-btn" style="flex: 1; justify-content: center;" @click="exportRules(mapRemoteRules, 'OpenProxy_MapRemote', mapRemoteGroups)">Export</button>
               <label class="ghost-btn" style="flex: 1; justify-content: center; cursor: pointer; margin: 0;">
                 Import
-                <input type="file" accept=".json" style="display: none;" @change="(e) => importRules(e, mapRemoteRules)" />
+                <input type="file" accept=".json" style="display: none;" @change="(e) => importRules(e, mapRemoteRules, mapRemoteGroups)" />
               </label>
             </div>
           </div>
@@ -265,6 +281,11 @@ const saveAndApplyRules = () => {
             </div>
 
             <div class="pm-editor-area" style="padding: 24px; gap: 24px; overflow-y: auto;">
+
+              <div v-if="!isAgentRule" class="pm-group-row">
+                <span class="pm-routing-label">GROUP</span>
+                <RuleGroupPicker :rule="activeRule" :ctl="groupsCtl" />
+              </div>
 
               <div class="pm-routing-box">
                 <div class="pm-routing-header">
@@ -353,6 +374,7 @@ const saveAndApplyRules = () => {
 .pm-sidebar-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-sidebar); }
 .pm-add-btn { background: var(--accent-muted); color: var(--accent); border: 1px solid var(--accent-border); padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
 .pm-add-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.pm-group-row { display: flex; align-items: center; gap: 12px; margin-bottom: -8px; }
 
 .pm-rule-list { flex: 1; overflow-y: auto; }
 .pm-rule-item { height: 44px; padding: 0 14px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 10px; cursor: pointer; transition: background 0.15s; box-sizing: border-box; }

@@ -1,9 +1,13 @@
 <script setup>
 import { computed, watch, ref } from 'vue'
 import { useEdgeResize } from '../composables/useEdgeResize'
+import { useRuleGroups } from '../composables/useRuleGroups'
+import RuleGroupList from './RuleGroupList.vue'
+import RuleGroupPicker from './RuleGroupPicker.vue'
 import { 
   showBreakpointModal, 
   breakpointRules, 
+  breakpointGroups,
   selectedBreakpointId, 
   syncBreakpointRules, 
   breakpointsEnabled,
@@ -45,6 +49,14 @@ const saveAndApplyRules = () => {
   syncBreakpointRules()
   showBreakpointModal.value = false
 }
+
+// --- groups (see RuleGroupList) ---
+const groupsCtl = useRuleGroups(breakpointRules, breakpointGroups)
+const onGroupDeleted = (ids) => {
+  if (ids.some(id => String(id) === String(selectedBreakpointId.value))) {
+    selectedBreakpointId.value = breakpointRules.value.length ? breakpointRules.value[0].id : null
+  }
+}
 </script>
 
 <template>
@@ -69,37 +81,40 @@ const saveAndApplyRules = () => {
           </div>
           
           <div class="pm-rule-list">
-            <div v-for="rule in breakpointRules" :key="rule.id" 
-                 class="pm-rule-item" 
-                 :class="{ active: selectedBreakpointId === rule.id }" 
-                 @click="selectedBreakpointId = rule.id">
-              
-              <label class="pm-checkbox-container" @click.stop>
-                <input type="checkbox" v-model="rule.active" />
-                <span class="pm-checkmark"></span>
-              </label>
+            <RuleGroupList :ctl="groupsCtl" :selected-id="selectedBreakpointId"
+                           empty-group-hint="Drag breakpoints here" @deleted="onGroupDeleted" @delete-rule="deleteRule" @select="selectedBreakpointId = $event">
+              <template #row="{ rule }">
+                <div class="pm-rule-item"
+                     :class="{ active: selectedBreakpointId === rule.id }"
+                     @click="selectedBreakpointId = rule.id">
 
-              <div class="pm-rule-text-stack">
-                <span class="pm-rule-pattern" :title="rule.pattern">{{ rule.pattern || 'New Rule' }}</span>
-                <div class="pm-rule-badges">
-                  <span v-if="rule.is_request" class="pm-badge req">Req</span>
-                  <span v-if="rule.is_response" class="pm-badge res">Res</span>
-                  <span v-if="!rule.is_request && !rule.is_response" class="pm-badge none">Inactive</span>
+                  <label class="pm-checkbox-container" @click.stop>
+                    <input type="checkbox" v-model="rule.active" />
+                    <span class="pm-checkmark"></span>
+                  </label>
+
+                  <div class="pm-rule-text-stack">
+                    <span class="pm-rule-pattern" :title="rule.pattern">{{ rule.pattern || 'New Rule' }}</span>
+                    <div class="pm-rule-badges">
+                      <span v-if="rule.is_request" class="pm-badge req">Req</span>
+                      <span v-if="rule.is_response" class="pm-badge res">Res</span>
+                      <span v-if="!rule.is_request && !rule.is_response" class="pm-badge none">Inactive</span>
+                    </div>
+                  </div>
+
+                  <button class="pm-rule-del" @click.stop="deleteRule(rule.id)" title="Delete Rule">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      <line x1="10" y1="11" x2="10" y2="17"></line>
+                      <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                  </button>
                 </div>
-              </div>
-
-              <button class="pm-rule-del" @click.stop="deleteRule(rule.id)" title="Delete Rule">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  <line x1="10" y1="11" x2="10" y2="17"></line>
-                  <line x1="14" y1="11" x2="14" y2="17"></line>
-                </svg>
-              </button>
-
-            </div>
+              </template>
+            </RuleGroupList>
             
-            <div v-if="breakpointRules.length === 0" class="pm-empty-sidebar">
+            <div v-if="breakpointRules.length === 0 && !breakpointGroups.length" class="pm-empty-sidebar">
               No rules yet. Click + Add to start pausing traffic.
             </div>
           </div>
@@ -113,10 +128,10 @@ const saveAndApplyRules = () => {
             <div class="pm-divider-horizontal"></div>
             
             <div style="display: flex; gap: 8px;">
-              <button class="ghost-btn" style="flex: 1; justify-content: center;" @click="exportRules(breakpointRules, 'OpenProxy_Breakpoints')">Export</button>
+              <button class="ghost-btn" style="flex: 1; justify-content: center;" @click="exportRules(breakpointRules, 'OpenProxy_Breakpoints', breakpointGroups)">Export</button>
               <label class="ghost-btn" style="flex: 1; justify-content: center; cursor: pointer; margin: 0;">
                 Import
-                <input type="file" accept=".json" style="display: none;" @change="(e) => importRules(e, breakpointRules)" />
+                <input type="file" accept=".json" style="display: none;" @change="(e) => importRules(e, breakpointRules, breakpointGroups)" />
               </label>
             </div>
           </div>
@@ -136,7 +151,12 @@ const saveAndApplyRules = () => {
             </div>
 
             <div class="pm-editor-area">
-              
+
+              <div class="pm-group-row">
+                <span class="pm-routing-label">GROUP</span>
+                <RuleGroupPicker :rule="activeRule" :ctl="groupsCtl" />
+              </div>
+
               <div class="pm-routing-box">
                 <div class="pm-routing-header">Intercept Target</div>
                 <div class="pm-routing-body">
@@ -215,6 +235,7 @@ const saveAndApplyRules = () => {
 .pm-sidebar-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-sidebar); }
 .pm-add-btn { background: var(--accent-muted); color: var(--accent); border: 1px solid var(--accent-border); padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
 .pm-add-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.pm-group-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 
 .pm-rule-list { flex: 1; overflow-y: auto; }
 .pm-rule-item { height: 44px; padding: 0 14px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 10px; cursor: pointer; transition: background 0.15s; box-sizing: border-box; }
