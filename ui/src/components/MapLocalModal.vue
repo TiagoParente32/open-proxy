@@ -7,10 +7,14 @@ import { EditorView } from '@codemirror/view'
 import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import { useEdgeResize } from '../composables/useEdgeResize'
 import { useRuleSidebar } from '../composables/useRuleSidebar'
+import { useRuleGroups } from '../composables/useRuleGroups'
+import RuleGroupList from './RuleGroupList.vue'
+import RuleGroupPicker from './RuleGroupPicker.vue'
 
 import {
   showMapModal,
   mapLocalRules,
+  mapLocalGroups,
   selectedRuleId,
   syncMapLocalRules,
   enableMapLocal,
@@ -417,6 +421,16 @@ const deleteRule = (id) => {
   }
 }
 
+// --- groups ---
+// Chrome-style groups over the list; the list component owns drag & drop and
+// the group headers, this just creates groups and keeps the selection sane.
+const groupsCtl = useRuleGroups(mapLocalRules, mapLocalGroups)
+const onGroupDeleted = (ids) => {
+  if (ids.some(id => String(id) === String(selectedRuleId.value))) {
+    selectedRuleId.value = mapLocalRules.value.length ? mapLocalRules.value[0].id : null
+  }
+}
+
 const saveAndApplyRules = () => {
   syncMapLocalRules()
   showMapModal.value = false
@@ -512,41 +526,47 @@ const browseFile = async () => {
               <div class="pm-agent-divider"></div>
             </template>
 
-            <div v-for="rule in filteredRules" :key="rule.id" class="pm-rule-item"
-              :class="{ active: selectedRuleId === rule.id }" @click="selectedRuleId = rule.id">
+            <RuleGroupList :ctl="groupsCtl" :selected-id="selectedRuleId"
+                           :filter="matchesSearch" :searching="!!ruleSearch.trim()"
+                           empty-group-hint="Drag mocks here" @deleted="onGroupDeleted" @delete-rule="deleteRule" @select="selectedRuleId = $event">
+              <template #row="{ rule }">
+                <div class="pm-rule-item" :class="{ active: selectedRuleId === rule.id }"
+                     @click="selectedRuleId = rule.id">
 
-              <label class="pm-checkbox-container" @click.stop>
-                <input type="checkbox" v-model="rule.active" />
-                <span class="pm-checkmark"></span>
-              </label>
+                  <label class="pm-checkbox-container" @click.stop>
+                    <input type="checkbox" v-model="rule.active" />
+                    <span class="pm-checkmark"></span>
+                  </label>
 
-              <div class="pm-rule-text-stack">
-                <span class="pm-rule-pattern" :title="rule.label || rule.pattern">
-                  {{ rule.label || rule.pattern || 'New Rule' }}
-                </span>
-                <span class="pm-rule-subtext">
-                  <span class="pm-method-badge" :class="`method-${(rule.method||'ANY').toLowerCase()}`">{{ rule.method || 'ANY' }}</span>
-                  <span v-if="rule.label">{{ rule.pattern }}</span>
-                </span>
-              </div>
+                  <div class="pm-rule-text-stack">
+                    <span class="pm-rule-pattern" :title="rule.label || rule.pattern">
+                      {{ rule.label || rule.pattern || 'New Rule' }}
+                    </span>
+                    <span class="pm-rule-subtext">
+                      <span class="pm-method-badge" :class="`method-${(rule.method||'ANY').toLowerCase()}`">{{ rule.method || 'ANY' }}</span>
+                      <span v-if="rule.label">{{ rule.pattern }}</span>
+                    </span>
+                  </div>
 
-              <button class="pm-rule-del" @click.stop="deleteRule(rule.id)" title="Delete Rule">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  <line x1="10" y1="11" x2="10" y2="17"></line>
-                  <line x1="14" y1="11" x2="14" y2="17"></line>
-                </svg>
-              </button>
-            </div>
+                  <button class="pm-rule-del" @click.stop="deleteRule(rule.id)" title="Delete Rule">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      <line x1="10" y1="11" x2="10" y2="17"></line>
+                      <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                  </button>
+                </div>
+              </template>
+            </RuleGroupList>
 
             <div v-if="ruleSearch && (mapLocalRules.length || agentMocks.length) && !filteredRules.length && !filteredAgentMocks.length"
                  class="empty-state">
               No rules match "{{ ruleSearch }}".
             </div>
 
-            <div v-if="mapLocalRules.length === 0" class="empty-state">
+            <div v-if="mapLocalRules.length === 0 && !mapLocalGroups.length" class="empty-state">
               <template v-if="agentMocks.length">
                 No rules of your own — the rules above belong to {{ agentLabel }}.
               </template>
@@ -565,12 +585,12 @@ const browseFile = async () => {
             <div class="pm-divider-horizontal"></div>
             <div style="display: flex; gap: 8px;">
               <button class="ghost-btn" style="flex: 1; justify-content: center;"
-                @click="exportRules(mapLocalRules, 'OpenProxy_MapLocal')">Export</button>
+                @click="exportRules(mapLocalRules, 'OpenProxy_MapLocal', mapLocalGroups)">Export</button>
               <div class="ghost-btn" style="position: relative; overflow: hidden; flex: 1; justify-content: center;">
                 Import
                 <input type="file" accept=".json" 
                   style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;"
-                  @change="(e) => importRules(e, mapLocalRules)" />
+                  @change="(e) => importRules(e, mapLocalRules, mapLocalGroups)" />
               </div>
             </div>
           </div>
@@ -604,14 +624,19 @@ const browseFile = async () => {
               and can't be edited here.
             </div>
 
-            <div style="padding: 16px 20px 0 20px;">
-              <div class="pm-label-container">
+            <div class="pm-name-row">
+              <div class="pm-label-container" style="flex: 1; min-width: 0;">
                 <span class="pm-routing-label">
                   Rule Name (Optional)
                   <span v-if="isOverridden('label')" class="pm-owned">yours</span>
                 </span>
                 <input type="text" v-model="activeRule.label" class="pm-routing-input"
                   placeholder="e.g., Get User Profile Mock" />
+              </div>
+              <!-- Agent rules live outside the user's list, so they can't be grouped. -->
+              <div v-if="!isAgentRule" class="pm-label-container">
+                <span class="pm-routing-label">Group</span>
+                <RuleGroupPicker :rule="activeRule" :ctl="groupsCtl" />
               </div>
             </div>
 
@@ -1016,6 +1041,7 @@ const browseFile = async () => {
 .pm-close-btn { background: none; border: none; cursor: pointer; color: var(--fg-muted); padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: background 0.12s, color 0.12s; }
 .pm-close-btn:hover { background: var(--surface-hover-strong); color: var(--fg-primary); }
 
+.pm-name-row { display: flex; align-items: flex-end; gap: 16px; padding: 16px 20px 0 20px; }
 .pm-label-container { display: flex; flex-direction: column; gap: 6px; }
 .pm-routing-label { font-size: 11px; font-weight: 600; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .pm-routing-input { background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-primary); padding: 10px 12px; border-radius: 6px; font-size: 13px; outline: none; transition: border-color 0.2s; }

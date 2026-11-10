@@ -59,6 +59,7 @@ OpenProxy is a network debugging proxy built for developers. Whether you need to
 * **Map Local (Mocking)**: Trick your app into receiving custom JSON/HTML responses without touching your backend.
 * **Map Remote (Rewrites)**: Transparently route production URLs to your `localhost` development server.
 * **Live Breakpoints**: Pause requests or responses mid-flight, edit their headers/bodies, and release them.
+* **Rule Groups**: Sort mocks, rewrites and breakpoints into colour-coded, collapsible groups, the way browser tabs group — right-click a rule to start one, drag rules in and out, reorder by dragging, switch a whole group on or off at once.
 * **VPN Mode**: Route device traffic through a WireGuard tunnel — no manual proxy configuration needed. Available for Android and iOS physical devices.
 * **Smart Android Setup**: 1-click ADB integration. Automatically detects rooted emulators to inject System Certificates, or gracefully falls back to User Certificates.
 * **One-click CA trust**: Prompts to install and trust the mitmproxy certificate on the host machine so browsers and CLI tools just work.
@@ -217,7 +218,7 @@ The agent installs the mock, you (or it, via `adb`) trigger the app, and it repo
 
 Mocks set by an agent are kept separate from the ones you build by hand in the UI, are matched ahead of them, and are cleared automatically if the agent disconnects — so a crashed agent never strands you with silently mocked traffic.
 
-An agent can also work on the rules you built yourself: list them, edit a mock's status or body, add one, delete one, or reorder the list. Those edits are to your own setup, show up in the Map Local / Map Remote window straight away, and stay — they're the agent doing what you asked at the keyboard, not a scenario.
+An agent can also work on the rules you built yourself: list them, edit a mock's status or body, add one, delete one, reorder the list, or sort them into the same colour-coded groups you see in the sidebar. Those edits are to your own setup, show up in the Map Local / Map Remote window straight away, and stay — they're the agent doing what you asked at the keyboard, not a scenario.
 
 See [`mcp-server/README.md`](mcp-server/README.md) for the full tool list and client configuration.
 

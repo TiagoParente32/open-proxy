@@ -59,8 +59,13 @@ export const formatBytes = (bytes) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
-export const exportRules = (rules, filename) => {
-    const data = rules.value !== undefined ? rules.value : rules;
+// Rule files are a plain array unless the list has groups, in which case
+// they're `{ rules, groups }` so the grouping survives the round trip.
+// `importRules` reads both shapes.
+export const exportRules = (rules, filename, groups = null) => {
+    const list = rules.value !== undefined ? rules.value : rules;
+    const groupList = groups ? (groups.value !== undefined ? groups.value : groups) : [];
+    const data = groupList.length ? { rules: list, groups: groupList } : list;
     const jsonString = JSON.stringify(data, null, 2);
 
     if (window.electronAPI) {
@@ -71,24 +76,48 @@ export const exportRules = (rules, filename) => {
     }
 }
 
-export const importRules = (event, rulesRef) => {
+export const importRules = (event, rulesRef, groupsRef = null) => {
     const file = event.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
         try {
-            const importedRules = JSON.parse(e.target.result);
-            if (Array.isArray(importedRules)) {
+            const parsed = JSON.parse(e.target.result);
+            const importedRules = Array.isArray(parsed) ? parsed
+                : (parsed && Array.isArray(parsed.rules)) ? parsed.rules : null;
+            if (importedRules) {
+                // Groups merge by id, so re-importing a file you exported
+                // updates the groups you already have instead of doubling them.
+                const importedGroups = (!Array.isArray(parsed) && Array.isArray(parsed.groups)) ? parsed.groups : [];
+                // Templates hand over the unwrapped array, scripts the ref.
+                const groupList = groupsRef ? (groupsRef.value !== undefined ? groupsRef.value : groupsRef) : null;
+                if (groupList && importedGroups.length) {
+                    const have = new Map(groupList.map(g => [String(g.id), g]));
+                    for (const g of importedGroups) {
+                        if (!g || g.id == null) continue;
+                        const hit = have.get(String(g.id));
+                        if (hit) Object.assign(hit, { name: g.name ?? hit.name, color: g.color ?? hit.color });
+                        else groupList.push({ id: g.id, name: g.name || '', color: g.color || 'grey', collapsed: !!g.collapsed });
+                    }
+                }
+                const known = new Set((groupList || []).map(g => String(g.id)));
+                const cleaned = importedRules.map(r => {
+                    if (r && r.group_id != null && !known.has(String(r.group_id))) {
+                        const { group_id, ...rest } = r;
+                        return rest;
+                    }
+                    return r;
+                });
                 if (rulesRef.value !== undefined) {
-                    rulesRef.value = [...rulesRef.value, ...importedRules];
+                    rulesRef.value = [...rulesRef.value, ...cleaned];
                 } else {
-                    rulesRef.push(...importedRules);
+                    rulesRef.push(...cleaned);
                 }
             } else {
                 alert("Invalid file format. Expected an array of rules.");
             }
         } catch (err) {
-            alert("Failed to parse JSON file.");
+            alert(`Failed to import the file: ${err?.message || err}`);
         }
         event.target.value = '';
     };
@@ -270,18 +299,23 @@ export const agentLabel = computed(() => {
 // Map Local
 export const showMapModal = ref(false)
 export const mapLocalRules = ref(loadState('mapLocalRules', []))
+// Chrome-style groups over the rule list: { id, name, color, collapsed }.
+// A rule joins one via `group_id`; see composables/useRuleGroups.js.
+export const mapLocalGroups = ref(loadState('mapLocalGroups', []))
 export const enableMapLocal = ref(mapLocalRules.value.length > 0 ? loadState('enableMapLocal', true) : false)
 export const selectedRuleId = ref(null)
 
 // Map Remote
 export const showMapRemoteModal = ref(false)
 export const mapRemoteRules = ref(loadState('mapRemoteRules', []))
+export const mapRemoteGroups = ref(loadState('mapRemoteGroups', []))
 export const enableMapRemote = ref(mapRemoteRules.value.length > 0 ? loadState('enableMapRemote', true) : false)
 export const selectedMapRemoteId = ref(null)
 
 // Breakpoints
 export const showBreakpointModal = ref(false)
 export const breakpointRules = ref(loadState('breakpointRules', []))
+export const breakpointGroups = ref(loadState('breakpointGroups', []))
 export const breakpointsEnabled = ref(breakpointRules.value.length > 0 ? loadState('breakpointsEnabled', true) : false)
 export const trappedFlows = ref([])
 export const selectedBreakpointId = ref(null)
@@ -803,15 +837,25 @@ export const applyAllHighlightRules = () => {
     requests.value = [...requests.value];
 }
 
+// The backend knows a group's id, name and colour but not whether it's
+// collapsed — that's a sidebar preference — so an agent's edit keeps ours.
+const mergeAgentGroups = (current, incoming) => {
+    const collapsed = new Map(current.map(g => [String(g.id), !!g.collapsed]))
+    return incoming.map(g => ({
+        id: g.id, name: g.name || '', color: g.color || 'grey',
+        collapsed: collapsed.get(String(g.id)) || false,
+    }))
+}
+
 export const syncMapLocalRules = () => {
     if (wsConnection?.readyState === WebSocket.OPEN) {
-        wsConnection.send(JSON.stringify({ type: "UPDATE_MAP_LOCAL_RULES", rules: mapLocalRules.value }))
+        wsConnection.send(JSON.stringify({ type: "UPDATE_MAP_LOCAL_RULES", rules: mapLocalRules.value, groups: mapLocalGroups.value }))
     }
 }
 
 export const syncMapRemoteRules = () => {
     if (wsConnection?.readyState === WebSocket.OPEN) {
-        wsConnection.send(JSON.stringify({ type: "UPDATE_MAP_REMOTE_RULES", rules: mapRemoteRules.value }))
+        wsConnection.send(JSON.stringify({ type: "UPDATE_MAP_REMOTE_RULES", rules: mapRemoteRules.value, groups: mapRemoteGroups.value }))
     }
 }
 
@@ -1189,6 +1233,10 @@ watch(mapLocalRules, (newVals) => {
     syncMapLocalRules()
 }, { deep: true })
 
+// Groups ride along with the rules so an agent listing them sees the same
+// structure the sidebar shows.
+watch(mapLocalGroups, (val) => { saveState('mapLocalGroups', val); syncMapLocalRules() }, { deep: true })
+
 watch(agentRuleOverrides, (val) => saveState('agentRuleOverrides', val), { deep: true })
 watch(agentRemoteOverrides, (val) => saveState('agentRemoteOverrides', val), { deep: true })
 
@@ -1209,6 +1257,8 @@ watch(mapRemoteRules, (newVals) => {
     syncMapRemoteRules()
 }, { deep: true })
 
+watch(mapRemoteGroups, (val) => { saveState('mapRemoteGroups', val); syncMapRemoteRules() }, { deep: true })
+
 watch(breakpointsEnabled, (newVal) => {
     saveState('breakpointsEnabled', newVal)
     if (wsConnection?.readyState === WebSocket.OPEN) {
@@ -1225,6 +1275,9 @@ watch(breakpointRules, (newVals) => {
     saveState('breakpointRules', newVals)
     syncBreakpointRules()
 }, { deep: true })
+
+// Breakpoint groups are a sidebar convenience only; the backend doesn't need them.
+watch(breakpointGroups, (val) => saveState('breakpointGroups', val), { deep: true })
 
 watch(throttleProfile, (newVal) => {
     saveState('throttleProfile', newVal)
@@ -1604,9 +1657,11 @@ export const initWebSocket = () => {
             // An agent edited the user's own rules. This list is ours to
             // persist, so adopt it; the deep watch saves it and echoes it
             // back to the backend, which already holds the same thing.
+            if (Array.isArray(payload.data?.groups)) mapLocalGroups.value = mergeAgentGroups(mapLocalGroups.value, payload.data.groups)
             if (Array.isArray(payload.data?.rules)) mapLocalRules.value = payload.data.rules
         }
         else if (payload.type === "MAP_REMOTE_RULES") {
+            if (Array.isArray(payload.data?.groups)) mapRemoteGroups.value = mergeAgentGroups(mapRemoteGroups.value, payload.data.groups)
             if (Array.isArray(payload.data?.rules)) mapRemoteRules.value = payload.data.rules
         }
         else if (payload.type === "AGENT_STATE") {
@@ -2107,10 +2162,10 @@ export const importSettings = async () => {
     const LS_KEYS = [
         'theme', 'toolbarVisibility', 'throttleProfile', 'disableCache',
         'isFocusMode', 'pinnedSources', 'activeChips', 'sortOrder',
-        'mapLocalRules', 'enableMapLocal',
-        'mapRemoteRules', 'enableMapRemote',
+        'mapLocalRules', 'mapLocalGroups', 'enableMapLocal',
+        'mapRemoteRules', 'mapRemoteGroups', 'enableMapRemote',
         'agentRuleOverrides', 'agentRemoteOverrides',
-        'breakpointRules', 'breakpointsEnabled',
+        'breakpointRules', 'breakpointGroups', 'breakpointsEnabled',
         'highlightRules', 'highlightsEnabled',
         'proxyIgnoreHosts', 'proxyAllowHosts', 'proxyHostFilterMode',
         'proxyHttp2', 'proxyUpstreamCert',

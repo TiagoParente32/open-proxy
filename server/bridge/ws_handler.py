@@ -54,6 +54,7 @@ class WsHandlerMixin:
 
                 if payload.get("type") == "UPDATE_MAP_LOCAL_RULES":
                     self.map_local_rules = payload.get("rules", [])
+                    self.map_local_groups = payload.get("groups") or []
                     # Restart any sequenced user rules; keep the agent's counters.
                     agent_keys = set(self.agent_rule_order)
                     self.agent_rule_hits = {
@@ -117,6 +118,7 @@ class WsHandlerMixin:
 
                 elif payload.get("type") == "UPDATE_MAP_REMOTE_RULES":
                     self.map_remote_rules = payload.get("rules", [])
+                    self.map_remote_groups = payload.get("groups") or []
 
                 elif payload.get("type") == "LIST_ADB_DEVICES":
                     asyncio.create_task(self.handle_list_adb_devices(websocket))

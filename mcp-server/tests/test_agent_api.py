@@ -1083,6 +1083,103 @@ async def test_edit_user_rules(ws_port):
         await asyncio.sleep(0.2)
 
 
+async def test_rule_groups(ws_port):
+    """The user's groups travel with their rules: agents see them, can file
+    rules under them, create and dissolve them, and never get a list where a
+    group's rules are split up."""
+    print("\n== rule groups ==")
+    async with websockets.connect(f"ws://127.0.0.1:{ws_port}") as agent, \
+               websockets.connect(f"ws://127.0.0.1:{ws_port}") as ui:
+        await agent_call(agent, "AGENT_HELLO", {"client": "groups-test"}, req_id="g0")
+
+        def mock(i, label, **extra):
+            return {"id": i, "active": True, "label": label, "method": "ANY",
+                    "pattern": f"*/api/{label}*", "status": 200, "headers": "", "body": "",
+                    "body_source": "inline", "file_path": "", **extra}
+
+        # Two rules in a "Staging" group, one loose, one in a group that
+        # doesn't exist any more (the UI would already have cleaned that up).
+        await ui.send(json.dumps({"type": "UPDATE_MAP_LOCAL_RULES", "rules": [
+            mock(1, "a", group_id=500), mock(2, "b", group_id=500), mock(3, "c"),
+            mock(4, "d", group_id=999),
+        ], "groups": [{"id": 500, "name": "Staging", "color": "blue", "collapsed": True}]}))
+        await asyncio.sleep(0.2)
+
+        listed = await agent_call(agent, "AGENT_LIST_RULES", req_id="g1")
+        check("groups are listed without the UI-only collapsed flag",
+              listed["map_local_groups"] == [{"id": 500, "name": "Staging", "color": "blue"}],
+              str(listed["map_local_groups"]))
+        check("grouped rules carry group_id",
+              [r.get("group_id") for r in listed["map_local"]] == [500, 500, None, 999],
+              str([r.get("group_id") for r in listed["map_local"]]))
+        check("remote groups default to empty", listed["map_remote_groups"] == [])
+
+        # Create a group with rules in it, file another by group_id, and
+        # move a grouped rule: the result keeps every group contiguous.
+        res = await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "map_local", "operations": [
+            {"op": "add_group", "group": {"name": "Errors", "color": "red"}, "rule_ids": [3]},
+            {"op": "update", "id": 4, "fields": {"group_id": 500}},
+            {"op": "add", "rule": {"pattern": "*/api/e*", "group_id": 500}, "position": 99},
+        ]}, req_id="g2")
+        gids = {g["name"]: g["id"] for g in res["groups"]}
+        check("new group is returned with an id", "Errors" in gids and gids["Errors"] != 500,
+              str(res["groups"]))
+        order = [(r["id"] if r["id"] in (1, 2, 3, 4) else "new", r.get("group_id")) for r in res["rules"]]
+        check("stale group reference was dropped and the group's rules sit together",
+              order == [(1, 500), (2, 500), (4, 500), ("new", 500), (3, gids["Errors"])], str(order))
+        pushed = await _ui_wait_for(ui, "MAP_LOCAL_RULES")
+        check("UI is handed rules and groups together",
+              pushed is not None and [g["name"] for g in pushed["groups"]] == ["Staging", "Errors"],
+              str(pushed)[:160])
+
+        # Bad references and bad groups are rejected without changing anything.
+        for bad, label, needle in [
+            ([{"op": "update", "id": 1, "fields": {"group_id": 4242}}], "unknown group", "Staging"),
+            ([{"op": "add_group", "group": {"name": "x", "color": "beige"}}], "unknown colour", "color"),
+            ([{"op": "add_group", "group": {"name": "x", "icon": "y"}}], "unknown group field", "icon"),
+            ([{"op": "update_group", "id": 500, "fields": {}}], "empty group update", "fields"),
+            ([{"op": "add_group", "group": {"name": "x"}, "rule_ids": [77]}], "unknown rule in rule_ids", "77"),
+        ]:
+            try:
+                await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "map_local", "operations": bad},
+                                 req_id="g3")
+                check(f"{label} is rejected", False, "no error")
+            except RuntimeError as e:
+                check(f"{label} is rejected", needle in str(e), str(e)[:90])
+        listed = await agent_call(agent, "AGENT_LIST_RULES", req_id="g4")
+        check("rejected batches changed nothing",
+              [g["name"] for g in listed["map_local_groups"]] == ["Staging", "Errors"]
+              and len(listed["map_local"]) == 5)
+
+        # Rename, ungroup one rule, dissolve the other group.
+        res = await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "map_local", "operations": [
+            {"op": "update_group", "id": 500, "fields": {"name": "Stage", "color": "green"}},
+            {"op": "update", "id": 2, "fields": {"group_id": None}},
+            {"op": "delete_group", "id": gids["Errors"]},
+        ]}, req_id="g5")
+        check("group renamed and recoloured",
+              res["groups"] == [{"id": 500, "name": "Stage", "color": "green"}], str(res["groups"]))
+        check("dissolving a group keeps its rules",
+              [r["id"] for r in res["rules"] if r["id"] == 3] == [3] and "group_id" not in
+              next(r for r in res["rules"] if r["id"] == 3), str(res["rules"]))
+        check("a rule set to group_id null leaves its group",
+              "group_id" not in next(r for r in res["rules"] if r["id"] == 2))
+
+        # Rewrites group the same way.
+        await ui.send(json.dumps({"type": "UPDATE_MAP_REMOTE_RULES", "rules": [
+            {"id": 9, "active": True, "pattern": "old.test", "target": "127.0.0.1:1"}], "groups": []}))
+        await asyncio.sleep(0.2)
+        res = await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "map_remote", "operations": [
+            {"op": "add_group", "group": {"name": "Hosts", "color": "purple"}, "rule_ids": [9]},
+        ]}, req_id="g6")
+        check("rewrites can be grouped",
+              res["rules"][0].get("group_id") == res["groups"][0]["id"], str(res))
+
+        await ui.send(json.dumps({"type": "UPDATE_MAP_LOCAL_RULES", "rules": [], "groups": []}))
+        await ui.send(json.dumps({"type": "UPDATE_MAP_REMOTE_RULES", "rules": [], "groups": []}))
+        await asyncio.sleep(0.2)
+
+
 async def test_rule_validation(ws_port):
     """Malformed rules fail at install time, not as a 500 at match time."""
     print("\n== rule validation ==")
@@ -1560,6 +1657,7 @@ async def main():
         await test_disconnect_restores_tools(ws_port)
         await test_restore_edge_cases(ws_port)
         await test_edit_user_rules(ws_port)
+        await test_rule_groups(ws_port)
         await test_rule_validation(ws_port)
         await test_list_since_seq(ws_port)
         await test_scenario_ownership(ws_port)
