@@ -261,9 +261,11 @@ export const openMapLocalForAgentMock = (req) => {
     showMapModal.value = true
 }
 
-// One line describing a mock's agent-only extras (latency, response sequence),
-// or null. The editor has no controls for these, so it shows them as text.
-export const describeMockExtras = (rule) => {
+// One line describing a mock's extras (response sequence, latency), or null.
+// The response sequence is agent-only and has no editor control, so it is
+// shown as text. The delay has its own field, so the editor's notice passes
+// `delay: false` and only the list badges still mention it.
+export const describeMockExtras = (rule, { delay = true } = {}) => {
     if (!rule) return null
     const parts = []
     const seq = rule.responses
@@ -271,7 +273,7 @@ export const describeMockExtras = (rule) => {
         const steps = seq.map(s => s.status ?? rule.status ?? 200).join(' → ')
         parts.push(`Serves ${steps}${rule.sequence_mode === 'cycle' ? ', then repeats' : ', then holds the last'}`)
     }
-    if (rule.delay_ms) parts.push(`+${rule.delay_ms} ms delay`)
+    if (delay && rule.delay_ms) parts.push(`+${rule.delay_ms} ms delay`)
     return parts.length ? parts.join(' · ') : null
 }
 

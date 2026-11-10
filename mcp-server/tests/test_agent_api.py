@@ -413,12 +413,26 @@ async def test_user_overrides_survive_rerun(ws_port):
               sorted(r2["scenario"]["mocks"][0].get("overridden") or []) == ["body", "status"],
               str(r2["scenario"]["mocks"][0].get("overridden")))
 
+        # The delay is editable in the Map Local window too, so it's one of
+        # the fields the user can take over on an agent's mock.
+        await ui.send(json.dumps({
+            "type": "SET_AGENT_RULE_OVERRIDE", "key": key, "fields": {"delay_ms": 700},
+        }))
+        await asyncio.sleep(0.8)
+        t0 = time.monotonic()
+        code, body = await asyncio.to_thread(http_get, "http://mock.test/api/cart", proxy_port)
+        el = time.monotonic() - t0
+        check("user's delay holds the agent's mock", code == 201 and el >= 0.6, f"{code} in {el:.2f}s")
+
         # Handing it back restores whatever the agent last installed.
         await ui.send(json.dumps({"type": "CLEAR_AGENT_RULE_OVERRIDE", "key": key}))
         await asyncio.sleep(0.8)
+        t0 = time.monotonic()
         code, body = await asyncio.to_thread(http_get, "http://mock.test/api/cart", proxy_port)
+        el = time.monotonic() - t0
         check("reverting restores the agent's latest version",
               code == 503 and "agent body v2" in body, f"{code} {body[:40]!r}")
+        check("reverting drops the user's delay too", el < 0.5, f"{el:.2f}s")
 
 
 async def test_disconnect_preserves_rules_for_adoption(ws_port):

@@ -40,7 +40,7 @@ AGENT_PROTOCOL_VERSION = 1
 # result, so re-pointing a rule at a different URL can't orphan the override.
 OVERRIDABLE_FIELDS = {
     "active", "label", "pattern", "method", "status",
-    "headers", "body", "body_source", "file_path", "req_headers_mod",
+    "headers", "body", "body_source", "file_path", "req_headers_mod", "delay_ms",
 }
 
 # Same, for Map Remote rewrites — a rewrite is only ever these three fields.
@@ -82,7 +82,7 @@ TOOL_SWITCHES = {
 # Fields an agent may set on the *user's own* rules. The local set is every
 # editor field plus the agent-only extras the backend honours on user rules.
 # `group_id` files a rule under one of the user's groups (see GROUP_OPS).
-USER_LOCAL_FIELDS = OVERRIDABLE_FIELDS | {"delay_ms", "responses", "sequence_mode", "group_id"}
+USER_LOCAL_FIELDS = OVERRIDABLE_FIELDS | {"responses", "sequence_mode", "group_id"}
 USER_REMOTE_FIELDS = OVERRIDABLE_REMOTE_FIELDS | {"group_id"}
 GROUP_OPS = {"add_group", "update_group", "delete_group"}
 RULE_OPS = {"add", "update", "delete", "move"} | GROUP_OPS

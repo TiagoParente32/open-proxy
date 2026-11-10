@@ -69,9 +69,28 @@ const isAgentRule = computed(() => !!selectedAgentKey.value && !!selectedAgentMo
 const isOverridden = (field) => !!selectedAgentMock.value?.overridden?.includes(field)
 const anyOverridden = computed(() => agentMocks.value.some(m => m.overridden?.length))
 
-// Latency and response sequences have no controls in this editor (they're
-// agent-only fields), so they're described in a sentence instead of hidden.
-const ruleExtras = computed(() => describeMockExtras(activeRule.value))
+// A response sequence has no control in this editor (it's an agent-only
+// field), so it's described in a sentence instead of hidden. The delay has
+// its own field below, so it's left out of the notice.
+const ruleExtras = computed(() => describeMockExtras(activeRule.value, { delay: false }))
+
+// Per-rule latency. Kept as a number with 0 meaning none, which is what the
+// backend's `rule.get("delay_ms") or 0` and the "+N ms" badges expect. The
+// backend caps a delay at 60 s, so the field does too rather than letting a
+// larger value silently serve as 60 s.
+const MAX_DELAY_MS = 60000
+const delayMs = computed({
+  // '' rather than 0 so a rule without a delay shows the placeholder.
+  get: () => activeRule.value?.delay_ms || '',
+  set: (v) => {
+    if (!activeRule.value) return
+    const n = Math.round(Number(v))
+    activeRule.value.delay_ms = Number.isFinite(n) ? Math.min(Math.max(n, 0), MAX_DELAY_MS) : 0
+  },
+})
+// The setter clamps, but a clamp to the value already stored doesn't change
+// anything reactive, so the box could keep showing what was typed.
+const onDelayBlur = (e) => { e.target.value = delayMs.value || '' }
 
 const selectAgentMock = (key) => {
   selectedAgentKey.value = key
@@ -409,6 +428,7 @@ const addNewRule = () => {
     body: '',
     body_source: 'inline',
     file_path: '',
+    delay_ms: 0,
   }
   mapLocalRules.value.unshift(newRule)
   selectedRuleId.value = newRule.id
@@ -544,6 +564,7 @@ const browseFile = async () => {
                     </span>
                     <span class="pm-rule-subtext">
                       <span class="pm-method-badge" :class="`method-${(rule.method||'ANY').toLowerCase()}`">{{ rule.method || 'ANY' }}</span>
+                      <span v-if="rule.delay_ms" class="pm-extra" :title="`Served after a ${rule.delay_ms} ms delay`">+{{ rule.delay_ms }} ms</span>
                       <span v-if="rule.label">{{ rule.pattern }}</span>
                     </span>
                   </div>
@@ -620,7 +641,7 @@ const browseFile = async () => {
                  or the traffic table shows statuses the status box doesn't. -->
             <div v-if="ruleExtras" class="pm-extras-notice">
               <strong>{{ ruleExtras }}.</strong>
-              The status and body below are the base response; these extras were set by an agent
+              The status and body below are the base response; the sequence was set by an agent
               and can't be edited here.
             </div>
 
@@ -637,6 +658,16 @@ const browseFile = async () => {
               <div v-if="!isAgentRule" class="pm-label-container">
                 <span class="pm-routing-label">Group</span>
                 <RuleGroupPicker :rule="activeRule" :ctl="groupsCtl" />
+              </div>
+              <div class="pm-label-container">
+                <span class="pm-routing-label">
+                  Delay (ms)<span v-if="isOverridden('delay_ms')" class="pm-owned">yours</span>
+                </span>
+                <input type="number" min="0" :max="MAX_DELAY_MS" step="50" placeholder="0"
+                  v-model.number="delayMs" class="pm-routing-input pm-delay-input"
+                  :class="{ 'pm-owned-input': isOverridden('delay_ms') }"
+                  title="Hold the mocked response this long before serving it, on top of any throttle"
+                  @blur="onDelayBlur" />
               </div>
             </div>
 
@@ -1046,6 +1077,7 @@ const browseFile = async () => {
 .pm-routing-label { font-size: 11px; font-weight: 600; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .pm-routing-input { background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-primary); padding: 10px 12px; border-radius: 6px; font-size: 13px; outline: none; transition: border-color 0.2s; }
 .pm-routing-input:focus { border-color: var(--accent); }
+.pm-delay-input { width: 110px; }
 
 .pm-omnibar-container { padding: 12px 20px; }
 .pm-omnibar { display: flex; align-items: center; background: var(--bg-deepest); border: 1px solid var(--border); border-radius: 6px; }

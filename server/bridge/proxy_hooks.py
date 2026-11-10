@@ -115,9 +115,12 @@ class ProxyHooksMixin:
 
             # Simulated latency for this endpoint only, on top of any global
             # throttle. Lets a scenario test the app's timeout handling.
-            delay_ms = rule.get("delay_ms") or 0
-            if delay_ms:
-                await asyncio.sleep(min(float(delay_ms), 60_000) / 1000.0)
+            try:
+                delay_ms = float(rule.get("delay_ms") or 0)
+            except (TypeError, ValueError):
+                delay_ms = 0
+            if delay_ms > 0:
+                await asyncio.sleep(min(delay_ms, 60_000) / 1000.0)
 
             req_headers_mod = rule.get("req_headers_mod", {})
             if isinstance(req_headers_mod, dict):
