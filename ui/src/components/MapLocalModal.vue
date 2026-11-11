@@ -657,7 +657,7 @@ const browseFile = async () => {
               <!-- Agent rules live outside the user's list, so they can't be grouped. -->
               <div v-if="!isAgentRule" class="pm-label-container">
                 <span class="pm-routing-label">Group</span>
-                <RuleGroupPicker :rule="activeRule" :ctl="groupsCtl" />
+                <RuleGroupPicker :rule="activeRule" :ctl="groupsCtl" size="field" />
               </div>
               <div class="pm-label-container">
                 <span class="pm-routing-label">
@@ -1075,7 +1075,9 @@ const browseFile = async () => {
 .pm-name-row { display: flex; align-items: flex-end; gap: 16px; padding: 16px 20px 0 20px; }
 .pm-label-container { display: flex; flex-direction: column; gap: 6px; }
 .pm-routing-label { font-size: 11px; font-weight: 600; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-.pm-routing-input { background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-primary); padding: 10px 12px; border-radius: 6px; font-size: 13px; outline: none; transition: border-color 0.2s; }
+/* One fixed height for every control in the name row (text, number, group
+   picker), so they line up whatever the browser's default for each type. */
+.pm-routing-input { height: 38px; box-sizing: border-box; background: var(--bg-deepest); border: 1px solid var(--border); color: var(--fg-primary); padding: 0 12px; border-radius: 6px; font-size: 13px; outline: none; transition: border-color 0.2s; }
 .pm-routing-input:focus { border-color: var(--accent); }
 .pm-delay-input { width: 110px; }
 

@@ -47,6 +47,15 @@ async def rules_in_storage(page):
     return json.loads(await page.get_storage("openproxy_mapLocalRules") or "[]")
 
 
+async def pick_group(page, option):
+    """Choose an entry in the editor's group dropdown by its text."""
+    await page.h("document.querySelector('.rgp-trigger').click(); return 1;")
+    await asyncio.sleep(0.2)
+    # The menu is position: fixed, so it has no offsetParent — find it by text alone.
+    await page.h(f"$$('.rgp-option').find(e => e.textContent.trim() === {json.dumps(option)}).click(); return 1;")
+    await asyncio.sleep(0.3)
+
+
 async def right_click(page, label):
     await page.h(f"""
       const row = $$('.rg-item').find(e => vis(e) && e.textContent.includes({json.dumps(label)}));
@@ -158,16 +167,22 @@ async def main():
         print("\n== the editor's group picker ==")
         await page.h("$$('.rg-item').find(e => vis(e) && e.textContent.includes('gamma')).querySelector('.pm-rule-item').click(); return 1;")
         await asyncio.sleep(0.2)
-        await page.h("setVal(document.querySelector('select.rgp-select'), ''); return 1;")
-        await asyncio.sleep(0.3)
+        await page.h("document.querySelector('.rgp-trigger').click(); return 1;")
+        await asyncio.sleep(0.2)
+        check("the picker is a themed dropdown listing every group with its colour",
+              await page.h("return $$('.rgp-option').map(e => e.textContent.trim());") == ["No group", "Staging", "Errors", "New group…"]
+              and await page.h("return $$('.rgp-menu .rgp-dot').length === 3;"),
+              str(await page.h("return $$('.rgp-option').map(e => e.textContent.trim());")))
+        await page.h("document.querySelector('.rgp-overlay').click(); return 1;")
+        await asyncio.sleep(0.2)
+        check("clicking outside closes it", not await page.h("return !!document.querySelector('.rgp-menu');"))
+        await pick_group(page, "No group")
         check("'No group' takes it out; the now-empty group is pinned to the top",
               await sidebar(page) == ["G:Errors:0", "  (empty)", "G:Staging:2", "  alpha", "  beta", "delta", "gamma"], str(await sidebar(page)))
-        await page.h(f"setVal(document.querySelector('select.rgp-select'), '{errors_id}'); return 1;")
-        await asyncio.sleep(0.3)
+        await pick_group(page, "Errors")
         check("picking a group files the rule under it, where the rule is",
               await sidebar(page) == ["G:Staging:2", "  alpha", "  beta", "delta", "G:Errors:1", "  gamma"], str(await sidebar(page)))
-        await page.h("setVal(document.querySelector('select.rgp-select'), '__new'); return 1;")
-        await asyncio.sleep(0.3)
+        await pick_group(page, "New group…")
         check("'New group…' makes a group with this rule in it and opens the card",
               await sidebar(page) == ["G:Errors:0", "  (empty)", "G:Staging:2", "  alpha", "  beta", "delta", "G:Untitled group:1", "  gamma"]
               and await page.h("return document.querySelector('.rg-popover')?.getClientRects().length > 0;"), str(await sidebar(page)))
@@ -177,7 +192,7 @@ async def main():
           return 1;""")
         await asyncio.sleep(0.3)
         check("picker shows the group and its colour dot",
-              await page.h("return document.querySelector('.rgp-select').selectedOptions[0].textContent.trim() === 'Temp' && !!document.querySelector('.rgp-dot');"))
+              await page.h("return document.querySelector('.rgp-value').textContent.trim() === 'Temp' && !!document.querySelector('.rgp-trigger .rgp-dot:not(.rgp-dot--none)');"))
         await page.h("document.querySelector('.rgp-edit').click(); return 1;")
         await asyncio.sleep(0.3)
         await page.h("byText('.rg-action', 'Ungroup').click(); return 1;")
