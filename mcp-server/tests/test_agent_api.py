@@ -1179,6 +1179,27 @@ async def test_rule_groups(ws_port):
         check("a rule set to group_id null leaves its group",
               "group_id" not in next(r for r in res["rules"] if r["id"] == 2))
 
+        # A group lives as long as its rules: delete the last one and it goes.
+        stage = [r["id"] for r in res["rules"] if r.get("group_id") == 500]
+        res = await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "map_local", "operations": [
+            {"op": "delete", "id": rid} for rid in stage
+        ]}, req_id="g5b")
+        check("deleting a group's last rule removes the group",
+              res["groups"] == [] and len(res["rules"]) == 5 - len(stage), str(res["groups"]))
+        res = await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "map_local", "operations": [
+            {"op": "add_group", "group": {"name": "Pair", "color": "blue"}, "rule_ids": [2, 3]},
+            {"op": "update", "id": 2, "fields": {"group_id": None}},
+            {"op": "update", "id": 3, "fields": {"group_id": None}},
+        ]}, req_id="g5c")
+        check("moving every rule out removes the group too", res["groups"] == [], str(res["groups"]))
+        try:
+            await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "map_local", "operations": [
+                {"op": "add_group", "group": {"name": "Nobody", "color": "blue"}},
+            ]}, req_id="g5d")
+            check("a group with no rules can't be created", False, "no error")
+        except RuntimeError as e:
+            check("a group with no rules can't be created", "rule_ids" in str(e), str(e)[:90])
+
         # Rewrites group the same way.
         await ui.send(json.dumps({"type": "UPDATE_MAP_REMOTE_RULES", "rules": [
             {"id": 9, "active": True, "pattern": "old.test", "target": "127.0.0.1:1"}], "groups": []}))

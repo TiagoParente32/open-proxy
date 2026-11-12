@@ -107,9 +107,11 @@ class RuleOperation(TypedDict):
         "add: insert `rule` at `position` (default 0, the top — first match "
         "wins). update: merge `fields` into the rule with `id`. delete: remove "
         "the rule with `id`. move: put the rule with `id` at `position`. "
-        "add_group: create `group` and file `rule_ids` under it. update_group: "
-        "merge `fields` (name, color) into the group with `id`. delete_group: "
-        "dissolve the group with `id`; its rules stay, ungrouped."))]
+        "add_group: create `group` and file `rule_ids` (at least one) under "
+        "it. update_group: merge `fields` (name, color) into the group with "
+        "`id`. delete_group: dissolve the group with `id`; its rules stay, "
+        "ungrouped. A group whose last rule is deleted or moved out is "
+        "removed automatically."))]
     id: NotRequired[Annotated[int | float | str, Field(
         description="Rule id (update / delete / move) or group id "
                     "(update_group / delete_group) from list_mock_rules.")]]

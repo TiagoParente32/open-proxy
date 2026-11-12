@@ -738,6 +738,13 @@ class AgentApiMixin:
         return {"name": name, "color": color}
 
     @staticmethod
+    def _without_empty_groups(rules, groups):
+        """A group lives as long as its rules — mirrors the UI's
+        `withoutEmptyGroups` so an agent and the sidebar agree."""
+        used = {str(r.get("group_id")) for r in rules if r.get("group_id") is not None}
+        return [g for g in groups if str(g.get("id")) in used]
+
+    @staticmethod
     def _group_contiguous(rules, groups):
         """The list with every group's rules next to each other, each group
         sitting where its first rule does — the UI's own invariant, so what
@@ -883,10 +890,14 @@ class AgentApiMixin:
                 group["id"] = self._new_rule_id()
                 groups.append(group)
                 # The id isn't known until the batch runs, so the rules that
-                # should start out in the group come along in the same op.
+                # should start out in the group come along in the same op. A
+                # group only exists while it has rules, so there must be one.
                 ids = op.get("rule_ids") or []
                 if not isinstance(ids, list):
                     raise ValueError(f"{where} rule_ids must be a list of rule ids")
+                if not ids:
+                    raise ValueError(f"{where} add_group needs rule_ids with at least one rule: "
+                                     "a group with no rules in it is removed")
                 for rid in ids:
                     rules[find(rid, f"{where}.rule_ids")]["group_id"] = group["id"]
                 summary.append(("add_group", group))
@@ -914,6 +925,9 @@ class AgentApiMixin:
                 summary.append(("delete_group", group))
 
         rules = self._group_contiguous(rules, groups)
+        # Deleting or moving out a group's last rule takes the group with it,
+        # as it does in the UI.
+        groups = self._without_empty_groups(rules, groups)
 
         if local:
             self.map_local_rules = rules

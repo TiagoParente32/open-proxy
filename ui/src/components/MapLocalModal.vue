@@ -548,7 +548,7 @@ const browseFile = async () => {
 
             <RuleGroupList :ctl="groupsCtl" :selected-id="selectedRuleId"
                            :filter="matchesSearch" :searching="!!ruleSearch.trim()"
-                           empty-group-hint="Drag mocks here" @deleted="onGroupDeleted" @delete-rule="deleteRule" @select="selectedRuleId = $event">
+                           @deleted="onGroupDeleted" @delete-rule="deleteRule" @select="selectedRuleId = $event">
               <template #row="{ rule }">
                 <div class="pm-rule-item" :class="{ active: selectedRuleId === rule.id }"
                      @click="selectedRuleId = rule.id">

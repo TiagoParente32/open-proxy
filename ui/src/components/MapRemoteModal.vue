@@ -195,7 +195,7 @@ const onGroupDeleted = (ids) => {
 
             <RuleGroupList :ctl="groupsCtl" :selected-id="selectedMapRemoteId"
                            :filter="matchesSearch" :searching="!!ruleSearch.trim()"
-                           empty-group-hint="Drag rewrites here" @deleted="onGroupDeleted" @delete-rule="deleteRule" @select="selectedMapRemoteId = $event">
+                           @deleted="onGroupDeleted" @delete-rule="deleteRule" @select="selectedMapRemoteId = $event">
               <template #row="{ rule }">
                 <div class="pm-rule-item"
                      :class="{ active: selectedMapRemoteId === rule.id }"

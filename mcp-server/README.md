@@ -84,7 +84,7 @@ uv tool install ./mcp-server     # or: pip install -e ./mcp-server
 | `clear_mocks` | Remove the active scenario |
 | `set_proxy_tools` | Switch Map Local, Map Remote, Breakpoints, Recording, No Cache or throttle on/off, same as the toolbar |
 | `list_mock_rules` | The user's own Map Local / Map Remote rules and their groups, with ids and match order |
-| `edit_mock_rules` | Add, edit, delete, reorder or group the user's own rules — persistent, not undone on disconnect |
+| `edit_mock_rules` | Add, edit, delete, reorder or group the user's own rules — persistent, not undone on disconnect. A group is removed with its last rule |
 | `wait_for_requests` | Block until N matching requests complete; the assertion primitive |
 | `replay_request` | Re-send a captured request, optionally modified; returns the resulting flow |
 | `send_request` | Send a request composed from scratch through the proxy; returns the resulting flow |
