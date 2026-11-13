@@ -40,7 +40,7 @@ AGENT_PROTOCOL_VERSION = 1
 # result, so re-pointing a rule at a different URL can't orphan the override.
 OVERRIDABLE_FIELDS = {
     "active", "label", "pattern", "method", "status",
-    "headers", "body", "body_source", "file_path", "req_headers_mod",
+    "headers", "body", "body_source", "file_path", "req_headers_mod", "delay_ms",
 }
 
 # Same, for Map Remote rewrites — a rewrite is only ever these three fields.
@@ -82,7 +82,7 @@ TOOL_SWITCHES = {
 # Fields an agent may set on the *user's own* rules. The local set is every
 # editor field plus the agent-only extras the backend honours on user rules.
 # `group_id` files a rule under one of the user's groups (see GROUP_OPS).
-USER_LOCAL_FIELDS = OVERRIDABLE_FIELDS | {"delay_ms", "responses", "sequence_mode", "group_id"}
+USER_LOCAL_FIELDS = OVERRIDABLE_FIELDS | {"responses", "sequence_mode", "group_id"}
 USER_REMOTE_FIELDS = OVERRIDABLE_REMOTE_FIELDS | {"group_id"}
 GROUP_OPS = {"add_group", "update_group", "delete_group"}
 RULE_OPS = {"add", "update", "delete", "move"} | GROUP_OPS
@@ -738,6 +738,13 @@ class AgentApiMixin:
         return {"name": name, "color": color}
 
     @staticmethod
+    def _without_empty_groups(rules, groups):
+        """A group lives as long as its rules — mirrors the UI's
+        `withoutEmptyGroups` so an agent and the sidebar agree."""
+        used = {str(r.get("group_id")) for r in rules if r.get("group_id") is not None}
+        return [g for g in groups if str(g.get("id")) in used]
+
+    @staticmethod
     def _group_contiguous(rules, groups):
         """The list with every group's rules next to each other, each group
         sitting where its first rule does — the UI's own invariant, so what
@@ -883,10 +890,14 @@ class AgentApiMixin:
                 group["id"] = self._new_rule_id()
                 groups.append(group)
                 # The id isn't known until the batch runs, so the rules that
-                # should start out in the group come along in the same op.
+                # should start out in the group come along in the same op. A
+                # group only exists while it has rules, so there must be one.
                 ids = op.get("rule_ids") or []
                 if not isinstance(ids, list):
                     raise ValueError(f"{where} rule_ids must be a list of rule ids")
+                if not ids:
+                    raise ValueError(f"{where} add_group needs rule_ids with at least one rule: "
+                                     "a group with no rules in it is removed")
                 for rid in ids:
                     rules[find(rid, f"{where}.rule_ids")]["group_id"] = group["id"]
                 summary.append(("add_group", group))
@@ -914,6 +925,9 @@ class AgentApiMixin:
                 summary.append(("delete_group", group))
 
         rules = self._group_contiguous(rules, groups)
+        # Deleting or moving out a group's last rule takes the group with it,
+        # as it does in the UI.
+        groups = self._without_empty_groups(rules, groups)
 
         if local:
             self.map_local_rules = rules

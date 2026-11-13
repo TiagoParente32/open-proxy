@@ -47,6 +47,15 @@ async def rules_in_storage(page):
     return json.loads(await page.get_storage("openproxy_mapLocalRules") or "[]")
 
 
+async def pick_group(page, option):
+    """Choose an entry in the editor's group dropdown by its text."""
+    await page.h("document.querySelector('.rgp-trigger').click(); return 1;")
+    await asyncio.sleep(0.2)
+    # The menu is position: fixed, so it has no offsetParent — find it by text alone.
+    await page.h(f"$$('.rgp-option').find(e => e.textContent.trim() === {json.dumps(option)}).click(); return 1;")
+    await asyncio.sleep(0.3)
+
+
 async def right_click(page, label):
     await page.h(f"""
       const row = $$('.rg-item').find(e => vis(e) && e.textContent.includes({json.dumps(label)}));
@@ -158,18 +167,28 @@ async def main():
         print("\n== the editor's group picker ==")
         await page.h("$$('.rg-item').find(e => vis(e) && e.textContent.includes('gamma')).querySelector('.pm-rule-item').click(); return 1;")
         await asyncio.sleep(0.2)
-        await page.h("setVal(document.querySelector('select.rgp-select'), ''); return 1;")
-        await asyncio.sleep(0.3)
-        check("'No group' takes it out; the now-empty group is pinned to the top",
-              await sidebar(page) == ["G:Errors:0", "  (empty)", "G:Staging:2", "  alpha", "  beta", "delta", "gamma"], str(await sidebar(page)))
-        await page.h(f"setVal(document.querySelector('select.rgp-select'), '{errors_id}'); return 1;")
-        await asyncio.sleep(0.3)
-        check("picking a group files the rule under it, where the rule is",
-              await sidebar(page) == ["G:Staging:2", "  alpha", "  beta", "delta", "G:Errors:1", "  gamma"], str(await sidebar(page)))
-        await page.h("setVal(document.querySelector('select.rgp-select'), '__new'); return 1;")
-        await asyncio.sleep(0.3)
+        await page.h("document.querySelector('.rgp-trigger').click(); return 1;")
+        await asyncio.sleep(0.2)
+        check("the picker is a themed dropdown listing every group with its colour",
+              await page.h("return $$('.rgp-option').map(e => e.textContent.trim());") == ["No group", "Staging", "Errors", "New group…"]
+              and await page.h("return $$('.rgp-menu .rgp-dot').length === 3;"),
+              str(await page.h("return $$('.rgp-option').map(e => e.textContent.trim());")))
+        await page.h("document.querySelector('.rgp-overlay').click(); return 1;")
+        await asyncio.sleep(0.2)
+        check("clicking outside closes it", not await page.h("return !!document.querySelector('.rgp-menu');"))
+        await pick_group(page, "No group")
+        check("'No group' takes it out, and the group it emptied closes by itself",
+              await sidebar(page) == ["G:Staging:2", "  alpha", "  beta", "delta", "gamma"]
+              and [g["name"] for g in await groups_in_storage(page)] == ["Staging"], str(await sidebar(page)))
+        await asyncio.sleep(0.5)
+        check("backend dropped the empty group too",
+              [g["name"] for g in (await c.call("AGENT_LIST_RULES"))["map_local_groups"]] == ["Staging"])
+        await pick_group(page, "Staging")
+        check("picking a group files the rule under it, with the group's other rules",
+              await sidebar(page) == ["G:Staging:3", "  alpha", "  beta", "  gamma", "delta"], str(await sidebar(page)))
+        await pick_group(page, "New group…")
         check("'New group…' makes a group with this rule in it and opens the card",
-              await sidebar(page) == ["G:Errors:0", "  (empty)", "G:Staging:2", "  alpha", "  beta", "delta", "G:Untitled group:1", "  gamma"]
+              await sidebar(page) == ["G:Staging:2", "  alpha", "  beta", "G:Untitled group:1", "  gamma", "delta"]
               and await page.h("return document.querySelector('.rg-popover')?.getClientRects().length > 0;"), str(await sidebar(page)))
         await page.h("""
           setVal(document.querySelector('.rg-name-input'), 'Temp');
@@ -177,14 +196,14 @@ async def main():
           return 1;""")
         await asyncio.sleep(0.3)
         check("picker shows the group and its colour dot",
-              await page.h("return document.querySelector('.rgp-select').selectedOptions[0].textContent.trim() === 'Temp' && !!document.querySelector('.rgp-dot');"))
+              await page.h("return document.querySelector('.rgp-value').textContent.trim() === 'Temp' && !!document.querySelector('.rgp-trigger .rgp-dot:not(.rgp-dot--none)');"))
         await page.h("document.querySelector('.rgp-edit').click(); return 1;")
         await asyncio.sleep(0.3)
         await page.h("byText('.rg-action', 'Ungroup').click(); return 1;")
         await asyncio.sleep(0.3)
         check("ungrouping from the picker's card drops the group",
-              await sidebar(page) == ["G:Errors:0", "  (empty)", "G:Staging:2", "  alpha", "  beta", "delta", "gamma"]
-              and [g["name"] for g in await groups_in_storage(page)] == ["Staging", "Errors"], str(await sidebar(page)))
+              await sidebar(page) == ["G:Staging:2", "  alpha", "  beta", "gamma", "delta"]
+              and [g["name"] for g in await groups_in_storage(page)] == ["Staging"], str(await sidebar(page)))
 
         print("\n== the group switch toggles every rule in it ==")
         await page.h("$$('.rg-header').find(e => vis(e) && e.textContent.includes('Staging')).querySelector('.rg-check input').click(); return 1;")
@@ -215,7 +234,7 @@ async def main():
           return 1;""")
         await asyncio.sleep(0.3)
         check("dropping below the last grouped row joins the group",
-              await sidebar(page) == ["G:Errors:0", "  (empty)", "G:Staging:3", "  alpha", "  beta", "  delta", "gamma"], str(await sidebar(page)))
+              await sidebar(page) == ["G:Staging:3", "  alpha", "  beta", "  delta", "gamma"], str(await sidebar(page)))
         await page.h("""
           const hdr = $$('.rg-header').find(e => vis(e) && e.textContent.includes('Staging'));
           const dt = new DataTransfer();
@@ -228,7 +247,7 @@ async def main():
           return 1;""")
         await asyncio.sleep(0.3)
         check("a group header dragged to the end carries its rules along",
-              await sidebar(page) == ["G:Errors:0", "  (empty)", "gamma", "G:Staging:3", "  alpha", "  beta", "  delta"], str(await sidebar(page)))
+              await sidebar(page) == ["gamma", "G:Staging:3", "  alpha", "  beta", "  delta"], str(await sidebar(page)))
         await page.h("""
           const rowOf = t => $$('.rg-item').find(e => vis(e) && e.textContent.includes(t));
           const dt = new DataTransfer();
@@ -242,7 +261,7 @@ async def main():
           return 1;""")
         await asyncio.sleep(0.3)
         check("dropping above a loose rule leaves the group",
-              await sidebar(page) == ["G:Errors:0", "  (empty)", "alpha", "gamma", "G:Staging:2", "  beta", "  delta"], str(await sidebar(page)))
+              await sidebar(page) == ["alpha", "gamma", "G:Staging:2", "  beta", "  delta"], str(await sidebar(page)))
         check("backend sees the new order",
               [r["label"] for r in (await c.call("AGENT_LIST_RULES"))["map_local"]] == ["alpha", "gamma", "beta", "delta"])
 
@@ -253,10 +272,10 @@ async def main():
         ]})
         await asyncio.sleep(0.6)
         check("new group and rename are in the sidebar",
-              await sidebar(page) == ["G:Errors:0", "  (empty)", "G:Agent made:1", "  alpha", "gamma", "G:Stage:2", "  beta", "  delta"], str(await sidebar(page)))
+              await sidebar(page) == ["G:Agent made:1", "  alpha", "gamma", "G:Stage:2", "  beta", "  delta"], str(await sidebar(page)))
         stored = await groups_in_storage(page)
         check("groups persisted with collapsed kept for the ones we had",
-              [(g["name"], g["collapsed"]) for g in stored] == [("Stage", False), ("Errors", False), ("Agent made", False)], str(stored))
+              [(g["name"], g["collapsed"]) for g in stored] == [("Stage", False), ("Agent made", False)], str(stored))
 
         print("\n== search keeps collapsed groups readable ==")
         await page.h("$$('.rg-header').find(e => vis(e) && e.textContent.includes('Stage')).click(); return 1;")
@@ -281,30 +300,58 @@ async def main():
         await page.h("$$('.rg-action').find(b => b.textContent.includes('Delete group')).click(); return 1;")
         await asyncio.sleep(0.4)
         check("delete removes the group and its rules",
-              await sidebar(page) == ["G:Errors:0", "  (empty)", "alpha", "gamma"], str(await sidebar(page)))
+              await sidebar(page) == ["alpha", "gamma"], str(await sidebar(page)))
         check("the editor is still on a live rule", await page.h("return vis(document.querySelector('.pm-omnibar'));"))
         listed = await c.call("AGENT_LIST_RULES")
         check("backend matches", [r["label"] for r in listed["map_local"]] == ["alpha", "gamma"]
-              and [g["name"] for g in listed["map_local_groups"]] == ["Errors"])
+              and listed["map_local_groups"] == [])
         await right_click(page, "gamma")
         await page.h("byText('.rg-menu-item', 'Delete rule').click(); return 1;")
         await asyncio.sleep(0.3)
-        check("Delete rule from the menu removes it", await sidebar(page) == ["G:Errors:0", "  (empty)", "alpha"], str(await sidebar(page)))
+        check("Delete rule from the menu removes it", await sidebar(page) == ["alpha"], str(await sidebar(page)))
+
+        print("\n== a group closes when its last rule is deleted ==")
+        await right_click(page, "alpha")
+        await page.h("byText('.rg-menu-item', 'Add to new group').click(); return 1;")
+        await asyncio.sleep(0.3)
+        await page.h("""
+          setVal(document.querySelector('.rg-name-input'), 'Solo');
+          document.querySelector('.rg-name-input').dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+          return 1;""")
+        await asyncio.sleep(0.3)
+        check("the rule sits alone in its group", await sidebar(page) == ["G:Solo:1", "  alpha"], str(await sidebar(page)))
+        await page.h("$$('.rg-item').find(e => vis(e) && e.textContent.includes('alpha')).querySelector('.pm-rule-del').click(); return 1;")
+        await asyncio.sleep(0.4)
+        check("deleting it from the row leaves no empty group behind",
+              await sidebar(page) == [] and await groups_in_storage(page) == [], str(await sidebar(page)))
+        check("editor shows the empty state, not a stale rule", not await page.h("return vis(document.querySelector('.pm-omnibar'));"))
+        await asyncio.sleep(0.5)
+        listed = await c.call("AGENT_LIST_RULES")
+        check("backend has no rules and no groups", listed["map_local"] == [] and listed["map_local_groups"] == [])
 
         print("\n== import merges rules and groups ==")
         # Drive the file input's handler with an in-memory file: an export of
-        # one grouped rule, naming a group we already have by id and a new one.
-        await page.h(f"""
-          const payload = {{ rules: [{json.dumps(mock(77, "imported", group_id=9001))}, {json.dumps(mock(78, "also", group_id=errors_id))}],
-                            groups: [{{ id: 9001, name: 'From file', color: 'cyan' }}, {{ id: {errors_id}, name: 'Errors renamed', color: 'red' }}] }};
-          const input = $$('input[type=file]').find(i => i.accept === '.json');
-          const file = new File([JSON.stringify(payload)], 'rules.json', {{ type: 'application/json' }});
-          const dt = new DataTransfer(); dt.items.add(file); input.files = dt.files;
-          input.dispatchEvent(new Event('change', {{ bubbles: true }}));
-          return 1;""")
-        await asyncio.sleep(0.6)
-        check("imported rules land in their groups; a known group id is updated in place",
-              await sidebar(page) == ["alpha", "G:From file:1", "  imported", "G:Errors renamed:1", "  also"], str(await sidebar(page)))
+        # grouped rules naming a new group, then one naming that group by id.
+        async def import_file(payload):
+            await page.h(f"""
+              const payload = {json.dumps(payload)};
+              const input = $$('input[type=file]').find(i => i.accept === '.json');
+              const file = new File([JSON.stringify(payload)], 'rules.json', {{ type: 'application/json' }});
+              const dt = new DataTransfer(); dt.items.add(file); input.files = dt.files;
+              input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+              return 1;""")
+            await asyncio.sleep(0.6)
+
+        await import_file({"rules": [mock(77, "imported", group_id=9001), mock(78, "also", group_id=9001)],
+                           "groups": [{"id": 9001, "name": "From file", "color": "cyan"},
+                                      {"id": 9002, "name": "Nobody in it", "color": "red"}]})
+        check("imported rules land in their group; a group with no rules isn't kept",
+              await sidebar(page) == ["G:From file:2", "  imported", "  also"]
+              and [g["name"] for g in await groups_in_storage(page)] == ["From file"], str(await sidebar(page)))
+        await import_file({"rules": [mock(79, "more", group_id=9001)],
+                           "groups": [{"id": 9001, "name": "From file renamed", "color": "red"}]})
+        check("a known group id is updated in place, not doubled",
+              await sidebar(page) == ["G:From file renamed:3", "  imported", "  also", "  more"], str(await sidebar(page)))
 
         await page.h("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true})); return 1;")
         check("no console errors or exceptions", not page.errors, "; ".join(page.errors)[:300])

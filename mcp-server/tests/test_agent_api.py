@@ -413,12 +413,26 @@ async def test_user_overrides_survive_rerun(ws_port):
               sorted(r2["scenario"]["mocks"][0].get("overridden") or []) == ["body", "status"],
               str(r2["scenario"]["mocks"][0].get("overridden")))
 
+        # The delay is editable in the Map Local window too, so it's one of
+        # the fields the user can take over on an agent's mock.
+        await ui.send(json.dumps({
+            "type": "SET_AGENT_RULE_OVERRIDE", "key": key, "fields": {"delay_ms": 700},
+        }))
+        await asyncio.sleep(0.8)
+        t0 = time.monotonic()
+        code, body = await asyncio.to_thread(http_get, "http://mock.test/api/cart", proxy_port)
+        el = time.monotonic() - t0
+        check("user's delay holds the agent's mock", code == 201 and el >= 0.6, f"{code} in {el:.2f}s")
+
         # Handing it back restores whatever the agent last installed.
         await ui.send(json.dumps({"type": "CLEAR_AGENT_RULE_OVERRIDE", "key": key}))
         await asyncio.sleep(0.8)
+        t0 = time.monotonic()
         code, body = await asyncio.to_thread(http_get, "http://mock.test/api/cart", proxy_port)
+        el = time.monotonic() - t0
         check("reverting restores the agent's latest version",
               code == 503 and "agent body v2" in body, f"{code} {body[:40]!r}")
+        check("reverting drops the user's delay too", el < 0.5, f"{el:.2f}s")
 
 
 async def test_disconnect_preserves_rules_for_adoption(ws_port):
@@ -1164,6 +1178,27 @@ async def test_rule_groups(ws_port):
               next(r for r in res["rules"] if r["id"] == 3), str(res["rules"]))
         check("a rule set to group_id null leaves its group",
               "group_id" not in next(r for r in res["rules"] if r["id"] == 2))
+
+        # A group lives as long as its rules: delete the last one and it goes.
+        stage = [r["id"] for r in res["rules"] if r.get("group_id") == 500]
+        res = await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "map_local", "operations": [
+            {"op": "delete", "id": rid} for rid in stage
+        ]}, req_id="g5b")
+        check("deleting a group's last rule removes the group",
+              res["groups"] == [] and len(res["rules"]) == 5 - len(stage), str(res["groups"]))
+        res = await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "map_local", "operations": [
+            {"op": "add_group", "group": {"name": "Pair", "color": "blue"}, "rule_ids": [2, 3]},
+            {"op": "update", "id": 2, "fields": {"group_id": None}},
+            {"op": "update", "id": 3, "fields": {"group_id": None}},
+        ]}, req_id="g5c")
+        check("moving every rule out removes the group too", res["groups"] == [], str(res["groups"]))
+        try:
+            await agent_call(agent, "AGENT_EDIT_RULES", {"kind": "map_local", "operations": [
+                {"op": "add_group", "group": {"name": "Nobody", "color": "blue"}},
+            ]}, req_id="g5d")
+            check("a group with no rules can't be created", False, "no error")
+        except RuntimeError as e:
+            check("a group with no rules can't be created", "rule_ids" in str(e), str(e)[:90])
 
         # Rewrites group the same way.
         await ui.send(json.dumps({"type": "UPDATE_MAP_REMOTE_RULES", "rules": [

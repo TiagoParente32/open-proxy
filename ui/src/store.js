@@ -1,4 +1,5 @@
 import { ref, computed, watch } from 'vue'
+import { withoutEmptyGroups } from './composables/useRuleGroups'
 
 // ============================================================================
 // 1. CONSTANTS & UTILITIES
@@ -261,9 +262,11 @@ export const openMapLocalForAgentMock = (req) => {
     showMapModal.value = true
 }
 
-// One line describing a mock's agent-only extras (latency, response sequence),
-// or null. The editor has no controls for these, so it shows them as text.
-export const describeMockExtras = (rule) => {
+// One line describing a mock's extras (response sequence, latency), or null.
+// The response sequence is agent-only and has no editor control, so it is
+// shown as text. The delay has its own field, so the editor's notice passes
+// `delay: false` and only the list badges still mention it.
+export const describeMockExtras = (rule, { delay = true } = {}) => {
     if (!rule) return null
     const parts = []
     const seq = rule.responses
@@ -271,7 +274,7 @@ export const describeMockExtras = (rule) => {
         const steps = seq.map(s => s.status ?? rule.status ?? 200).join(' → ')
         parts.push(`Serves ${steps}${rule.sequence_mode === 'cycle' ? ', then repeats' : ', then holds the last'}`)
     }
-    if (rule.delay_ms) parts.push(`+${rule.delay_ms} ms delay`)
+    if (delay && rule.delay_ms) parts.push(`+${rule.delay_ms} ms delay`)
     return parts.length ? parts.join(' · ') : null
 }
 
@@ -301,21 +304,21 @@ export const showMapModal = ref(false)
 export const mapLocalRules = ref(loadState('mapLocalRules', []))
 // Chrome-style groups over the rule list: { id, name, color, collapsed }.
 // A rule joins one via `group_id`; see composables/useRuleGroups.js.
-export const mapLocalGroups = ref(loadState('mapLocalGroups', []))
+export const mapLocalGroups = ref(withoutEmptyGroups(mapLocalRules.value, loadState('mapLocalGroups', [])))
 export const enableMapLocal = ref(mapLocalRules.value.length > 0 ? loadState('enableMapLocal', true) : false)
 export const selectedRuleId = ref(null)
 
 // Map Remote
 export const showMapRemoteModal = ref(false)
 export const mapRemoteRules = ref(loadState('mapRemoteRules', []))
-export const mapRemoteGroups = ref(loadState('mapRemoteGroups', []))
+export const mapRemoteGroups = ref(withoutEmptyGroups(mapRemoteRules.value, loadState('mapRemoteGroups', [])))
 export const enableMapRemote = ref(mapRemoteRules.value.length > 0 ? loadState('enableMapRemote', true) : false)
 export const selectedMapRemoteId = ref(null)
 
 // Breakpoints
 export const showBreakpointModal = ref(false)
 export const breakpointRules = ref(loadState('breakpointRules', []))
-export const breakpointGroups = ref(loadState('breakpointGroups', []))
+export const breakpointGroups = ref(withoutEmptyGroups(breakpointRules.value, loadState('breakpointGroups', [])))
 export const breakpointsEnabled = ref(breakpointRules.value.length > 0 ? loadState('breakpointsEnabled', true) : false)
 export const trappedFlows = ref([])
 export const selectedBreakpointId = ref(null)
@@ -1228,9 +1231,13 @@ watch(() => mapLocalRules.value.length, (n, o) => {
     else if (n === 0) enableMapLocal.value = false
 })
 
+// A group whose last rule was deleted, moved out or ungrouped goes with it.
+// Done here, on the rule list, so it covers the editor, the sidebar, drag and
+// drop, an import and an agent's edits alike.
 watch(mapLocalRules, (newVals) => {
     saveState('mapLocalRules', newVals)
     syncMapLocalRules()
+    mapLocalGroups.value = withoutEmptyGroups(newVals, mapLocalGroups.value)
 }, { deep: true })
 
 // Groups ride along with the rules so an agent listing them sees the same
@@ -1255,6 +1262,7 @@ watch(() => mapRemoteRules.value.length, (n, o) => {
 watch(mapRemoteRules, (newVals) => {
     saveState('mapRemoteRules', newVals)
     syncMapRemoteRules()
+    mapRemoteGroups.value = withoutEmptyGroups(newVals, mapRemoteGroups.value)
 }, { deep: true })
 
 watch(mapRemoteGroups, (val) => { saveState('mapRemoteGroups', val); syncMapRemoteRules() }, { deep: true })
@@ -1274,6 +1282,7 @@ watch(() => breakpointRules.value.length, (n, o) => {
 watch(breakpointRules, (newVals) => {
     saveState('breakpointRules', newVals)
     syncBreakpointRules()
+    breakpointGroups.value = withoutEmptyGroups(newVals, breakpointGroups.value)
 }, { deep: true })
 
 // Breakpoint groups are a sidebar convenience only; the backend doesn't need them.

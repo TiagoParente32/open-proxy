@@ -82,7 +82,7 @@ const onGroupDeleted = (ids) => {
           
           <div class="pm-rule-list">
             <RuleGroupList :ctl="groupsCtl" :selected-id="selectedBreakpointId"
-                           empty-group-hint="Drag breakpoints here" @deleted="onGroupDeleted" @delete-rule="deleteRule" @select="selectedBreakpointId = $event">
+                           @deleted="onGroupDeleted" @delete-rule="deleteRule" @select="selectedBreakpointId = $event">
               <template #row="{ rule }">
                 <div class="pm-rule-item"
                      :class="{ active: selectedBreakpointId === rule.id }"
