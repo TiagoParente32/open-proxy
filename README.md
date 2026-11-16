@@ -56,10 +56,10 @@ OpenProxy is a network debugging proxy built for developers. Whether you need to
 ## ✨ Key Features
 
 * **Traffic Interception**: View, inspect, and filter HTTP/HTTPS requests in real-time.
-* **Map Local (Mocking)**: Trick your app into receiving custom JSON/HTML responses without touching your backend.
+* **Map Local (Mocking)**: Trick your app into receiving custom JSON/HTML responses without touching your backend, optionally held back by a per-rule delay to test timeouts and loading states.
 * **Map Remote (Rewrites)**: Transparently route production URLs to your `localhost` development server.
 * **Live Breakpoints**: Pause requests or responses mid-flight, edit their headers/bodies, and release them.
-* **Rule Groups**: Sort mocks, rewrites and breakpoints into colour-coded, collapsible groups, the way browser tabs group — right-click a rule to start one, drag rules in and out, reorder by dragging, switch a whole group on or off at once.
+* **Rule Groups**: Sort mocks, rewrites and breakpoints into colour-coded, collapsible groups, the way browser tabs group — right-click a rule to start one, drag rules in and out, reorder by dragging, switch a whole group on or off at once. A group that loses its last rule closes by itself.
 * **VPN Mode**: Route device traffic through a WireGuard tunnel — no manual proxy configuration needed. Available for Android and iOS physical devices.
 * **Smart Android Setup**: 1-click ADB integration. Automatically detects rooted emulators to inject System Certificates, or gracefully falls back to User Certificates.
 * **One-click CA trust**: Prompts to install and trust the mitmproxy certificate on the host machine so browsers and CLI tools just work.

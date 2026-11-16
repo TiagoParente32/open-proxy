@@ -25,7 +25,6 @@ const props = defineProps({
   selectedId: { default: null },
   filter: { type: Function, default: () => true },    // search predicate
   searching: { type: Boolean, default: false },
-  emptyGroupHint: { type: String, default: 'Drag rules here' },
 })
 const emit = defineEmits(['select', 'deleted', 'delete-rule'])
 
@@ -217,10 +216,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
                @contextmenu.prevent="openMenu($event, rule)">
             <slot name="row" :rule="rule" :group="b.group" />
           </div>
-          <div v-if="!b.rules.length" class="rg-empty-group" :style="{ '--g': groupHex(b.group.color) }"
-               @dragover.prevent="hoverHeader($event, b)" @drop.prevent="finishDrop">
-            {{ emptyGroupHint }}
-          </div>
         </template>
       </template>
 
@@ -342,11 +337,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
 .rg-item { position: relative; }
 .rg-item--grouped {
   padding-left: 10px; box-shadow: inset 3px 0 0 var(--g);
-  background: color-mix(in srgb, var(--g) 6%, transparent);
-}
-.rg-empty-group {
-  padding: 10px 14px 10px 24px; font-size: 11px; color: var(--fg-muted); font-style: italic;
-  border-bottom: 1px solid var(--border-subtle); box-shadow: inset 3px 0 0 var(--g);
   background: color-mix(in srgb, var(--g) 6%, transparent);
 }
 

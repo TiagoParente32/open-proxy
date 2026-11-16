@@ -7,7 +7,8 @@
  * order — so grouping is a view over that list with one invariant: a group's
  * rules sit next to each other, like grouped tabs do. Every operation here
  * re-establishes that invariant (`normalizeRules`) so what the sidebar shows is
- * exactly the order the proxy matches in.
+ * exactly the order the proxy matches in. A group also only exists while it
+ * has rules: the store drops any that end up empty (`withoutEmptyGroups`).
  *
  * The palette and the group-op semantics are mirrored in
  * server/bridge/agent_api.py so an MCP agent can work with the same groups.
@@ -41,9 +42,9 @@ const groupOf = (rule, byId) =>
  *   { type: 'rule', rule, visible }                      — an ungrouped rule
  *   { type: 'group', group, rules, visible }             — a group with its rules
  *
- * Groups appear where their first rule does. Empty groups have nothing to
- * anchor them, so they sit at the top until something is dragged in. With
- * `searching`, hidden rules and groups with no match are dropped and
+ * Groups appear where their first rule does. A group with no rules isn't
+ * shown: it only exists for a moment, until `withoutEmptyGroups` removes it.
+ * With `searching`, hidden rules and groups with no match are dropped and
  * collapsed groups are shown open — a search that hides its own hits is no
  * search at all.
  */
@@ -51,14 +52,6 @@ export function buildBlocks(rules, groups, { filter = () => true, searching = fa
   const byId = groupIndex(groups)
   const blocks = []
   const open = new Map()
-
-  const used = new Set(rules.map(r => sid(r.group_id)))
-  for (const g of groups) {
-    if (used.has(sid(g.id))) continue
-    const b = { type: 'group', group: g, rules: [], visible: [] }
-    blocks.push(b)
-    open.set(sid(g.id), b)
-  }
 
   for (const r of rules) {
     const g = groupOf(r, byId)
@@ -96,6 +89,17 @@ export function normalizeRules(rules, groups) {
     if (r.group_id != null && !byId.has(sid(r.group_id))) delete r.group_id
   }
   return out
+}
+
+/**
+ * A group lives as long as its rules: delete, move out or ungroup the last
+ * one and the group goes with it, rather than lingering as an empty header.
+ * Returns `groups` itself when nothing needs removing, so a watcher can tell.
+ */
+export function withoutEmptyGroups(rules, groups) {
+  const used = new Set(rules.map(r => sid(r.group_id)))
+  const kept = groups.filter(g => used.has(sid(g.id)))
+  return kept.length === groups.length ? groups : kept
 }
 
 /**
